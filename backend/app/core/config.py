@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Appointment & Resource Booking System"
+    app_name: str = "Appointment & Resource Booking System created by Namit & Nikhil"
     environment: str = "development"
     debug: bool = True
 
