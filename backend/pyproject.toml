@@ -3,6 +3,13 @@ name = "appointment-booking-backend"
 version = "0.1.0"
 description = "Backend for the Appointment & Resource Booking System"
 requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "sqlalchemy",
+   "psycopg[binary]",
+]
 
 [tool.ruff]
 line-length = 88
