@@ -49,3 +49,6 @@ line-ending = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
