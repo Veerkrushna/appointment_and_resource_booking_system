@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy import DateTime, Integer, Numeric, String, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
 
@@ -75,6 +75,10 @@ class Service(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    provider_links: Mapped[list["ProviderService"]] = relationship(
+        back_populates="service", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
