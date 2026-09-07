@@ -93,6 +93,22 @@ class AvailabilityRequest(BaseModel):
         return self
 
 
+class WeeklyScheduleRequest(BaseModel):
+    days: list[AvailabilityWindow] = Field(min_length=7, max_length=7)
+
+    @model_validator(mode="after")
+    def validate_days(self):
+        day_numbers = [day.day_of_week for day in self.days]
+        if len(set(day_numbers)) != 7:
+            raise ValueError("weekly schedule must contain exactly one entry per day")
+        return self
+
+
+class WeeklyScheduleResponse(BaseModel):
+    provider_id: UUID
+    days: list[AvailabilityWindow]
+
+
 class ScheduleResponse(BaseModel):
     provider: ProviderResponse
     date: date | None
