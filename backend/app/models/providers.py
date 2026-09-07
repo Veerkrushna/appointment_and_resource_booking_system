@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
 from sqlalchemy import Enum as SQLEnum
@@ -8,6 +9,15 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+
+
+if TYPE_CHECKING:
+    from app.models.availability import (
+        ProviderAvailability,
+        ProviderBlackoutDate,
+        ProviderBreak,
+    )
+    from app.models.provider_service import ProviderService
 
 
 # Providers can be people who deliver services or physical resources that

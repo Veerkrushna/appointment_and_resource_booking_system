@@ -6,10 +6,10 @@ from decimal import Decimal
 from sqlalchemy import DateTime, Integer, Numeric, String, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
-# from app.models.provider_service import ProviderService
+from app.models.provider_service import ProviderService
 
 
 class ServiceStatus(enum.StrEnum):
@@ -78,9 +78,9 @@ class Service(Base):
         nullable=False,
     )
 
-    # provider_links: Mapped[list["ProviderService"]] = relationship(
-    #     back_populates="service", cascade="all, delete-orphan"
-    # )
+    provider_links: Mapped[list["ProviderService"]] = relationship(
+        back_populates="service", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Service id={self.id} name={self.name!r} status={self.status.value}>"

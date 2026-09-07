@@ -3,8 +3,13 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.crud.services import (
+    create_service,
+    get_service,
+    list_services,
+    update_service,
+)
 from app.db.database import get_db
-from app.repositories.service_repository import ServiceRepository
 from app.schemas.service import (
     ServiceCreate,
     ServiceResponse,
@@ -23,11 +28,11 @@ router = APIRouter(
     response_model=ServiceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_service(
+def create_service_endpoint(
     service_data: ServiceCreate,
     db: Session = Depends(get_db),
 ):
-    return ServiceRepository.create(
+    return create_service(
         db=db,
         service_data=service_data,
     )
@@ -40,18 +45,18 @@ def create_service(
 def get_services(
     db: Session = Depends(get_db),
 ):
-    return ServiceRepository.get_all(db=db)
+    return list_services(db=db)
 
 
 @router.get(
     "/{service_id}",
     response_model=ServiceResponse,
 )
-def get_service(
+def get_service_by_id(
     service_id: uuid.UUID,
     db: Session = Depends(get_db),
 ):
-    service = ServiceRepository.get_by_id(
+    service = get_service(
         db=db,
         service_id=service_id,
     )
@@ -69,12 +74,12 @@ def get_service(
     "/{service_id}",
     response_model=ServiceResponse,
 )
-def update_service(
+def update_service_endpoint(
     service_id: uuid.UUID,
     service_data: ServiceUpdate,
     db: Session = Depends(get_db),
 ):
-    service = ServiceRepository.get_by_id(
+    service = get_service(
         db=db,
         service_id=service_id,
     )
@@ -85,7 +90,7 @@ def update_service(
             detail="Service not found",
         )
 
-    return ServiceRepository.update(
+    return update_service(
         db=db,
         service=service,
         service_data=service_data,
