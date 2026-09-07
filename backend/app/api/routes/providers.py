@@ -6,12 +6,20 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.crud.provider_services import (
+    get_provider_services,
+    update_provider_services,
+)
 from app.crud.providers import create_provider as create_provider_record
 from app.crud.providers import get_provider, replace_provider_availability
 from app.crud.providers import list_providers as list_provider_records
 from app.crud.providers import update_provider as update_provider_record
 from app.db.database import get_db
 from app.models.providers import Provider
+from app.schemas.provider_service import (
+    ProviderServiceResponse,
+    ProviderServicesUpdate,
+)
 from app.schemas.providers import (
     AvailabilityRequest,
     AvailabilityWindow,
@@ -67,7 +75,9 @@ def blackout_response(provider: Provider) -> list[BlackoutWindow]:
             reason=item.reason,
             is_all_day=item.is_all_day,
         )
-        for item in sorted(provider.blackout_dates, key=lambda item: item.blackout_start)
+        for item in sorted(
+            provider.blackout_dates, key=lambda item: item.blackout_start
+        )
     ]
 
 
@@ -83,6 +93,65 @@ def list_providers(
     availability_status: str | None = None,
 ):
     return list_provider_records(db, provider_type, availability_status)
+
+
+@router.get(
+    "/{provider_id}/services",
+    response_model=list[ProviderServiceResponse],
+)
+def get_services_for_provider(
+    provider_id: UUID,
+    db: Session = Depends(get_db),
+):
+    provider = get_provider(
+        db=db,
+        provider_id=provider_id,
+    )
+
+    if provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider not found",
+        )
+
+    return get_provider_services(
+        db=db,
+        provider_id=provider_id,
+    )
+
+
+@router.put(
+    "/{provider_id}/services",
+    response_model=list[ProviderServiceResponse],
+)
+def update_services_for_provider(
+    provider_id: UUID,
+    payload: ProviderServicesUpdate,
+    db: Session = Depends(get_db),
+):
+    provider = get_provider(
+        db=db,
+        provider_id=provider_id,
+    )
+
+    if provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider not found",
+        )
+
+    try:
+        return update_provider_services(
+            db=db,
+            provider_id=provider_id,
+            service_ids=payload.service_ids,
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        ) from error
 
 
 @router.put("/{provider_id}", response_model=ProviderResponse)
@@ -123,7 +192,9 @@ def build_schedule(provider: Provider, schedule_date: date | None) -> ScheduleRe
 
     if schedule_date is not None:
         day_of_week = schedule_date.weekday()
-        availability = [item for item in availability if item.day_of_week == day_of_week]
+        availability = [
+            item for item in availability if item.day_of_week == day_of_week
+        ]
         breaks = [item for item in breaks if item.day_of_week == day_of_week]
         blackouts = [
             item
