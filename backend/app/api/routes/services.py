@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -16,7 +17,6 @@ from app.schemas.service import (
     ServiceUpdate,
 )
 
-
 router = APIRouter(
     prefix="/api/services",
     tags=["Services"],
@@ -30,7 +30,7 @@ router = APIRouter(
 )
 def create_service_endpoint(
     service_data: ServiceCreate,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     return create_service(
         db=db,
@@ -43,7 +43,7 @@ def create_service_endpoint(
     response_model=list[ServiceResponse],
 )
 def get_services(
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     return list_services(db=db)
 
@@ -54,7 +54,7 @@ def get_services(
 )
 def get_service_by_id(
     service_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     service = get_service(
         db=db,
@@ -77,7 +77,7 @@ def get_service_by_id(
 def update_service_endpoint(
     service_id: uuid.UUID,
     service_data: ServiceUpdate,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     service = get_service(
         db=db,
