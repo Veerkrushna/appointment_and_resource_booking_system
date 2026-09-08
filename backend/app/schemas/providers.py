@@ -80,6 +80,24 @@ class BlackoutWindow(BaseModel):
         return self
 
 
+class BlackoutResponse(BlackoutWindow):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+
+
+class UnavailabilityRequest(BaseModel):
+    start_date: date
+    end_date: date
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_date_range(self):
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be on or before end_date")
+        return self
+
+
 class AvailabilityRequest(BaseModel):
     availability: list[AvailabilityWindow] = Field(default_factory=list)
     breaks: list[BreakWindow] = Field(default_factory=list)
@@ -98,4 +116,4 @@ class ScheduleResponse(BaseModel):
     date: date | None
     availability: list[AvailabilityWindow]
     breaks: list[BreakWindow]
-    blackout_dates: list[BlackoutWindow]
+    blackout_dates: list[BlackoutResponse]
