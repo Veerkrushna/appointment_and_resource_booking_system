@@ -37,7 +37,6 @@ from app.schemas.providers import (
     AvailabilityRequest,
     AvailabilityWindow,
     BlackoutResponse,
-    BlackoutWindow,
     BreakWindow,
     ProviderBreakCreate,
     ProviderBreakResponse,
@@ -388,7 +387,7 @@ def set_provider_availability(
 )
 def list_provider_unavailability(
     provider_id: UUID,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     get_provider_or_404(provider_id, db)
     return [
@@ -405,7 +404,7 @@ def list_provider_unavailability(
 def add_provider_unavailability(
     provider_id: UUID,
     payload: UnavailabilityRequest,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     get_provider_or_404(provider_id, db)
     return blackout_item_response(create_provider_blackout(db, provider_id, payload))
@@ -418,7 +417,7 @@ def add_provider_unavailability(
 def remove_provider_unavailability(
     provider_id: UUID,
     blackout_id: UUID,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     get_provider_or_404(provider_id, db)
     if not delete_provider_blackout(db, provider_id, blackout_id):

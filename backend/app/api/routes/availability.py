@@ -1,6 +1,5 @@
-# FastAPI dependencies are intentionally declared in function signatures.
-# ruff: noqa: B008
 from datetime import date
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,11 +14,13 @@ router = APIRouter(prefix="/api/availability", tags=["Availability"])
 
 @router.get("/slots", response_model=AvailabilitySlotsResponse)
 def get_available_slots(
-    db: Session = Depends(get_db),
-    service_id: UUID = Query(..., description="Service UUID"),
-    date: date = Query(..., description="Date in YYYY-MM-DD format"),
-    provider_id: UUID | None = Query(default=None, description="Optional provider UUID"),
-    slot_interval_minutes: int = Query(default=15, ge=1, le=120),
+    db: Annotated[Session, Depends(get_db)],
+    service_id: Annotated[UUID, Query(description="Service UUID")],
+    date: Annotated[date, Query(description="Date in YYYY-MM-DD format")],
+    provider_id: Annotated[
+        UUID | None, Query(description="Optional provider UUID")
+    ] = None,
+    slot_interval_minutes: Annotated[int, Query(ge=1, le=120)] = 15,
 ):
     result = calculate_available_slots(
         db,
