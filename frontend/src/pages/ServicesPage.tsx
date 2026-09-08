@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 type Service = {
   id: string;
@@ -136,6 +137,9 @@ function ServicesPage() {
                     <span>{service.duration_minutes} min</span>
                     <span>{formatPrice(service.price)}</span>
                   </div>
+                  <Link className="service-book-link" to={`/book/${service.id}`}>
+                    Book this service <span aria-hidden="true">&#8594;</span>
+                  </Link>
                 </article>
               ))}
             </div>
