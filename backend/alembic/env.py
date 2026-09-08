@@ -1,24 +1,10 @@
 from logging.config import fileConfig
 
-from sqlalchemy import create_engine
-from sqlalchemy import pool
+from sqlalchemy import create_engine, pool
 
 from alembic import context
-
 from app.core.config import settings
 from app.db.database import Base
-from app.models.appointment import Appointment
-from app.models.appointment_cancellation import AppointmentCancellation
-from app.models.availability import (
-    ProviderAvailability,
-    ProviderBlackoutDate,
-    ProviderBreak,
-)
-from app.models.notification import Notification
-from app.models.providers import Provider
-from app.models.provider_service import ProviderService
-from app.models.service import Service
-
 
 # Alembic Config object
 config = context.config
