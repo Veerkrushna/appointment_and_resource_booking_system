@@ -18,10 +18,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
+from app.models.appointment_cancellation import AppointmentCancellation
+from app.models.notification import Notification
 
 if TYPE_CHECKING:
-    from app.models.appointment_cancellation import AppointmentCancellation
-    from app.models.notification import Notification
     from app.models.providers import Provider
     from app.models.service import Service
 
