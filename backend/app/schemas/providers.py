@@ -44,9 +44,7 @@ class AvailabilityWindow(BaseModel):
     def validate_window(self):
         if self.is_working_day:
             if self.start_time is None or self.end_time is None:
-                raise ValueError(
-                    "working days require both start_time and end_time"
-                )
+                raise ValueError("working days require both start_time and end_time")
             if self.start_time >= self.end_time:
                 raise ValueError("start_time must be before end_time")
         elif self.start_time is not None or self.end_time is not None:
@@ -65,6 +63,41 @@ class BreakWindow(BaseModel):
         if self.start_time >= self.end_time:
             raise ValueError("start_time must be before end_time")
         return self
+
+
+class ProviderBreakCreate(BaseModel):
+    day_of_week: int = Field(ge=0, le=6)
+    start_time: time
+    end_time: time
+    break_type: str = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_window(self):
+        if self.start_time >= self.end_time:
+            raise ValueError("start_time must be before end_time")
+        return self
+
+
+class ProviderBreakUpdate(BaseModel):
+    day_of_week: int | None = Field(default=None, ge=0, le=6)
+    start_time: time | None = None
+    end_time: time | None = None
+    break_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+
+class ProviderBreakResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    provider_id: UUID
+    day_of_week: int
+    start_time: time
+    end_time: time
+    break_type: str
 
 
 class BlackoutWindow(BaseModel):
