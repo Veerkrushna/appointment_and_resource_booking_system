@@ -11,10 +11,17 @@ from app.crud.provider_services import (
     update_provider_services,
 )
 from app.crud.providers import create_provider as create_provider_record
-from app.crud.providers import get_provider, replace_provider_availability
+from app.crud.providers import (
+    create_provider_blackout,
+    delete_provider_blackout,
+    get_provider,
+    list_provider_blackouts,
+    replace_provider_availability,
+)
 from app.crud.providers import list_providers as list_provider_records
 from app.crud.providers import update_provider as update_provider_record
 from app.db.database import get_db
+from app.models.availability import ProviderBlackoutDate
 from app.models.providers import Provider
 from app.schemas.provider_service import (
     ProviderServiceResponse,
@@ -23,12 +30,14 @@ from app.schemas.provider_service import (
 from app.schemas.providers import (
     AvailabilityRequest,
     AvailabilityWindow,
+    BlackoutResponse,
     BlackoutWindow,
     BreakWindow,
     ProviderCreate,
     ProviderResponse,
     ProviderUpdate,
     ScheduleResponse,
+    UnavailabilityRequest,
 )
 
 router = APIRouter(prefix="/api/providers", tags=["Providers"])
@@ -67,9 +76,10 @@ def break_response(provider: Provider) -> list[BreakWindow]:
     ]
 
 
-def blackout_response(provider: Provider) -> list[BlackoutWindow]:
+def blackout_response(provider: Provider) -> list[BlackoutResponse]:
     return [
-        BlackoutWindow(
+        BlackoutResponse(
+            id=item.id,
             blackout_start=item.blackout_start,
             blackout_end=item.blackout_end,
             reason=item.reason,
@@ -79,6 +89,16 @@ def blackout_response(provider: Provider) -> list[BlackoutWindow]:
             provider.blackout_dates, key=lambda item: item.blackout_start
         )
     ]
+
+
+def blackout_item_response(item: ProviderBlackoutDate) -> BlackoutResponse:
+    return BlackoutResponse(
+        id=item.id,
+        blackout_start=item.blackout_start,
+        blackout_end=item.blackout_end,
+        reason=item.reason,
+        is_all_day=item.is_all_day,
+    )
 
 
 @router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
@@ -173,6 +193,49 @@ def set_provider_availability(
     provider = get_provider_or_404(provider_id, db)
     provider = replace_provider_availability(db, provider, payload)
     return build_schedule(provider, None)
+
+
+@router.get(
+    "/{provider_id}/unavailability",
+    response_model=list[BlackoutResponse],
+)
+def list_provider_unavailability(
+    provider_id: UUID,
+    db: Session = Depends(get_db),
+):
+    get_provider_or_404(provider_id, db)
+    return [
+        blackout_item_response(item)
+        for item in list_provider_blackouts(db, provider_id)
+    ]
+
+
+@router.post(
+    "/{provider_id}/unavailability",
+    response_model=BlackoutResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_provider_unavailability(
+    provider_id: UUID,
+    payload: UnavailabilityRequest,
+    db: Session = Depends(get_db),
+):
+    get_provider_or_404(provider_id, db)
+    return blackout_item_response(create_provider_blackout(db, provider_id, payload))
+
+
+@router.delete(
+    "/{provider_id}/unavailability/{blackout_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_provider_unavailability(
+    provider_id: UUID,
+    blackout_id: UUID,
+    db: Session = Depends(get_db),
+):
+    get_provider_or_404(provider_id, db)
+    if not delete_provider_blackout(db, provider_id, blackout_id):
+        raise HTTPException(status_code=404, detail="Unavailability not found")
 
 
 @router.get("/{provider_id}/schedule", response_model=ScheduleResponse)
