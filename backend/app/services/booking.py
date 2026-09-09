@@ -8,7 +8,7 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
-from app.schemas.appointment import AppointmentCreate
+from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
 
 
 class BookingValidationError(ValueError):
@@ -32,39 +32,23 @@ def _local_interval(date_value, start: time, end: time, zone: ZoneInfo):
     )
 
 
-def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
-    provider = db.scalar(
-        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
-    )
-    if provider is None:
-        raise BookingValidationError("Provider not found")
-    if provider.availability_status != AvailabilityStatus.AVAILABLE:
-        raise BookingValidationError("Provider is not available")
-
-    service = db.scalar(
-        select(Service)
-        .join(ProviderService, ProviderService.service_id == Service.id)
-        .where(
-            Service.id == payload.service_id,
-            Service.status == ServiceStatus.ACTIVE,
-            ProviderService.provider_id == provider.id,
-            ProviderService.is_active.is_(True),
-        )
-    )
-    if service is None:
-        raise BookingValidationError("Active service is not offered by provider")
-
+def _validate_slot(
+    db: Session,
+    appointment_start: datetime,
+    duration_minutes: int,
+    provider: Provider,
+    exclude_appointment_id=None,
+) -> tuple[datetime, datetime]:
     try:
         zone = ZoneInfo(provider.timezone)
     except ZoneInfoNotFoundError as error:
         raise BookingValidationError("Provider has an invalid timezone") from error
 
-    start_utc = _utc(payload.appointment_start)
-    now = datetime.now(UTC)
-    if start_utc <= now:
+    start_utc = _utc(appointment_start)
+    if start_utc <= datetime.now(UTC):
         raise BookingValidationError("Appointments cannot be booked in the past")
 
-    end_utc = start_utc + timedelta(minutes=service.duration_minutes)
+    end_utc = start_utc + timedelta(minutes=duration_minutes)
     local_start = start_utc.astimezone(zone)
     local_end = end_utc.astimezone(zone)
     if local_start.date() != local_end.date():
@@ -105,16 +89,47 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
         if start_utc < blackout_end and end_utc > blackout_start:
             raise BookingValidationError("Appointment overlaps a provider blackout")
 
-    overlapping = db.scalar(
-        select(Appointment.id).where(
-            Appointment.provider_id == provider.id,
-            Appointment.status != AppointmentStatus.CANCELLED,
-            Appointment.appointment_start < end_utc,
-            Appointment.appointment_end > start_utc,
+    overlapping_query = select(Appointment.id).where(
+        Appointment.provider_id == provider.id,
+        Appointment.status != AppointmentStatus.CANCELLED,
+        Appointment.appointment_start < end_utc,
+        Appointment.appointment_end > start_utc,
+    )
+    if exclude_appointment_id is not None:
+        overlapping_query = overlapping_query.where(
+            Appointment.id != exclude_appointment_id
+        )
+    if db.scalar(overlapping_query) is not None:
+        raise BookingConflictError("Appointment slot is already booked")
+
+    return start_utc, end_utc
+
+
+def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
+    provider = db.scalar(
+        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
+    )
+    if provider is None:
+        raise BookingValidationError("Provider not found")
+    if provider.availability_status != AvailabilityStatus.AVAILABLE:
+        raise BookingValidationError("Provider is not available")
+
+    service = db.scalar(
+        select(Service)
+        .join(ProviderService, ProviderService.service_id == Service.id)
+        .where(
+            Service.id == payload.service_id,
+            Service.status == ServiceStatus.ACTIVE,
+            ProviderService.provider_id == provider.id,
+            ProviderService.is_active.is_(True),
         )
     )
-    if overlapping is not None:
-        raise BookingConflictError("Appointment slot is already booked")
+    if service is None:
+        raise BookingValidationError("Active service is not offered by provider")
+
+    start_utc, end_utc = _validate_slot(
+        db, payload.appointment_start, service.duration_minutes, provider
+    )
 
     appointment = Appointment(
         **payload.model_dump(exclude={"appointment_start"}),
@@ -123,6 +138,37 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
         duration_minutes=service.duration_minutes,
     )
     db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
+def update_appointment(
+    db: Session, appointment: Appointment, payload: AppointmentUpdate
+) -> Appointment:
+    changes = payload.model_dump(exclude_unset=True)
+    new_start = changes.pop("appointment_start", None)
+    if new_start is not None:
+        provider = db.scalar(
+            select(Provider)
+            .where(Provider.id == appointment.provider_id)
+            .with_for_update()
+        )
+        if provider is None:
+            raise BookingValidationError("Provider not found")
+        start_utc, end_utc = _validate_slot(
+            db,
+            new_start,
+            appointment.duration_minutes,
+            provider,
+            appointment.id,
+        )
+        appointment.appointment_start = start_utc
+        appointment.appointment_end = end_utc
+
+    for field, value in changes.items():
+        setattr(appointment, field, value)
+
     db.commit()
     db.refresh(appointment)
     return appointment
