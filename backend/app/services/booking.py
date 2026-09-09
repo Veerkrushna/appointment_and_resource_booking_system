@@ -4,14 +4,29 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment_cancellation import AppointmentCancellation
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
-from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
+from app.schemas.appointment import (
+    AppointmentCancellationCreate,
+    AppointmentCreate,
+    AppointmentRescheduleCreate,
+    AppointmentUpdate,
+)
 
 
 class BookingValidationError(ValueError):
+    pass
+
+
+class BookingConflictError(BookingValidationError):
+    pass
+
+
+class CancellationValidationError(BookingValidationError):
     pass
 
 
@@ -96,13 +111,15 @@ def _validate_slot(
             Appointment.id != exclude_appointment_id
         )
     if db.scalar(overlapping_query) is not None:
-        raise BookingValidationError("Appointment overlaps an existing booking")
+        raise BookingConflictError("Appointment slot is already booked")
 
     return start_utc, end_utc
 
 
 def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
-    provider = db.get(Provider, payload.provider_id)
+    provider = db.scalar(
+        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
+    )
     if provider is None:
         raise BookingValidationError("Provider not found")
     if provider.availability_status != AvailabilityStatus.AVAILABLE:
@@ -141,9 +158,17 @@ def update_appointment(
     db: Session, appointment: Appointment, payload: AppointmentUpdate
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("status") == AppointmentStatus.CANCELLED:
+        raise BookingValidationError(
+            "Use the cancellation endpoint to cancel an appointment"
+        )
     new_start = changes.pop("appointment_start", None)
     if new_start is not None:
-        provider = db.get(Provider, appointment.provider_id)
+        provider = db.scalar(
+            select(Provider)
+            .where(Provider.id == appointment.provider_id)
+            .with_for_update()
+        )
         if provider is None:
             raise BookingValidationError("Provider not found")
         start_utc, end_utc = _validate_slot(
@@ -162,3 +187,107 @@ def update_appointment(
     db.commit()
     db.refresh(appointment)
     return appointment
+
+
+def cancel_appointment(
+    db: Session,
+    appointment_id,
+    payload: AppointmentCancellationCreate | None = None,
+) -> AppointmentCancellation:
+    payload = payload or AppointmentCancellationCreate()
+    appointment_snapshot = db.scalar(
+        select(Appointment).where(Appointment.id == appointment_id)
+    )
+    if appointment_snapshot is None:
+        raise CancellationValidationError("Appointment not found")
+
+    db.scalar(
+        select(Provider)
+        .where(Provider.id == appointment_snapshot.provider_id)
+        .with_for_update()
+    )
+    appointment = db.scalar(
+        select(Appointment).where(Appointment.id == appointment_id).with_for_update()
+    )
+    if appointment is None:
+        raise CancellationValidationError("Appointment not found")
+    if appointment.status == AppointmentStatus.CANCELLED:
+        raise CancellationValidationError("Appointment is already cancelled")
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise CancellationValidationError("Completed appointments cannot be cancelled")
+
+    cancellation_deadline = appointment.appointment_start - timedelta(
+        minutes=settings.cancellation_grace_period_minutes
+    )
+    if datetime.now(UTC) >= cancellation_deadline:
+        raise CancellationValidationError(
+            "Appointments cannot be cancelled within the cancellation grace period"
+        )
+
+    appointment.status = AppointmentStatus.CANCELLED
+    cancellation = AppointmentCancellation(
+        appointment_id=appointment.id,
+        **payload.model_dump(),
+    )
+    db.add(cancellation)
+    db.commit()
+    db.refresh(cancellation)
+    return cancellation
+
+
+def reschedule_appointment(
+    db: Session,
+    appointment_id,
+    payload: AppointmentRescheduleCreate,
+) -> Appointment:
+    appointment = db.scalar(
+        select(Appointment)
+        .where(Appointment.id == appointment_id)
+        .with_for_update()
+    )
+    if appointment is None:
+        raise BookingValidationError("Appointment not found")
+    if appointment.status == AppointmentStatus.CANCELLED:
+        raise BookingValidationError("Appointment is already cancelled")
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise BookingValidationError("Completed appointments cannot be rescheduled")
+
+    provider = db.scalar(
+        select(Provider)
+        .where(Provider.id == appointment.provider_id)
+        .with_for_update()
+    )
+    if provider is None:
+        raise BookingValidationError("Provider not found")
+    if provider.availability_status != AvailabilityStatus.AVAILABLE:
+        raise BookingValidationError("Provider is not available")
+
+    start_utc, end_utc = _validate_slot(
+        db,
+        payload.appointment_start,
+        appointment.duration_minutes,
+        provider,
+        appointment.id,
+    )
+    cancellation = AppointmentCancellation(
+        appointment_id=appointment.id,
+        cancelled_by=payload.cancelled_by,
+        reason=payload.reason,
+        refund_status=payload.refund_status,
+    )
+    appointment.status = AppointmentStatus.CANCELLED
+    replacement = Appointment(
+        service_id=appointment.service_id,
+        provider_id=appointment.provider_id,
+        user_name=appointment.user_name,
+        user_email=appointment.user_email,
+        user_phone=appointment.user_phone,
+        appointment_start=start_utc,
+        appointment_end=end_utc,
+        duration_minutes=appointment.duration_minutes,
+        notes=appointment.notes,
+    )
+    db.add_all([cancellation, replacement])
+    db.commit()
+    db.refresh(replacement)
+    return replacement
