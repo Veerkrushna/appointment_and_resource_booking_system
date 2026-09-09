@@ -18,6 +18,7 @@ class NotificationType(enum.StrEnum):
     CONFIRMATION = "confirmation"
     REMINDER = "reminder"
     CANCELLATION = "cancellation"
+    FEEDBACK_REQUEST = "feedback_request"
 
 
 class NotificationStatus(enum.StrEnum):

@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_from_phone: str | None = None
+    redis_url: str = "redis://localhost:6379/0"
+    feedback_delay_minutes: int = 15
 
     model_config = SettingsConfigDict(
         env_file=".env",

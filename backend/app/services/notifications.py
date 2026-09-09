@@ -1,3 +1,4 @@
+import base64
 import logging
 import smtplib
 from datetime import UTC, datetime
@@ -14,25 +15,14 @@ from app.models.notification import Notification, NotificationStatus, Notificati
 logger = logging.getLogger(__name__)
 
 
-def _message(appointment: Appointment) -> str:
-    return (
-        f"Hello {appointment.user_name},\n\n"
-        "Your appointment has been confirmed.\n"
-        f"Start: {appointment.appointment_start.isoformat()}\n"
-        f"End: {appointment.appointment_end.isoformat()}\n\n"
-        "Thank you."
-    )
-
-
-def _send_email(appointment: Appointment) -> None:
+def _send_email(appointment: Appointment, subject: str, body: str) -> None:
     if not settings.smtp_host or not settings.smtp_from:
         raise RuntimeError("SMTP is not configured")
-
     message = EmailMessage()
-    message["Subject"] = "Appointment confirmation"
+    message["Subject"] = subject
     message["From"] = settings.smtp_from
     message["To"] = appointment.user_email
-    message.set_content(_message(appointment))
+    message.set_content(body)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as client:
         if settings.smtp_starttls:
             client.starttls()
@@ -41,19 +31,18 @@ def _send_email(appointment: Appointment) -> None:
         client.send_message(message)
 
 
-def _send_sms(appointment: Appointment) -> None:
+def _send_sms(appointment: Appointment, body_text: str) -> None:
     if not appointment.user_phone:
         return
     if not settings.twilio_account_sid or not settings.twilio_auth_token:
         raise RuntimeError("SMS is not configured")
     if not settings.twilio_from_phone:
         raise RuntimeError("Twilio sender phone is not configured")
-
     body = urlencode(
         {
             "To": appointment.user_phone,
             "From": settings.twilio_from_phone,
-            "Body": "Your appointment has been confirmed.",
+            "Body": body_text,
         }
     ).encode()
     request = Request(
@@ -62,8 +51,6 @@ def _send_sms(appointment: Appointment) -> None:
         data=body,
         method="POST",
     )
-    import base64
-
     credentials = f"{settings.twilio_account_sid}:{settings.twilio_auth_token}"
     request.add_header(
         "Authorization", "Basic " + base64.b64encode(credentials.encode()).decode()
@@ -72,9 +59,7 @@ def _send_sms(appointment: Appointment) -> None:
         pass
 
 
-def _record_result(
-    db: Session, notification: Notification, delivered: bool
-) -> None:
+def _record_result(db: Session, notification: Notification, delivered: bool) -> None:
     notification.status = (
         NotificationStatus.SENT if delivered else NotificationStatus.FAILED
     )
@@ -84,26 +69,59 @@ def _record_result(
     db.commit()
 
 
+def deliver_notification(
+    db: Session, notification: Notification, appointment: Appointment
+) -> None:
+    is_email = notification.recipient_email is not None
+    if notification.notification_type == NotificationType.CONFIRMATION:
+        subject = "Appointment confirmation"
+        body = (
+            f"Hello {appointment.user_name},\n\n"
+            "Your appointment has been confirmed.\n"
+            f"Start: {appointment.appointment_start.isoformat()}\n"
+            f"End: {appointment.appointment_end.isoformat()}\n\n"
+            "Thank you."
+        )
+        sms_body = "Your appointment has been confirmed."
+    elif notification.notification_type == NotificationType.REMINDER:
+        subject = "Appointment reminder"
+        body = (
+            f"Hello {appointment.user_name},\n\n"
+            "This is a reminder for your appointment at "
+            f"{appointment.appointment_start.isoformat()}."
+        )
+        sms_body = "Reminder: your appointment is coming up soon."
+    else:
+        subject = "How was your appointment?"
+        body = (
+            f"Hello {appointment.user_name},\n\n"
+            "Please share your feedback about your recent appointment."
+        )
+        sms_body = body
+    try:
+        if is_email:
+            _send_email(appointment, subject, body)
+        else:
+            _send_sms(appointment, sms_body)
+    except Exception:
+        logger.exception("Failed to send notification %s", notification.id)
+        _record_result(db, notification, delivered=False)
+    else:
+        _record_result(db, notification, delivered=True)
+
+
 def send_booking_confirmation(db: Session, appointment: Appointment) -> None:
     """Deliver configured confirmation channels after booking is committed."""
-    channels = [("email", appointment.user_email, _send_email)]
+    channels = [("email", appointment.user_email)]
     if appointment.user_phone:
-        channels.append(("sms", appointment.user_phone, _send_sms))
-
-    for channel, recipient, sender in channels:
+        channels.append(("sms", appointment.user_phone))
+    for channel, recipient in channels:
         notification = Notification(
             appointment_id=appointment.id,
             notification_type=NotificationType.CONFIRMATION,
             recipient_email=recipient if channel == "email" else None,
             recipient_phone=recipient if channel == "sms" else None,
-            status=NotificationStatus.PENDING,
         )
         db.add(notification)
         db.commit()
-        try:
-            sender(appointment)
-        except Exception:
-            logger.exception("Failed to send appointment confirmation via %s", channel)
-            _record_result(db, notification, delivered=False)
-        else:
-            _record_result(db, notification, delivered=True)
+        deliver_notification(db, notification, appointment)
