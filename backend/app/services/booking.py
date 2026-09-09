@@ -15,6 +15,7 @@ from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentUpdate,
 )
+from app.services.notifications import send_booking_confirmation
 
 
 class BookingValidationError(ValueError):
@@ -149,6 +150,8 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
     )
     db.add(appointment)
     db.commit()
+    db.refresh(appointment)
+    send_booking_confirmation(db, appointment)
     db.refresh(appointment)
     return appointment
 
