@@ -1,0 +1,14 @@
+  backend/availability_algorithm[m
+* [32mbackend/booking_rules[m
+  backend/feature/providers_api[m
+  dev[m
+  feature/backend-core[m
+  feature/booking-logic[m
+  feature/frontend[m
+  feature/provider_unavailability_api[m
+  feature/schedule_management_api[m
+  feature/services[m
+  feature/testing[m
+  frontend/service_browse[m
+  frontend/service_page[m
+  main[m

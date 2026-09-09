@@ -10,7 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
 
-
 if TYPE_CHECKING:
     from app.models.availability import (
         ProviderAvailability,
@@ -53,6 +52,10 @@ class Provider(Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False)
 
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
 
     availability_status: Mapped[AvailabilityStatus] = mapped_column(
         SQLEnum(AvailabilityStatus, name="availability_status"), nullable=False

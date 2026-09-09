@@ -1,3 +1,4 @@
+from datetime import datetime, time, timezone
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -9,7 +10,12 @@ from app.models.availability import (
     ProviderBreak,
 )
 from app.models.providers import Provider
-from app.schemas.providers import AvailabilityRequest, ProviderCreate, ProviderUpdate
+from app.schemas.providers import (
+    AvailabilityRequest,
+    ProviderCreate,
+    ProviderUpdate,
+    UnavailabilityRequest,
+)
 
 
 def get_provider(db: Session, provider_id: UUID) -> Provider | None:
@@ -112,3 +118,50 @@ def update_weekly_schedule_day(
     db.commit()
     db.refresh(provider)
     return provider
+def list_provider_blackouts(
+    db: Session, provider_id: UUID
+) -> list[ProviderBlackoutDate]:
+    query = (
+        select(ProviderBlackoutDate)
+        .where(ProviderBlackoutDate.provider_id == provider_id)
+        .order_by(ProviderBlackoutDate.blackout_start)
+    )
+    return list(db.scalars(query).all())
+
+
+def create_provider_blackout(
+    db: Session, provider_id: UUID, payload: UnavailabilityRequest
+) -> ProviderBlackoutDate:
+    blackout = ProviderBlackoutDate(
+        provider_id=provider_id,
+        blackout_start=datetime.combine(
+            payload.start_date, time.min, tzinfo=timezone.utc
+        ),
+        blackout_end=datetime.combine(
+            payload.end_date,
+            time.max,
+            tzinfo=timezone.utc,
+        ),
+        reason=payload.reason,
+        is_all_day=True,
+    )
+    db.add(blackout)
+    db.commit()
+    db.refresh(blackout)
+    return blackout
+
+
+def delete_provider_blackout(
+    db: Session, provider_id: UUID, blackout_id: UUID
+) -> bool:
+    blackout = db.scalar(
+        select(ProviderBlackoutDate).where(
+            ProviderBlackoutDate.id == blackout_id,
+            ProviderBlackoutDate.provider_id == provider_id,
+        )
+    )
+    if blackout is None:
+        return False
+    db.delete(blackout)
+    db.commit()
+    return True
