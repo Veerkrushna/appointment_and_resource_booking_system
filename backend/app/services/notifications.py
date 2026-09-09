@@ -91,6 +91,21 @@ def deliver_notification(
             f"{appointment.appointment_start.isoformat()}."
         )
         sms_body = "Reminder: your appointment is coming up soon."
+    elif notification.notification_type == NotificationType.CANCELLATION:
+        subject = "Appointment cancelled"
+        body = (
+            f"Hello {appointment.user_name},\n\n"
+            "Your appointment has been cancelled."
+        )
+        sms_body = body
+    elif notification.notification_type == NotificationType.RESCHEDULE:
+        subject = "Appointment rescheduled"
+        body = (
+            f"Hello {appointment.user_name},\n\n"
+            "Your appointment has been rescheduled.\n"
+            f"New start: {appointment.appointment_start.isoformat()}"
+        )
+        sms_body = body
     else:
         subject = "How was your appointment?"
         body = (
@@ -125,3 +140,70 @@ def send_booking_confirmation(db: Session, appointment: Appointment) -> None:
         db.add(notification)
         db.commit()
         deliver_notification(db, notification, appointment)
+
+
+def send_status_email(
+    db: Session,
+    appointment: Appointment,
+    notification_type: NotificationType,
+    subject: str,
+    body: str,
+) -> None:
+    notification = Notification(
+        appointment_id=appointment.id,
+        notification_type=notification_type,
+        recipient_email=appointment.user_email,
+    )
+    db.add(notification)
+    db.commit()
+    try:
+        _send_email(appointment, subject, body)
+    except Exception:
+        logger.exception("Failed to send status notification %s", notification.id)
+        _record_result(db, notification, delivered=False)
+    else:
+        _record_result(db, notification, delivered=True)
+
+
+def send_confirmation_status_email(db: Session, appointment: Appointment) -> None:
+    send_status_email(
+        db,
+        appointment,
+        NotificationType.CONFIRMATION,
+        "Appointment confirmed",
+        (
+            f"Hello {appointment.user_name},\n\n"
+            "Your appointment is confirmed.\n"
+            f"Start: {appointment.appointment_start.isoformat()}\n"
+            f"End: {appointment.appointment_end.isoformat()}"
+        ),
+    )
+
+
+def send_cancellation_email(db: Session, appointment: Appointment) -> None:
+    send_status_email(
+        db,
+        appointment,
+        NotificationType.CANCELLATION,
+        "Appointment cancelled",
+        (
+            f"Hello {appointment.user_name},\n\n"
+            "Your appointment has been cancelled.\n"
+            f"Scheduled start: {appointment.appointment_start.isoformat()}"
+        ),
+    )
+
+
+def send_reschedule_email(db: Session, appointment: Appointment) -> None:
+    send_status_email(
+        db,
+        appointment,
+        NotificationType.RESCHEDULE,
+        "Appointment rescheduled",
+        (
+            f"Hello {appointment.user_name},\n\n"
+            "Your appointment has been rescheduled.\n"
+            f"New start: {appointment.appointment_start.isoformat()}\n"
+            f"New end: {appointment.appointment_end.isoformat()}"
+        ),
+    )

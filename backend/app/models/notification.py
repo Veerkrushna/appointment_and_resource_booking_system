@@ -19,6 +19,7 @@ class NotificationType(enum.StrEnum):
     REMINDER = "reminder"
     CANCELLATION = "cancellation"
     FEEDBACK_REQUEST = "feedback_request"
+    RESCHEDULE = "reschedule"
 
 
 class NotificationStatus(enum.StrEnum):
