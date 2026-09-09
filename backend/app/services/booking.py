@@ -4,7 +4,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment_cancellation import (
+    AppointmentCancellation,
+    RefundStatus,
+)
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
@@ -16,6 +21,10 @@ class BookingValidationError(ValueError):
 
 
 class BookingConflictError(BookingValidationError):
+    pass
+
+
+class CancellationValidationError(ValueError):
     pass
 
 
@@ -172,3 +181,50 @@ def update_appointment(
     db.commit()
     db.refresh(appointment)
     return appointment
+
+
+def cancel_appointment(
+    db: Session,
+    appointment_id,
+    cancelled_by: str = "customer",
+    reason: str | None = None,
+) -> None:
+    appointment_snapshot = db.scalar(
+        select(Appointment).where(Appointment.id == appointment_id)
+    )
+    if appointment_snapshot is None:
+        raise CancellationValidationError("Appointment not found")
+
+    db.scalar(
+        select(Provider)
+        .where(Provider.id == appointment_snapshot.provider_id)
+        .with_for_update()
+    )
+    appointment = db.scalar(
+        select(Appointment).where(Appointment.id == appointment_id).with_for_update()
+    )
+    if appointment is None:
+        raise CancellationValidationError("Appointment not found")
+    if appointment.status == AppointmentStatus.CANCELLED:
+        raise CancellationValidationError("Appointment is already cancelled")
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise CancellationValidationError("Completed appointments cannot be cancelled")
+
+    cancellation_deadline = appointment.appointment_start - timedelta(
+        minutes=settings.cancellation_grace_period_minutes
+    )
+    if datetime.now(UTC) >= cancellation_deadline:
+        raise CancellationValidationError(
+            "Appointments cannot be cancelled within the cancellation grace period"
+        )
+
+    appointment.status = AppointmentStatus.CANCELLED
+    db.add(
+        AppointmentCancellation(
+            appointment_id=appointment.id,
+            cancelled_by=cancelled_by,
+            reason=reason,
+            refund_status=RefundStatus.PENDING,
+        )
+    )
+    db.commit()

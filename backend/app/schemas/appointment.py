@@ -25,6 +25,11 @@ class AppointmentUpdate(BaseModel):
     status: AppointmentStatus | None = None
 
 
+class AppointmentCancellationRequest(BaseModel):
+    cancelled_by: str = Field(default="customer", min_length=1, max_length=100)
+    reason: str | None = None
+
+
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

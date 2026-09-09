@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.schemas.appointment import (
+    AppointmentCancellationRequest,
     AppointmentCreate,
     AppointmentResponse,
     AppointmentUpdate,
@@ -15,8 +16,12 @@ from app.schemas.appointment import (
 from app.services.booking import (
     BookingConflictError,
     BookingValidationError,
+    CancellationValidationError,
     create_appointment,
     update_appointment,
+)
+from app.services.booking import (
+    cancel_appointment as cancel_appointment_service,
 )
 
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
@@ -96,3 +101,26 @@ def edit_appointment(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
         ) from error
+
+
+@router.delete("/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_appointment_endpoint(
+    appointment_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    payload: AppointmentCancellationRequest | None = None,
+):
+    request = payload or AppointmentCancellationRequest()
+    try:
+        cancel_appointment_service(
+            db,
+            appointment_id,
+            request.cancelled_by,
+            request.reason,
+        )
+    except CancellationValidationError as error:
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if str(error) == "Appointment not found"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
