@@ -27,7 +27,7 @@ class AppointmentUpdate(BaseModel):
 
 
 class AppointmentCancellationCreate(BaseModel):
-    cancelled_by: str = Field(min_length=1, max_length=100)
+    cancelled_by: str = Field(default="customer", min_length=1, max_length=100)
     reason: str | None = None
     refund_status: RefundStatus = RefundStatus.PENDING
 
@@ -48,6 +48,9 @@ class AppointmentRescheduleCreate(BaseModel):
     cancelled_by: str = Field(min_length=1, max_length=100)
     reason: str | None = None
     refund_status: RefundStatus = RefundStatus.NOT_ELIGIBLE
+
+
+AppointmentCancellationRequest = AppointmentCancellationCreate
 
 
 class AppointmentResponse(BaseModel):

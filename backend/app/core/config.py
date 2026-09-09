@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     database_url: str
+    cancellation_grace_period_minutes: int = 120
 
     model_config = SettingsConfigDict(
         env_file=".env",
