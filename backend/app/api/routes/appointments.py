@@ -11,6 +11,7 @@ from app.schemas.appointment import (
     AppointmentCancellationCreate,
     AppointmentCancellationResponse,
     AppointmentCreate,
+    AppointmentRescheduleCreate,
     AppointmentResponse,
     AppointmentUpdate,
 )
@@ -19,6 +20,7 @@ from app.services.booking import (
     BookingValidationError,
     cancel_appointment,
     create_appointment,
+    reschedule_appointment,
     update_appointment,
 )
 
@@ -113,6 +115,31 @@ def cancel_appointment_endpoint(
 ):
     try:
         return cancel_appointment(db, appointment_id, payload)
+    except BookingValidationError as error:
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if str(error) == "Appointment not found"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post(
+    "/{appointment_id}/reschedule",
+    response_model=AppointmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def reschedule_appointment_endpoint(
+    appointment_id: UUID,
+    payload: AppointmentRescheduleCreate,
+    db: Annotated[Session, Depends(get_db)],
+):
+    try:
+        return reschedule_appointment(db, appointment_id, payload)
+    except BookingConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(error)
+        ) from error
     except BookingValidationError as error:
         status_code = (
             status.HTTP_404_NOT_FOUND

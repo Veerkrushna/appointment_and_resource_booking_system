@@ -12,6 +12,7 @@ from app.models.service import Service, ServiceStatus
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
     AppointmentCreate,
+    AppointmentRescheduleCreate,
     AppointmentUpdate,
 )
 
@@ -209,3 +210,61 @@ def cancel_appointment(
     db.commit()
     db.refresh(cancellation)
     return cancellation
+
+
+def reschedule_appointment(
+    db: Session,
+    appointment_id,
+    payload: AppointmentRescheduleCreate,
+) -> Appointment:
+    appointment = db.scalar(
+        select(Appointment)
+        .where(Appointment.id == appointment_id)
+        .with_for_update()
+    )
+    if appointment is None:
+        raise BookingValidationError("Appointment not found")
+    if appointment.status == AppointmentStatus.CANCELLED:
+        raise BookingValidationError("Appointment is already cancelled")
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise BookingValidationError("Completed appointments cannot be rescheduled")
+
+    provider = db.scalar(
+        select(Provider)
+        .where(Provider.id == appointment.provider_id)
+        .with_for_update()
+    )
+    if provider is None:
+        raise BookingValidationError("Provider not found")
+    if provider.availability_status != AvailabilityStatus.AVAILABLE:
+        raise BookingValidationError("Provider is not available")
+
+    start_utc, end_utc = _validate_slot(
+        db,
+        payload.appointment_start,
+        appointment.duration_minutes,
+        provider,
+        appointment.id,
+    )
+    cancellation = AppointmentCancellation(
+        appointment_id=appointment.id,
+        cancelled_by=payload.cancelled_by,
+        reason=payload.reason,
+        refund_status=payload.refund_status,
+    )
+    appointment.status = AppointmentStatus.CANCELLED
+    replacement = Appointment(
+        service_id=appointment.service_id,
+        provider_id=appointment.provider_id,
+        user_name=appointment.user_name,
+        user_email=appointment.user_email,
+        user_phone=appointment.user_phone,
+        appointment_start=start_utc,
+        appointment_end=end_utc,
+        duration_minutes=appointment.duration_minutes,
+        notes=appointment.notes,
+    )
+    db.add_all([cancellation, replacement])
+    db.commit()
+    db.refresh(replacement)
+    return replacement
