@@ -53,6 +53,10 @@ class Provider(Base):
 
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
+
     availability_status: Mapped[AvailabilityStatus] = mapped_column(
         SQLEnum(AvailabilityStatus, name="availability_status"), nullable=False
     )
