@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -53,15 +54,17 @@ def generate_slot_starts(
     return starts
 
 
-def _utc_datetime(target_date: date, target_time: time) -> datetime:
-    return datetime.combine(target_date, target_time, tzinfo=UTC)
+def _provider_datetime(
+    target_date: date, target_time: time, timezone: ZoneInfo
+) -> datetime:
+    return datetime.combine(target_date, target_time, tzinfo=timezone).astimezone(UTC)
 
 
 def _overlap_interval(
-    start: datetime, end: datetime, target_date: date
+    start: datetime, end: datetime, target_date: date, timezone: ZoneInfo
 ) -> Interval | None:
-    day_start = _utc_datetime(target_date, time.min)
-    day_end = day_start + timedelta(days=1)
+    day_start = _provider_datetime(target_date, time.min, timezone)
+    day_end = _provider_datetime(target_date + timedelta(days=1), time.min, timezone)
     overlap_start = max(start, day_start)
     overlap_end = min(end, day_end)
     if overlap_start >= overlap_end:
@@ -77,6 +80,7 @@ def _provider_slots(
     blackouts: list[ProviderBlackoutDate],
     breaks: list[ProviderBreak],
     slot_interval: timedelta,
+    timezone: ZoneInfo,
 ) -> list[AvailabilitySlot]:
     windows = [
         availability
@@ -91,8 +95,8 @@ def _provider_slots(
 
     working_intervals = [
         (
-            _utc_datetime(target_date, window.start_time),
-            _utc_datetime(target_date, window.end_time),
+            _provider_datetime(target_date, window.start_time, timezone),
+            _provider_datetime(target_date, window.end_time, timezone),
         )
         for window in windows
     ]
@@ -101,14 +105,14 @@ def _provider_slots(
         if item.day_of_week == target_date.weekday():
             blocked.append(
                 (
-                    _utc_datetime(target_date, item.start_time),
-                    _utc_datetime(target_date, item.end_time),
+                    _provider_datetime(target_date, item.start_time, timezone),
+                    _provider_datetime(target_date, item.end_time, timezone),
                 )
             )
 
     for blackout in blackouts:
         overlap = _overlap_interval(
-            blackout.blackout_start, blackout.blackout_end, target_date
+            blackout.blackout_start, blackout.blackout_end, target_date, timezone
         )
         if overlap is not None:
             blocked.append(overlap)
@@ -173,9 +177,15 @@ def calculate_available_slots(
     providers = list(db.scalars(provider_query).unique().all())
 
     slots: list[AvailabilitySlot] = []
-    day_start = _utc_datetime(target_date, time.min)
-    day_end = day_start + timedelta(days=1)
     for provider in providers:
+        try:
+            timezone = ZoneInfo(provider.timezone)
+        except ZoneInfoNotFoundError:
+            continue
+        day_start = _provider_datetime(target_date, time.min, timezone)
+        day_end = _provider_datetime(
+            target_date + timedelta(days=1), time.min, timezone
+        )
         appointments = list(
             db.scalars(
                 select(Appointment).where(
@@ -212,6 +222,7 @@ def calculate_available_slots(
                 blackouts,
                 breaks,
                 timedelta(minutes=slot_interval_minutes),
+                timezone,
             )
         )
 

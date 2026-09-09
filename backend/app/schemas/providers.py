@@ -11,6 +11,7 @@ class ProviderCreate(BaseModel):
     type: ProviderType
     email: EmailStr
     phone: str | None = Field(default=None, max_length=30)
+    timezone: str = Field(default="UTC", min_length=1, max_length=64)
     availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE
 
 
@@ -19,6 +20,7 @@ class ProviderUpdate(BaseModel):
     type: ProviderType | None = None
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=30)
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
     availability_status: AvailabilityStatus | None = None
 
 
@@ -30,6 +32,7 @@ class ProviderResponse(BaseModel):
     type: ProviderType
     email: str
     phone: str | None
+    timezone: str
     availability_status: AvailabilityStatus
     created_at: datetime
 
