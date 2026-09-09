@@ -130,40 +130,6 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
     start_utc, end_utc = _validate_slot(
         db, payload.appointment_start, service.duration_minutes, provider
     )
-    )
-    if exclude_appointment_id is not None:
-        overlapping_query = overlapping_query.where(
-            Appointment.id != exclude_appointment_id
-        )
-    if db.scalar(overlapping_query) is not None:
-        raise BookingValidationError("Appointment overlaps an existing booking")
-
-    return start_utc, end_utc
-
-
-def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
-    provider = db.get(Provider, payload.provider_id)
-    if provider is None:
-        raise BookingValidationError("Provider not found")
-    if provider.availability_status != AvailabilityStatus.AVAILABLE:
-        raise BookingValidationError("Provider is not available")
-
-    service = db.scalar(
-        select(Service)
-        .join(ProviderService, ProviderService.service_id == Service.id)
-        .where(
-            Service.id == payload.service_id,
-            Service.status == ServiceStatus.ACTIVE,
-            ProviderService.provider_id == provider.id,
-            ProviderService.is_active.is_(True),
-        )
-    )
-    if service is None:
-        raise BookingValidationError("Active service is not offered by provider")
-
-    start_utc, end_utc = _validate_slot(
-        db, payload.appointment_start, service.duration_minutes, provider
-    )
 
     appointment = Appointment(
         **payload.model_dump(exclude={"appointment_start"}),
@@ -188,7 +154,6 @@ def update_appointment(
             .where(Provider.id == appointment.provider_id)
             .with_for_update()
         )
-        provider = db.get(Provider, appointment.provider_id)
         if provider is None:
             raise BookingValidationError("Provider not found")
         start_utc, end_utc = _validate_slot(
@@ -206,5 +171,4 @@ def update_appointment(
 
     db.commit()
     db.refresh(appointment)
-    return appointment
     return appointment

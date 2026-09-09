@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -118,6 +118,8 @@ def update_weekly_schedule_day(
     db.commit()
     db.refresh(provider)
     return provider
+
+
 def list_provider_blackouts(
     db: Session, provider_id: UUID
 ) -> list[ProviderBlackoutDate]:
@@ -134,13 +136,11 @@ def create_provider_blackout(
 ) -> ProviderBlackoutDate:
     blackout = ProviderBlackoutDate(
         provider_id=provider_id,
-        blackout_start=datetime.combine(
-            payload.start_date, time.min, tzinfo=timezone.utc
-        ),
+        blackout_start=datetime.combine(payload.start_date, time.min, tzinfo=UTC),
         blackout_end=datetime.combine(
             payload.end_date,
             time.max,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         reason=payload.reason,
         is_all_day=True,
@@ -151,9 +151,7 @@ def create_provider_blackout(
     return blackout
 
 
-def delete_provider_blackout(
-    db: Session, provider_id: UUID, blackout_id: UUID
-) -> bool:
+def delete_provider_blackout(db: Session, provider_id: UUID, blackout_id: UUID) -> bool:
     blackout = db.scalar(
         select(ProviderBlackoutDate).where(
             ProviderBlackoutDate.id == blackout_id,

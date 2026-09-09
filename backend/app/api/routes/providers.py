@@ -16,17 +16,17 @@ from app.crud.provider_services import (
     get_provider_services,
     update_provider_services,
 )
-from app.crud.providers import create_provider as create_provider_record
 from app.crud.providers import (
-    get_provider,
-    replace_provider_availability,
-    replace_weekly_schedule,
-    update_weekly_schedule_day,
+    create_provider as create_provider_record,
+)
+from app.crud.providers import (
     create_provider_blackout,
     delete_provider_blackout,
     get_provider,
     list_provider_blackouts,
     replace_provider_availability,
+    replace_weekly_schedule,
+    update_weekly_schedule_day,
 )
 from app.crud.providers import list_providers as list_provider_records
 from app.crud.providers import update_provider as update_provider_record
@@ -49,9 +49,9 @@ from app.schemas.providers import (
     ProviderResponse,
     ProviderUpdate,
     ScheduleResponse,
+    UnavailabilityRequest,
     WeeklyScheduleRequest,
     WeeklyScheduleResponse,
-    UnavailabilityRequest,
 )
 
 router = APIRouter(prefix="/api/providers", tags=["Providers"])
@@ -387,23 +387,20 @@ def set_provider_availability(
     return build_schedule(provider, None)
 
 
-@router.get(
-    "/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse
-)
+@router.get("/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse)
 def get_weekly_schedule(
-    provider_id: UUID, db: Session = Depends(get_db)
+    provider_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
 ):
     provider = get_provider_or_404(provider_id, db)
     return weekly_schedule_response(provider)
 
 
-@router.put(
-    "/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse
-)
+@router.put("/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse)
 def replace_weekly_schedule_endpoint(
     provider_id: UUID,
     payload: WeeklyScheduleRequest,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     provider = get_provider_or_404(provider_id, db)
     provider = replace_weekly_schedule(
@@ -420,9 +417,9 @@ def replace_weekly_schedule_endpoint(
 )
 def update_weekly_schedule_day_endpoint(
     provider_id: UUID,
-    day_of_week: int = Path(ge=0, le=6),
-    payload: AvailabilityWindow = ...,
-    db: Session = Depends(get_db),
+    day_of_week: Annotated[int, Path(ge=0, le=6)],
+    payload: AvailabilityWindow,
+    db: Annotated[Session, Depends(get_db)],
 ):
     if payload.day_of_week != day_of_week:
         raise HTTPException(
@@ -437,6 +434,9 @@ def update_weekly_schedule_day_endpoint(
         payload.model_dump(),
     )
     return weekly_schedule_response(provider)
+
+
+@router.get(
     "/{provider_id}/unavailability",
     response_model=list[BlackoutResponse],
 )
@@ -490,9 +490,7 @@ def get_provider_schedule(
 
 
 def weekly_schedule_response(provider: Provider) -> WeeklyScheduleResponse:
-    stored_days = {
-        item.day_of_week: item for item in provider.availability
-    }
+    stored_days = {item.day_of_week: item for item in provider.availability}
     days = [
         AvailabilityWindow(
             day_of_week=day_of_week,
