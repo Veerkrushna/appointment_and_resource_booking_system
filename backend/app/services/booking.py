@@ -15,6 +15,10 @@ class BookingValidationError(ValueError):
     pass
 
 
+class BookingConflictError(BookingValidationError):
+    pass
+
+
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise BookingValidationError("appointment_start must include a timezone")
@@ -29,7 +33,9 @@ def _local_interval(date_value, start: time, end: time, zone: ZoneInfo):
 
 
 def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
-    provider = db.get(Provider, payload.provider_id)
+    provider = db.scalar(
+        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
+    )
     if provider is None:
         raise BookingValidationError("Provider not found")
     if provider.availability_status != AvailabilityStatus.AVAILABLE:
@@ -108,7 +114,7 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
         )
     )
     if overlapping is not None:
-        raise BookingValidationError("Appointment overlaps an existing booking")
+        raise BookingConflictError("Appointment slot is already booked")
 
     appointment = Appointment(
         **payload.model_dump(exclude={"appointment_start"}),
