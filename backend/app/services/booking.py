@@ -5,10 +5,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment_cancellation import AppointmentCancellation
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
-from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
+from app.schemas.appointment import (
+    AppointmentCancellationCreate,
+    AppointmentCreate,
+    AppointmentUpdate,
+)
 
 
 class BookingValidationError(ValueError):
@@ -147,6 +152,10 @@ def update_appointment(
     db: Session, appointment: Appointment, payload: AppointmentUpdate
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("status") == AppointmentStatus.CANCELLED:
+        raise BookingValidationError(
+            "Use the cancellation endpoint to cancel an appointment"
+        )
     new_start = changes.pop("appointment_start", None)
     if new_start is not None:
         provider = db.scalar(
@@ -172,3 +181,31 @@ def update_appointment(
     db.commit()
     db.refresh(appointment)
     return appointment
+
+
+def cancel_appointment(
+    db: Session,
+    appointment_id,
+    payload: AppointmentCancellationCreate,
+) -> AppointmentCancellation:
+    appointment = db.scalar(
+        select(Appointment)
+        .where(Appointment.id == appointment_id)
+        .with_for_update()
+    )
+    if appointment is None:
+        raise BookingValidationError("Appointment not found")
+    if appointment.status == AppointmentStatus.CANCELLED:
+        raise BookingValidationError("Appointment is already cancelled")
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise BookingValidationError("Completed appointments cannot be cancelled")
+
+    cancellation = AppointmentCancellation(
+        appointment_id=appointment.id,
+        **payload.model_dump(),
+    )
+    appointment.status = AppointmentStatus.CANCELLED
+    db.add(cancellation)
+    db.commit()
+    db.refresh(cancellation)
+    return cancellation
