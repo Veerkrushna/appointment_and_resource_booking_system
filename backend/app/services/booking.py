@@ -15,6 +15,13 @@ from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentUpdate,
 )
+from app.services.notifications import (
+    send_booking_confirmation,
+    send_cancellation_email,
+    send_confirmation_status_email,
+    send_reschedule_email,
+)
+from app.tasks import schedule_appointment_notifications
 
 
 class BookingValidationError(ValueError):
@@ -150,6 +157,9 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+    send_booking_confirmation(db, appointment)
+    db.refresh(appointment)
+    schedule_appointment_notifications(appointment)
     return appointment
 
 
@@ -157,6 +167,8 @@ def update_appointment(
     db: Session, appointment: Appointment, payload: AppointmentUpdate
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
+    rescheduled = "appointment_start" in changes
+    confirmed = changes.get("status") == AppointmentStatus.CONFIRMED
     if changes.get("status") == AppointmentStatus.CANCELLED:
         raise BookingValidationError(
             "Use the cancellation endpoint to cancel an appointment"
@@ -185,6 +197,11 @@ def update_appointment(
 
     db.commit()
     db.refresh(appointment)
+    if confirmed:
+        send_confirmation_status_email(db, appointment)
+    if rescheduled:
+        db.refresh(appointment)
+        send_reschedule_email(db, appointment)
     return appointment
 
 
@@ -231,4 +248,6 @@ def cancel_appointment(
     db.add(cancellation)
     db.commit()
     db.refresh(cancellation)
+    db.refresh(appointment)
+    send_cancellation_email(db, appointment)
     return cancellation
