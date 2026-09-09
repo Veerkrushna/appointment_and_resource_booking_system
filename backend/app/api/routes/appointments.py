@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.schemas.appointment import (
-    AppointmentCancellationRequest,
+    AppointmentCancellationCreate,
+    AppointmentCancellationResponse,
     AppointmentCreate,
     AppointmentResponse,
     AppointmentUpdate,
@@ -17,11 +18,9 @@ from app.services.booking import (
     BookingConflictError,
     BookingValidationError,
     CancellationValidationError,
+    cancel_appointment,
     create_appointment,
     update_appointment,
-)
-from app.services.booking import (
-    cancel_appointment as cancel_appointment_service,
 )
 
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
@@ -107,16 +106,10 @@ def edit_appointment(
 def cancel_appointment_endpoint(
     appointment_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    payload: AppointmentCancellationRequest | None = None,
+    payload: AppointmentCancellationCreate | None = None,
 ):
-    request = payload or AppointmentCancellationRequest()
     try:
-        cancel_appointment_service(
-            db,
-            appointment_id,
-            request.cancelled_by,
-            request.reason,
-        )
+        cancel_appointment(db, appointment_id, payload)
     except CancellationValidationError as error:
         status_code = (
             status.HTTP_404_NOT_FOUND
@@ -124,3 +117,41 @@ def cancel_appointment_endpoint(
             else status.HTTP_400_BAD_REQUEST
         )
         raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.post(
+    "/{appointment_id}/cancel",
+    response_model=AppointmentCancellationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def cancel_appointment_post_endpoint(
+    appointment_id: UUID,
+    payload: AppointmentCancellationCreate,
+    db: Annotated[Session, Depends(get_db)],
+):
+    try:
+        return cancel_appointment(db, appointment_id, payload)
+    except BookingValidationError as error:
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if str(error) == "Appointment not found"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/{appointment_id}/cancellations",
+    response_model=list[AppointmentCancellationResponse],
+)
+def list_appointment_cancellations(
+    appointment_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+):
+    appointment = db.get(Appointment, appointment_id)
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
+    return appointment.cancellations

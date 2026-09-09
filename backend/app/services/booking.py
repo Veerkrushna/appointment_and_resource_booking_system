@@ -6,14 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.appointment import Appointment, AppointmentStatus
-from app.models.appointment_cancellation import (
-    AppointmentCancellation,
-    RefundStatus,
-)
+from app.models.appointment_cancellation import AppointmentCancellation
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
-from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
+from app.schemas.appointment import (
+    AppointmentCancellationCreate,
+    AppointmentCreate,
+    AppointmentUpdate,
+)
 
 
 class BookingValidationError(ValueError):
@@ -24,7 +25,7 @@ class BookingConflictError(BookingValidationError):
     pass
 
 
-class CancellationValidationError(ValueError):
+class CancellationValidationError(BookingValidationError):
     pass
 
 
@@ -156,6 +157,10 @@ def update_appointment(
     db: Session, appointment: Appointment, payload: AppointmentUpdate
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("status") == AppointmentStatus.CANCELLED:
+        raise BookingValidationError(
+            "Use the cancellation endpoint to cancel an appointment"
+        )
     new_start = changes.pop("appointment_start", None)
     if new_start is not None:
         provider = db.scalar(
@@ -186,9 +191,9 @@ def update_appointment(
 def cancel_appointment(
     db: Session,
     appointment_id,
-    cancelled_by: str = "customer",
-    reason: str | None = None,
-) -> None:
+    payload: AppointmentCancellationCreate | None = None,
+) -> AppointmentCancellation:
+    payload = payload or AppointmentCancellationCreate()
     appointment_snapshot = db.scalar(
         select(Appointment).where(Appointment.id == appointment_id)
     )
@@ -219,12 +224,11 @@ def cancel_appointment(
         )
 
     appointment.status = AppointmentStatus.CANCELLED
-    db.add(
-        AppointmentCancellation(
-            appointment_id=appointment.id,
-            cancelled_by=cancelled_by,
-            reason=reason,
-            refund_status=RefundStatus.PENDING,
-        )
+    cancellation = AppointmentCancellation(
+        appointment_id=appointment.id,
+        **payload.model_dump(),
     )
+    db.add(cancellation)
     db.commit()
+    db.refresh(cancellation)
+    return cancellation

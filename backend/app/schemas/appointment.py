@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.appointment import AppointmentStatus
+from app.models.appointment_cancellation import RefundStatus
 
 
 class AppointmentCreate(BaseModel):
@@ -25,9 +26,24 @@ class AppointmentUpdate(BaseModel):
     status: AppointmentStatus | None = None
 
 
-class AppointmentCancellationRequest(BaseModel):
+class AppointmentCancellationCreate(BaseModel):
     cancelled_by: str = Field(default="customer", min_length=1, max_length=100)
     reason: str | None = None
+    refund_status: RefundStatus = RefundStatus.PENDING
+
+
+class AppointmentCancellationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    appointment_id: UUID
+    cancelled_by: str
+    reason: str | None
+    refund_status: RefundStatus
+    cancelled_at: datetime
+
+
+AppointmentCancellationRequest = AppointmentCancellationCreate
 
 
 class AppointmentResponse(BaseModel):
