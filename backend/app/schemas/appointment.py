@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.models.appointment import AppointmentStatus
+
 
 class AppointmentCreate(BaseModel):
     service_id: UUID
@@ -12,6 +14,15 @@ class AppointmentCreate(BaseModel):
     user_phone: str | None = Field(default=None, max_length=30)
     appointment_start: datetime
     notes: str | None = None
+
+
+class AppointmentUpdate(BaseModel):
+    user_name: str | None = Field(default=None, min_length=1, max_length=255)
+    user_email: EmailStr | None = None
+    user_phone: str | None = Field(default=None, max_length=30)
+    appointment_start: datetime | None = None
+    notes: str | None = None
+    status: AppointmentStatus | None = None
 
 
 class AppointmentResponse(BaseModel):
