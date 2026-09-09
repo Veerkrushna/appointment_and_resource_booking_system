@@ -5,10 +5,20 @@ description = "Backend for the Appointment & Resource Booking System"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",
+    "email-validator",
     "uvicorn[standard]",
     "pydantic-settings",
     "sqlalchemy",
-   "psycopg[binary]",
+    "psycopg[binary]",
+    "alembic",
+    "celery",
+    "redis",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
 ]
 
 [tool.ruff]
@@ -40,3 +50,6 @@ line-ending = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

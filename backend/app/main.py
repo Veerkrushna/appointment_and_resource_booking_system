@@ -1,5 +1,9 @@
 from fastapi import FastAPI
 
+from app.api.routes.appointments import router as appointments_router
+from app.api.routes.availability import router as availability_router
+from app.api.routes.providers import router as providers_router
+from app.api.routes.services import router as services_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -7,6 +11,13 @@ app = FastAPI(
     version="0.1.0",
     debug=settings.debug,
 )
+
+app.include_router(providers_router)
+
+
+app.include_router(services_router)
+app.include_router(availability_router)
+app.include_router(appointments_router)
 
 
 @app.get("/health")
