@@ -15,6 +15,10 @@ class BookingValidationError(ValueError):
     pass
 
 
+class BookingConflictError(BookingValidationError):
+    pass
+
+
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise BookingValidationError("appointment_start must include a timezone")
@@ -96,6 +100,42 @@ def _validate_slot(
             Appointment.id != exclude_appointment_id
         )
     if db.scalar(overlapping_query) is not None:
+        raise BookingConflictError("Appointment slot is already booked")
+
+    return start_utc, end_utc
+
+
+def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
+    provider = db.scalar(
+        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
+    )
+    if provider is None:
+        raise BookingValidationError("Provider not found")
+    if provider.availability_status != AvailabilityStatus.AVAILABLE:
+        raise BookingValidationError("Provider is not available")
+
+    service = db.scalar(
+        select(Service)
+        .join(ProviderService, ProviderService.service_id == Service.id)
+        .where(
+            Service.id == payload.service_id,
+            Service.status == ServiceStatus.ACTIVE,
+            ProviderService.provider_id == provider.id,
+            ProviderService.is_active.is_(True),
+        )
+    )
+    if service is None:
+        raise BookingValidationError("Active service is not offered by provider")
+
+    start_utc, end_utc = _validate_slot(
+        db, payload.appointment_start, service.duration_minutes, provider
+    )
+    )
+    if exclude_appointment_id is not None:
+        overlapping_query = overlapping_query.where(
+            Appointment.id != exclude_appointment_id
+        )
+    if db.scalar(overlapping_query) is not None:
         raise BookingValidationError("Appointment overlaps an existing booking")
 
     return start_utc, end_utc
@@ -143,6 +183,11 @@ def update_appointment(
     changes = payload.model_dump(exclude_unset=True)
     new_start = changes.pop("appointment_start", None)
     if new_start is not None:
+        provider = db.scalar(
+            select(Provider)
+            .where(Provider.id == appointment.provider_id)
+            .with_for_update()
+        )
         provider = db.get(Provider, appointment.provider_id)
         if provider is None:
             raise BookingValidationError("Provider not found")
@@ -161,4 +206,5 @@ def update_appointment(
 
     db.commit()
     db.refresh(appointment)
+    return appointment
     return appointment
