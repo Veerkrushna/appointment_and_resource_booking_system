@@ -21,7 +21,7 @@ from app.services.notifications import (
     send_confirmation_status_email,
     send_reschedule_email,
 )
-from app.tasks import schedule_appointment_notifications
+from app.tasks.notification_tasks import schedule_appointment_notifications
 
 
 class BookingValidationError(ValueError):

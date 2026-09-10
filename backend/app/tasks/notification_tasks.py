@@ -14,6 +14,7 @@ from app.services.notifications import deliver_notification
 
 def _schedule(task, appointment: Appointment, eta: datetime) -> None:
     if eta > datetime.now(UTC):
+
         def enqueue() -> None:
             try:
                 task.apply_async(args=[str(appointment.id)], eta=eta, retry=False)
@@ -50,67 +51,104 @@ def _send_once(
     notification_type: NotificationType,
     recipient_email: str | None,
     recipient_phone: str | None,
-) -> None:
+) -> bool:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
+
         if appointment is None or appointment.status == AppointmentStatus.CANCELLED:
-            return
-        exists = db.scalar(
-            select(Notification.id).where(
+            return False
+
+        notification = db.scalar(
+            select(Notification)
+            .where(
                 Notification.appointment_id == appointment.id,
                 Notification.notification_type == notification_type,
                 Notification.recipient_email == recipient_email,
                 Notification.recipient_phone == recipient_phone,
-                Notification.status == NotificationStatus.SENT,
             )
+            .order_by(Notification.created_at.desc())
         )
-        if exists is not None:
-            return
-        notification = Notification(
-            appointment_id=appointment.id,
-            notification_type=notification_type,
-            recipient_email=recipient_email,
-            recipient_phone=recipient_phone,
-        )
-        db.add(notification)
-        db.commit()
-        deliver_notification(db, notification, appointment)
+
+        if notification is not None:
+            if notification.status == NotificationStatus.SENT:
+                return True
+        else:
+            notification = Notification(
+                appointment_id=appointment.id,
+                notification_type=notification_type,
+                recipient_email=recipient_email,
+                recipient_phone=recipient_phone,
+            )
+            db.add(notification)
+            db.commit()
+
+        return deliver_notification(db, notification, appointment)
 
 
-@celery_app.task(name="appointments.send_email_reminder")
+@celery_app.task(
+    name="appointments.send_email_reminder",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
 def send_email_reminder(appointment_id: str) -> None:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
+
         if appointment is not None:
-            _send_once(
+            delivered = _send_once(
                 appointment_id,
                 NotificationType.REMINDER,
                 appointment.user_email,
                 None,
             )
 
+            if not delivered:
+                raise RuntimeError("Email reminder delivery failed")
 
-@celery_app.task(name="appointments.send_sms_reminder")
+
+@celery_app.task(
+    name="appointments.send_sms_reminder",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
 def send_sms_reminder(appointment_id: str) -> None:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
+
         if appointment is not None and appointment.user_phone:
-            _send_once(
+            delivered = _send_once(
                 appointment_id,
                 NotificationType.REMINDER,
                 None,
                 appointment.user_phone,
             )
 
+            if not delivered:
+                raise RuntimeError("SMS reminder delivery failed")
 
-@celery_app.task(name="appointments.send_feedback_request")
+
+@celery_app.task(
+    name="appointments.send_feedback_request",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
 def send_feedback_request(appointment_id: str) -> None:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
+
         if appointment is not None:
-            _send_once(
+            delivered = _send_once(
                 appointment_id,
                 NotificationType.FEEDBACK_REQUEST,
                 appointment.user_email,
                 None,
             )
+
+            if not delivered:
+                raise RuntimeError("Feedback request delivery failed")
