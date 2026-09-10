@@ -53,3 +53,8 @@ python_functions = ["test_*"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"

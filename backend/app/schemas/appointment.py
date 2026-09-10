@@ -53,6 +53,13 @@ class AppointmentRescheduleCreate(BaseModel):
 AppointmentCancellationRequest = AppointmentCancellationCreate
 
 
+class AppointmentRescheduleCreate(BaseModel):
+    appointment_start: datetime
+    cancelled_by: str = Field(min_length=1, max_length=100)
+    reason: str | None = None
+    refund_status: RefundStatus = RefundStatus.NOT_ELIGIBLE
+
+
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
