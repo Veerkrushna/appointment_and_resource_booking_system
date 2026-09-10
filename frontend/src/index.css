@@ -117,6 +117,164 @@ main {
   font-size: 1.35rem;
 }
 
+.appointments-page {
+  padding-top: clamp(3.5rem, 8vw, 7rem);
+}
+
+.appointment-lookup {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 2.25rem;
+  padding: 1.25rem;
+  border: 1px solid #dbe5dc;
+  border-radius: 8px;
+  background: #fbfcf8;
+}
+
+.appointment-lookup__controls {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.appointment-lookup__controls input {
+  width: min(100%, 20rem);
+  border: 1px solid #ccd8d0;
+  border-radius: 5px;
+  padding: 0.78rem 0.85rem;
+  background: #fff;
+  color: #18312f;
+  font: inherit;
+}
+
+.appointment-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 1.5rem;
+}
+
+.appointment-tabs .filter-button span {
+  margin-left: 0.3rem;
+  opacity: 0.7;
+}
+
+.appointment-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.appointment-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.5fr) auto;
+  gap: 1.5rem;
+  align-items: center;
+  padding: 1.4rem 1.5rem;
+  border: 1px solid #dbe5dc;
+  border-radius: 8px;
+  background: #fbfcf8;
+}
+
+.appointment-card__date {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #64736e;
+  font-size: 0.82rem;
+}
+
+.appointment-card__date strong {
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.5rem;
+}
+
+.appointment-card__date small {
+  color: #8a9b94;
+}
+
+.appointment-card__topline {
+  min-height: 1.1rem;
+}
+
+.appointment-status {
+  color: #557b69;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.appointment-status--cancelled {
+  color: #a15c44;
+}
+
+.appointment-card h2 {
+  margin: 0.45rem 0 0.25rem;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.3rem;
+}
+
+.appointment-card p {
+  margin: 0;
+  color: #64736e;
+  font-size: 0.9rem;
+}
+
+.appointment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.text-button {
+  border: 0;
+  padding: 0.8rem 0.25rem;
+  background: transparent;
+  color: #a15c44;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.reschedule-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e9e1;
+}
+
+.reschedule-form .field-label {
+  min-width: min(100%, 15rem);
+}
+
+.reschedule-form input {
+  border: 1px solid #ccd8d0;
+  border-radius: 5px;
+  padding: 0.65rem;
+  background: #fff;
+  color: #18312f;
+  font: inherit;
+}
+
+.appointment-empty {
+  margin-top: 1rem;
+}
+
 .category-filter {
   display: flex;
   flex-wrap: wrap;
@@ -641,6 +799,28 @@ main {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .appointment-lookup {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .appointment-lookup__controls {
+    justify-content: stretch;
+  }
+
+  .appointment-lookup__controls input {
+    flex: 1;
+  }
+
+  .appointment-card {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .appointment-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
@@ -680,6 +860,15 @@ main {
   }
 
   .booking-actions button {
+    width: 100%;
+  }
+
+  .appointment-lookup__controls {
+    flex-direction: column;
+  }
+
+  .appointment-lookup__controls input,
+  .appointment-lookup__controls button {
     width: 100%;
   }
 }
