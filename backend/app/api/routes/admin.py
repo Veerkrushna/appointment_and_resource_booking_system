@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.timezones import TimezoneValidationError, get_timezone, to_utc
@@ -62,18 +62,24 @@ def admin_overview(
         .order_by(Appointment.status)
     ).all()
     total_appointments = sum(count for _, count in status_rows)
-    upcoming_appointments = db.scalar(
-        select(func.count(Appointment.id)).where(
-            Appointment.appointment_end >= now_utc,
-            Appointment.status != AppointmentStatus.CANCELLED,
+    upcoming_appointments = (
+        db.scalar(
+            select(func.count(Appointment.id)).where(
+                Appointment.appointment_end >= now_utc,
+                Appointment.status != AppointmentStatus.CANCELLED,
+            )
         )
-    ) or 0
-    appointments_today = db.scalar(
-        select(func.count(Appointment.id)).where(
-            Appointment.appointment_start < today_end,
-            Appointment.appointment_end > today_start,
+        or 0
+    )
+    appointments_today = (
+        db.scalar(
+            select(func.count(Appointment.id)).where(
+                Appointment.appointment_start < today_end,
+                Appointment.appointment_end > today_start,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     return AdminOverviewResponse(
         generated_at=now_utc,
@@ -90,11 +96,13 @@ def admin_overview(
             select(func.count(Provider.id)).where(
                 Provider.availability_status == AvailabilityStatus.AVAILABLE
             )
-        ) or 0,
+        )
+        or 0,
         total_services=db.scalar(select(func.count(Service.id))) or 0,
         active_services=db.scalar(
             select(func.count(Service.id)).where(Service.status == ServiceStatus.ACTIVE)
-        ) or 0,
+        )
+        or 0,
     )
 
 
@@ -104,21 +112,35 @@ def admin_appointments(
     timezone: str = Query(default="UTC", min_length=1, max_length=64),
     provider_id: UUID | None = None,
     service_id: UUID | None = None,
-    appointment_status: Annotated[AppointmentStatus | None, Query(alias="status")] = None,
-    user_email: str | None = None,
+    appointment_status: Annotated[
+        AppointmentStatus | None, Query(alias="status")
+    ] = None,
+    search: str | None = None,
+    provider_search: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=25, ge=1, le=100),
 ):
     _admin_timezone(timezone)
-    if start_date is not None and end_date is not None and start_date > end_date:
-        raise HTTPException(status_code=400, detail="start_date must be before end_date")
 
-    query = select(Appointment).options(
-        joinedload(Appointment.provider), joinedload(Appointment.service)
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(
+            status_code=400, detail="start_date must be before or equal to end_date"
+        )
+
+    page_size = 15
+
+    query = (
+        select(Appointment)
+        .join(Provider, Provider.id == Appointment.provider_id)
+        .options(
+            joinedload(Appointment.provider),
+            joinedload(Appointment.service),
+        )
     )
-    count_query = select(func.count(Appointment.id))
+    count_query = select(func.count(Appointment.id)).join(
+        Provider, Provider.id == Appointment.provider_id
+    )
     filters = []
     if provider_id is not None:
         filters.append(Appointment.provider_id == provider_id)
@@ -126,17 +148,32 @@ def admin_appointments(
         filters.append(Appointment.service_id == service_id)
     if appointment_status is not None:
         filters.append(Appointment.status == appointment_status)
-    if user_email is not None:
-        filters.append(Appointment.user_email == user_email)
+    if search is not None:
+        search_term = f"%{search.strip()}%"
+        filters.append(
+            or_(
+                Appointment.user_email.ilike(search_term),
+                Appointment.user_phone.ilike(search_term),
+            )
+        )
+    if provider_search is not None:
+        provider_search_term = f"%{provider_search.strip()}%"
+        filters.append(Provider.name.ilike(provider_search_term))
     if start_date is not None:
-        filters.append(Appointment.appointment_end > _utc_day_bounds(start_date, timezone)[0])
+        filters.append(
+            Appointment.appointment_end > _utc_day_bounds(start_date, timezone)[0]
+        )
     if end_date is not None:
-        filters.append(Appointment.appointment_start < _utc_day_bounds(end_date, timezone)[1])
+        filters.append(
+            Appointment.appointment_start < _utc_day_bounds(end_date, timezone)[1]
+        )
     query = query.where(*filters).order_by(Appointment.appointment_start)
     count_query = count_query.where(*filters)
 
     total = db.scalar(count_query) or 0
-    appointments = db.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()
+    appointments = db.scalars(
+        query.offset((page - 1) * page_size).limit(page_size)
+    ).all()
     return AdminAppointmentListResponse(
         appointments=[_appointment_response(item, timezone) for item in appointments],
         page=page,
@@ -146,7 +183,9 @@ def admin_appointments(
     )
 
 
-@router.get("/providers/{provider_id}/schedule", response_model=ProviderScheduleResponse)
+@router.get(
+    "/providers/{provider_id}/schedule", response_model=ProviderScheduleResponse
+)
 def admin_provider_schedule(
     provider_id: UUID,
     db: Annotated[Session, Depends(get_db)],
@@ -171,7 +210,9 @@ def admin_provider_schedule(
     schedule_start = start_date or local_today
     schedule_end = end_date or schedule_start + timedelta(days=6)
     if schedule_start > schedule_end:
-        raise HTTPException(status_code=400, detail="start_date must be before end_date")
+        raise HTTPException(
+            status_code=400, detail="start_date must be before end_date"
+        )
 
     range_start, _ = _utc_day_bounds(schedule_start, timezone)
     _, range_end = _utc_day_bounds(schedule_end, timezone)
@@ -207,8 +248,12 @@ def admin_provider_schedule(
                 end_time=item.end_time,
                 break_type=item.break_type,
             )
-            for item in sorted(provider.breaks, key=lambda item: (item.day_of_week, item.start_time))
+            for item in sorted(
+                provider.breaks, key=lambda item: (item.day_of_week, item.start_time)
+            )
         ],
-        blackout_dates=[BlackoutResponse.model_validate(item) for item in provider.blackout_dates],
+        blackout_dates=[
+            BlackoutResponse.model_validate(item) for item in provider.blackout_dates
+        ],
         appointments=[_appointment_response(item, timezone) for item in appointments],
     )
