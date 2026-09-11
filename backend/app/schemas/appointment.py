@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.core.timezones import to_local
 from app.models.appointment import AppointmentStatus
 from app.models.appointment_cancellation import RefundStatus
 
@@ -67,3 +68,10 @@ class AppointmentResponse(BaseModel):
     duration_minutes: int
     notes: str | None
     status: str
+
+    @classmethod
+    def from_appointment(cls, appointment, timezone: str) -> "AppointmentResponse":
+        response = cls.model_validate(appointment)
+        response.appointment_start = to_local(response.appointment_start, timezone)
+        response.appointment_end = to_local(response.appointment_end, timezone)
+        return response
