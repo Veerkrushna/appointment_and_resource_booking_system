@@ -15,14 +15,17 @@ class AvailabilitySlot(BaseModel):
 
 
 class AvailabilitySlotsResponse(BaseModel):
-    service_id: UUID
-    date: date
-    slot_interval_minutes: int
     slots: list[AvailabilitySlot]
+
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
 
 
 class AvailabilitySlotsQuery(BaseModel):
-    service_id: UUID
-    date: date
+    service_id: UUID | None = None
     provider_id: UUID | None = None
-    slot_interval_minutes: int = Field(default=15, ge=1, le=120)
+    start_date: date
+    end_date: date
+    page: int = Field(default=1, ge=1)
