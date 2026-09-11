@@ -44,6 +44,13 @@ class AppointmentCancellationResponse(BaseModel):
     cancelled_at: datetime
 
 
+class AppointmentRescheduleCreate(BaseModel):
+    appointment_start: datetime
+    cancelled_by: str = Field(min_length=1, max_length=100)
+    reason: str | None = None
+    refund_status: RefundStatus = RefundStatus.NOT_ELIGIBLE
+
+
 AppointmentCancellationRequest = AppointmentCancellationCreate
 
 

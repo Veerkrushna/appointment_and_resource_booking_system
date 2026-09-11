@@ -33,6 +33,13 @@ function Navbar() {
         >
           Appointments
         </NavLink>
+
+        <NavLink
+          to="/admin"
+          className={({ isActive }) => (isActive ? "active" : "")}
+        >
+          Admin
+        </NavLink>
       </div>
     </nav>
   );
