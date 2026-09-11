@@ -17,3 +17,10 @@ def to_local(value: datetime, timezone: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(get_timezone(timezone))
+
+
+def to_utc(value: datetime, timezone: str) -> datetime:
+    """Interpret a datetime in an IANA zone and return the UTC instant."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        value = value.replace(tzinfo=get_timezone(timezone))
+    return value.astimezone(UTC)

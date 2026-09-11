@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.routes.admin import router as admin_router
 from app.api.routes.appointments import router as appointments_router
 from app.api.routes.availability import router as availability_router
 from app.api.routes.providers import router as providers_router
@@ -18,6 +19,7 @@ app.include_router(providers_router)
 app.include_router(services_router)
 app.include_router(availability_router)
 app.include_router(appointments_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")
