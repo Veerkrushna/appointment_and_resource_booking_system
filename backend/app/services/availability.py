@@ -14,7 +14,7 @@ from app.models.availability import (
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
-from app.schemas.availability import AvailabilitySlot, AvailabilitySlotsResponse
+from app.schemas.availability import AvailabilitySlot
 
 Interval = tuple[datetime, datetime]
 
@@ -149,87 +149,149 @@ def _provider_slots(
 
 def calculate_available_slots(
     db: Session,
-    service_id: UUID,
-    target_date: date,
+    service_id: UUID | None,
+    start_date: date,
+    end_date: date,
     provider_id: UUID | None = None,
     slot_interval_minutes: int = 15,
-) -> AvailabilitySlotsResponse | None:
-    service = db.scalar(
-        select(Service).where(
-            Service.id == service_id,
-            Service.status == ServiceStatus.ACTIVE,
-        )
-    )
-    if service is None:
+) -> list[AvailabilitySlot] | None:
+    if start_date > end_date:
         return None
 
-    provider_query = (
-        select(Provider)
-        .join(ProviderService, ProviderService.provider_id == Provider.id)
-        .where(
-            ProviderService.service_id == service_id,
-            ProviderService.is_active.is_(True),
-            Provider.availability_status == AvailabilityStatus.AVAILABLE,
-        )
-    )
-    if provider_id is not None:
-        provider_query = provider_query.where(Provider.id == provider_id)
-    providers = list(db.scalars(provider_query).unique().all())
+    # ---------------------------------------------------------
+    # 1. Find the services to calculate availability for
+    # ---------------------------------------------------------
+    service_query = select(Service).where(Service.status == ServiceStatus.ACTIVE)
 
+    if service_id is not None:
+        service_query = service_query.where(Service.id == service_id)
+
+    services = list(db.scalars(service_query).all())
+
+    if not services:
+        return None
+
+    # ---------------------------------------------------------
+    # 2. Generate every date in the requested range
+    # ---------------------------------------------------------
+    dates: list[date] = []
+    current_date = start_date
+
+    while current_date <= end_date:
+        dates.append(current_date)
+        current_date += timedelta(days=1)
+
+    # ---------------------------------------------------------
+    # 3. Calculate slots for every service/provider/date
+    # ---------------------------------------------------------
     slots: list[AvailabilitySlot] = []
-    for provider in providers:
-        try:
-            timezone = ZoneInfo(provider.timezone)
-        except ZoneInfoNotFoundError:
-            continue
-        day_start = _provider_datetime(target_date, time.min, timezone)
-        day_end = _provider_datetime(
-            target_date + timedelta(days=1), time.min, timezone
-        )
-        appointments = list(
-            db.scalars(
-                select(Appointment).where(
-                    Appointment.provider_id == provider.id,
-                    Appointment.status != AppointmentStatus.CANCELLED,
-                    Appointment.appointment_start < day_end,
-                    Appointment.appointment_end > day_start,
-                )
-            ).all()
-        )
-        blackouts = list(
-            db.scalars(
-                select(ProviderBlackoutDate).where(
-                    ProviderBlackoutDate.provider_id == provider.id,
-                    ProviderBlackoutDate.blackout_start < day_end,
-                    ProviderBlackoutDate.blackout_end > day_start,
-                )
-            ).all()
-        )
-        breaks = list(
-            db.scalars(
-                select(ProviderBreak).where(
-                    ProviderBreak.provider_id == provider.id,
-                    ProviderBreak.day_of_week == target_date.weekday(),
-                )
-            ).all()
-        )
-        slots.extend(
-            _provider_slots(
-                provider,
-                service,
-                target_date,
-                appointments,
-                blackouts,
-                breaks,
-                timedelta(minutes=slot_interval_minutes),
-                timezone,
+
+    for service in services:
+        provider_query = (
+            select(Provider)
+            .join(
+                ProviderService,
+                ProviderService.provider_id == Provider.id,
+            )
+            .where(
+                ProviderService.service_id == service.id,
+                ProviderService.is_active.is_(True),
+                Provider.availability_status == AvailabilityStatus.AVAILABLE,
             )
         )
 
-    slots.sort(key=lambda slot: (slot.start, slot.provider_name))
-    return AvailabilitySlotsResponse(
-        service_id=service_id,
-        date=target_date,
-        slot_interval_minutes=slot_interval_minutes,
-        slots=slots,
+        if provider_id is not None:
+            provider_query = provider_query.where(Provider.id == provider_id)
+
+        providers = list(db.scalars(provider_query).unique().all())
+
+        for provider in providers:
+            try:
+                timezone = ZoneInfo(provider.timezone)
+            except ZoneInfoNotFoundError:
+                continue
+
+            for target_date in dates:
+                # -------------------------------------------------
+                # Determine the UTC boundaries for this provider's
+                # local day.
+                # -------------------------------------------------
+                day_start = _provider_datetime(
+                    target_date,
+                    time.min,
+                    timezone,
+                )
+
+                day_end = _provider_datetime(
+                    target_date + timedelta(days=1),
+                    time.min,
+                    timezone,
+                )
+
+                # -------------------------------------------------
+                # Existing appointments
+                # -------------------------------------------------
+                appointments = list(
+                    db.scalars(
+                        select(Appointment).where(
+                            Appointment.provider_id == provider.id,
+                            Appointment.status != AppointmentStatus.CANCELLED,
+                            Appointment.appointment_start < day_end,
+                            Appointment.appointment_end > day_start,
+                        )
+                    ).all()
+                )
+
+                # -------------------------------------------------
+                # Blackout dates
+                # -------------------------------------------------
+                blackouts = list(
+                    db.scalars(
+                        select(ProviderBlackoutDate).where(
+                            ProviderBlackoutDate.provider_id == provider.id,
+                            ProviderBlackoutDate.blackout_start < day_end,
+                            ProviderBlackoutDate.blackout_end > day_start,
+                        )
+                    ).all()
+                )
+
+                # -------------------------------------------------
+                # Breaks
+                # -------------------------------------------------
+                breaks = list(
+                    db.scalars(
+                        select(ProviderBreak).where(
+                            ProviderBreak.provider_id == provider.id,
+                            ProviderBreak.day_of_week == target_date.weekday(),
+                        )
+                    ).all()
+                )
+
+                # -------------------------------------------------
+                # Reuse the existing slot-generation algorithm
+                # -------------------------------------------------
+                slots.extend(
+                    _provider_slots(
+                        provider,
+                        service,
+                        target_date,
+                        appointments,
+                        blackouts,
+                        breaks,
+                        timedelta(minutes=slot_interval_minutes),
+                        timezone,
+                    )
+                )
+
+    # ---------------------------------------------------------
+    # 4. Sort the complete result
+    # ---------------------------------------------------------
+    slots.sort(
+        key=lambda slot: (
+            slot.start,
+            slot.provider_name,
+            slot.service_id,
+        )
     )
+
+    return slots
