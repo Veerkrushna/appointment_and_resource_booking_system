@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.timezones import TimezoneValidationError, get_timezone
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.schemas.appointment import (
@@ -26,15 +27,28 @@ from app.services.booking import (
 router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
 
 
+def _validate_timezone(timezone: str) -> str:
+    try:
+        get_timezone(timezone)
+    except TimezoneValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
+        ) from error
+    return timezone
+
+
 @router.post(
     "", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED
 )
 def book_appointment(
     payload: AppointmentCreate,
     db: Annotated[Session, Depends(get_db)],
+    timezone: str = Query(default="UTC", min_length=1, max_length=64),
 ):
+    timezone = _validate_timezone(timezone)
     try:
-        return create_appointment(db, payload)
+        appointment = create_appointment(db, payload)
+        return AppointmentResponse.from_appointment(appointment, timezone)
     except BookingConflictError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(error)
@@ -50,10 +64,12 @@ def list_appointments(
     db: Annotated[Session, Depends(get_db)],
     provider_id: UUID | None = None,
     user_email: str | None = None,
+    timezone: str = Query(default="UTC", min_length=1, max_length=64),
     appointment_status: Annotated[
         AppointmentStatus | None, Query(alias="status")
     ] = None,
 ):
+    timezone = _validate_timezone(timezone)
     query = select(Appointment).order_by(Appointment.appointment_start)
     if provider_id is not None:
         query = query.where(Appointment.provider_id == provider_id)
@@ -61,21 +77,26 @@ def list_appointments(
         query = query.where(Appointment.user_email == user_email)
     if appointment_status is not None:
         query = query.where(Appointment.status == appointment_status)
-    return list(db.scalars(query).all())
+    return [
+        AppointmentResponse.from_appointment(appointment, timezone)
+        for appointment in db.scalars(query).all()
+    ]
 
 
 @router.get("/{appointment_id}", response_model=AppointmentResponse)
 def get_appointment(
     appointment_id: UUID,
     db: Annotated[Session, Depends(get_db)],
+    timezone: str = Query(default="UTC", min_length=1, max_length=64),
 ):
+    timezone = _validate_timezone(timezone)
     appointment = db.get(Appointment, appointment_id)
     if appointment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Appointment not found",
         )
-    return appointment
+    return AppointmentResponse.from_appointment(appointment, timezone)
 
 
 @router.put("/{appointment_id}", response_model=AppointmentResponse)
@@ -83,7 +104,9 @@ def edit_appointment(
     appointment_id: UUID,
     payload: AppointmentUpdate,
     db: Annotated[Session, Depends(get_db)],
+    timezone: str = Query(default="UTC", min_length=1, max_length=64),
 ):
+    timezone = _validate_timezone(timezone)
     appointment = db.get(Appointment, appointment_id)
     if appointment is None:
         raise HTTPException(
@@ -91,7 +114,8 @@ def edit_appointment(
             detail="Appointment not found",
         )
     try:
-        return update_appointment(db, appointment, payload)
+        appointment = update_appointment(db, appointment, payload)
+        return AppointmentResponse.from_appointment(appointment, timezone)
     except BookingConflictError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(error)
