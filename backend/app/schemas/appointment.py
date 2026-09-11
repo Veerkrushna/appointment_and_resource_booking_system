@@ -75,3 +75,11 @@ class AppointmentResponse(BaseModel):
         response.appointment_start = to_local(response.appointment_start, timezone)
         response.appointment_end = to_local(response.appointment_end, timezone)
         return response
+
+
+class AppointmentListResponse(BaseModel):
+    appointments: list[AppointmentResponse]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int

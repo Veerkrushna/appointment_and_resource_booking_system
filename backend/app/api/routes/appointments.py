@@ -1,17 +1,21 @@
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.timezones import TimezoneValidationError, get_timezone
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.providers import Provider
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
     AppointmentCancellationResponse,
     AppointmentCreate,
+    AppointmentListResponse,
     AppointmentResponse,
     AppointmentUpdate,
 )
@@ -59,7 +63,7 @@ def book_appointment(
         ) from error
 
 
-@router.get("", response_model=list[AppointmentResponse])
+@router.get("", response_model=AppointmentListResponse)
 def list_appointments(
     db: Annotated[Session, Depends(get_db)],
     provider_id: UUID | None = None,
@@ -68,19 +72,84 @@ def list_appointments(
     appointment_status: Annotated[
         AppointmentStatus | None, Query(alias="status")
     ] = None,
+    page: Annotated[
+        int,
+        Query(ge=1, description="Page number"),
+    ] = 1,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    search: str | None = None,
+    provider_search: str | None = None,
 ):
     timezone = _validate_timezone(timezone)
-    query = select(Appointment).order_by(Appointment.appointment_start)
+
+    if start_date is not None and end_date is not None:
+        if start_date > end_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="start_date must be before or equal to end_date",
+            )
+
+    query = (
+        select(Appointment)
+        .join(Provider, Provider.id == Appointment.provider_id)
+        .order_by(Appointment.appointment_start)
+    )
+
+    if start_date is not None:
+        start_datetime = datetime.combine(
+            start_date,
+            time.min,
+            tzinfo=ZoneInfo(timezone),
+        ).astimezone(UTC)
+        query = query.where(Appointment.appointment_start >= start_datetime)
+
+    if end_date is not None:
+        end_datetime = datetime.combine(
+            end_date + timedelta(days=1),
+            time.min,
+            tzinfo=ZoneInfo(timezone),
+        ).astimezone(UTC)
+
+        query = query.where(Appointment.appointment_start < end_datetime)
+
     if provider_id is not None:
         query = query.where(Appointment.provider_id == provider_id)
+    if provider_search is not None:
+        provider_search_term = f"%{provider_search.strip()}%"
+        query = query.where(Provider.name.ilike(provider_search_term))
     if user_email is not None:
         query = query.where(Appointment.user_email == user_email)
     if appointment_status is not None:
         query = query.where(Appointment.status == appointment_status)
-    return [
-        AppointmentResponse.from_appointment(appointment, timezone)
-        for appointment in db.scalars(query).all()
-    ]
+    if search is not None:
+        search_term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                Appointment.user_email.ilike(search_term),
+                Appointment.user_phone.ilike(search_term),
+            )
+        )
+    page_size = 15
+
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+
+    start_index = (page - 1) * page_size
+
+    appointments = db.scalars(query.offset(start_index).limit(page_size)).all()
+
+    total_pages = (total + page_size - 1) // page_size
+
+    return AppointmentListResponse(
+        appointments=[
+            AppointmentResponse.from_appointment(appointment, timezone)
+            for appointment in appointments
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/{appointment_id}", response_model=AppointmentResponse)
