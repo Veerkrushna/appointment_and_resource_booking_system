@@ -21,6 +21,8 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
+const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(value));
 }
@@ -73,7 +75,7 @@ function AppointmentsPage() {
 
     try {
       const [appointmentsResponse, servicesResponse, providersResponse] = await Promise.all([
-        fetch(`/api/appointments?user_email=${encodeURIComponent(normalizedEmail)}`),
+        fetch(`/api/appointments?user_email=${encodeURIComponent(normalizedEmail)}&timezone=${encodeURIComponent(userTimeZone)}`),
         fetch("/api/services"),
         fetch("/api/providers"),
       ]);
@@ -131,7 +133,7 @@ function AppointmentsPage() {
     setActiveAction(id);
     setActionError(null);
     try {
-      const response = await fetch(`/api/appointments/${id}`, {
+      const response = await fetch(`/api/appointments/${id}?timezone=${encodeURIComponent(userTimeZone)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appointment_start: new Date(rescheduleDate).toISOString() }),
