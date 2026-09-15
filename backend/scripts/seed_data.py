@@ -171,9 +171,6 @@ def create_provider_services(db, providers, services):
     return links
 
 
-from datetime import time
-
-
 def create_availability(db, providers):
     availability = []
 
@@ -242,9 +239,6 @@ def create_breaks(db, providers):
     print(f"Created {len(breaks)} weekly break records.")
 
     return breaks
-
-
-from datetime import UTC, datetime
 
 
 def create_blackout_dates(db, providers):

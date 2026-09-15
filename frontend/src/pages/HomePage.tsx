@@ -1,84 +1,150 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 type Service = {
   id: string;
   name: string;
-  description: string;
-  duration: string;
-  price: string;
+  description: string | null;
+  duration_minutes: number;
+  price: string | number | null;
   category: string;
+  status: string;
 };
+
 type Provider = {
+  id: string;
   name: string;
-  type: string;
-  services: string;
-  initials: string;
-  tone: string;
+  type: "person" | "resource";
+  availability_status: "available" | "on_leave" | "inactive";
 };
 
-// Replace these records with services and providers API responses when the home feed is connected.
-const popularServices: Service[] = [
-  {
-    id: "general-consultation",
-    name: "General Consultation",
-    description:
-      "A focused conversation to understand your needs and next steps.",
-    duration: "30 min",
-    price: "₹500",
-    category: "Consultation",
-  },
-  {
-    id: "follow-up-consultation",
-    name: "Follow-up Consultation",
-    description: "Continue your care with a quick check-in and a clear plan.",
-    duration: "30 min",
-    price: "₹300",
-    category: "Consultation",
-  },
-  {
-    id: "specialist-consultation",
-    name: "Specialist Consultation",
-    description:
-      "Dedicated time with an experienced specialist for your concern.",
-    duration: "45 min",
-    price: "₹700",
-    category: "Specialist care",
-  },
-];
+type AvailabilityResponse = {
+  slots: Array<{
+    provider_id: string;
+    provider_name: string;
+    service_id: string;
+    date: string;
+    start: string;
+    end: string;
+    duration_minutes: number;
+  }>;
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
 
-const providers: Provider[] = [
-  {
-    name: "Dr. Ananya Mehta",
-    type: "General physician",
-    services: "General & follow-up care",
-    initials: "AM",
-    tone: "coral",
-  },
-  {
-    name: "Dr. Rohan Kapoor",
-    type: "Specialist consultant",
-    services: "Specialist consultations",
-    initials: "RK",
-    tone: "sage",
-  },
-  {
-    name: "Dr. Neha Iyer",
-    type: "Family physician",
-    services: "General & follow-up care",
-    initials: "NI",
-    tone: "gold",
-  },
-];
+const providerTones = ["coral", "sage", "gold"];
+
+function formatPrice(price: Service["price"]) {
+  return price === null
+    ? "Price on request"
+    : `₹${Number(price).toLocaleString("en-IN")}`;
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function getToday() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function HomePage() {
-  const navigate = useNavigate();
   const [serviceId, setServiceId] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const [date, setDate] = useState("");
+  const [services, setServices] = useState<Service[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [providersLoading, setProvidersLoading] = useState(true);
+  const [servicesError, setServicesError] = useState("");
+  const [providersError, setProvidersError] = useState("");
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [availabilityResult, setAvailabilityResult] =
+    useState<AvailabilityResponse | null>(null);
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    let isCurrent = true;
+    async function loadServices() {
+      try {
+        const response = await fetch("/api/services");
+        if (!response.ok) throw new Error();
+        const data: Service[] = await response.json();
+        if (isCurrent)
+          setServices(
+            data.filter((service) => service.status.toLowerCase() === "active"),
+          );
+      } catch {
+        if (isCurrent) setServicesError("Unable to load services.");
+      } finally {
+        if (isCurrent) setServicesLoading(false);
+      }
+    }
+    void loadServices();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+    async function loadProviders() {
+      try {
+        const response = await fetch("/api/providers");
+        if (!response.ok) throw new Error();
+        const data: Provider[] = await response.json();
+        if (isCurrent) setProviders(data);
+      } catch {
+        if (isCurrent) setProvidersError("Unable to load providers.");
+      } finally {
+        if (isCurrent) setProvidersLoading(false);
+      }
+    }
+    void loadProviders();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    navigate(serviceId ? `/book/${serviceId}` : "/services");
+    setAvailabilityError("");
+    setAvailabilityResult(null);
+    if (!serviceId || !date) {
+      setAvailabilityError(
+        "Select a service and date to find available slots.",
+      );
+      return;
+    }
+
+    const query = new URLSearchParams({
+      service_id: serviceId,
+      start_date: date,
+      end_date: date,
+    });
+    if (providerId) query.set("provider_id", providerId);
+    setAvailabilityLoading(true);
+    try {
+      const response = await fetch(
+        `/api/availability/slots?${query.toString()}`,
+      );
+      if (!response.ok) throw new Error();
+      const data: AvailabilityResponse = await response.json();
+      setAvailabilityResult(data);
+    } catch {
+      setAvailabilityError("Unable to find available slots.");
+    } finally {
+      setAvailabilityLoading(false);
+    }
   }
 
   return (
@@ -167,9 +233,12 @@ function HomePage() {
             <select
               value={serviceId}
               onChange={(event) => setServiceId(event.target.value)}
+              disabled={servicesLoading || services.length === 0}
             >
-              <option value="">Select a service</option>
-              {popularServices.map((service) => (
+              <option value="">
+                {servicesLoading ? "Loading services..." : "Select a service"}
+              </option>
+              {services.map((service) => (
                 <option key={service.id} value={service.id}>
                   {service.name}
                 </option>
@@ -178,20 +247,76 @@ function HomePage() {
           </label>
           <label className="home-field">
             Provider
-            <select defaultValue="">
-              <option value="">Any provider</option>
-              <option value="one">Dr. Ananya Mehta</option>
-              <option value="two">Dr. Rohan Kapoor</option>
+            <select
+              value={providerId}
+              onChange={(event) => setProviderId(event.target.value)}
+              disabled={providersLoading || providers.length === 0}
+            >
+              <option value="">
+                {providersLoading ? "Loading providers..." : "Any provider"}
+              </option>
+              {providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.name}
+                </option>
+              ))}
             </select>
           </label>
           <label className="home-field">
             Date
-            <input type="date" min={new Date().toISOString().slice(0, 10)} />
+            <input
+              type="date"
+              min={getToday()}
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
           </label>
-          <button className="primary-button" type="submit">
-            Find Available Slots <span aria-hidden="true">→</span>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={availabilityLoading || servicesLoading}
+          >
+            {availabilityLoading ? (
+              "Finding slots..."
+            ) : (
+              <>
+                Find Available Slots <span aria-hidden="true">→</span>
+              </>
+            )}
           </button>
         </form>
+        {servicesError && (
+          <p className="home-form-message home-form-message--error">
+            {servicesError}
+          </p>
+        )}
+        {providersError && (
+          <p className="home-form-message home-form-message--error">
+            {providersError}
+          </p>
+        )}
+        {availabilityError && (
+          <p
+            className="home-form-message home-form-message--error"
+            role="alert"
+          >
+            {availabilityError}
+          </p>
+        )}
+        {availabilityResult &&
+          (availabilityResult.total > 0 ? (
+            <p className="home-form-message" role="status">
+              {availabilityResult.total} slot
+              {availabilityResult.total === 1 ? "" : "s"} available.{" "}
+              <Link to={`/book/${serviceId}`}>
+                Continue to booking <span aria-hidden="true">→</span>
+              </Link>
+            </p>
+          ) : (
+            <p className="home-form-message" role="status">
+              No available slots for this date. Try another date or provider.
+            </p>
+          ))}
       </section>
 
       <section
@@ -211,27 +336,49 @@ function HomePage() {
             View all services <span aria-hidden="true">↗</span>
           </Link>
         </div>
-        <div className="home-service-grid">
-          {popularServices.map((service, index) => (
-            <article className="home-service-card" key={service.id}>
-              <div className={`service-art service-art--${index + 1}`}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-              </div>
-              <div className="home-service-card__body">
-                <span className="service-category">{service.category}</span>
-                <h3>{service.name}</h3>
-                <p>{service.description}</p>
-                <div className="home-service-meta">
-                  <span>{service.duration}</span>
-                  <strong>{service.price}</strong>
+        {servicesLoading && (
+          <p className="status-message">Loading services...</p>
+        )}
+        {servicesError && (
+          <div className="status-message status-message--error" role="alert">
+            <strong>We could not load the service list.</strong>
+            <span>{servicesError}</span>
+          </div>
+        )}
+        {!servicesLoading && !servicesError && services.length === 0 && (
+          <p className="status-message">
+            No active services are available right now.
+          </p>
+        )}
+        {!servicesLoading && !servicesError && services.length > 0 && (
+          <div className="home-service-grid">
+            {services.map((service, index) => (
+              <article className="home-service-card" key={service.id}>
+                <div className={`service-art service-art--${(index % 3) + 1}`}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
                 </div>
-                <Link to={`/book/${service.id}`} className="service-book-link">
-                  Book Now <span aria-hidden="true">↗</span>
-                </Link>
-              </div>
-            </article>
-          ))}
-        </div>
+                <div className="home-service-card__body">
+                  <span className="service-category">{service.category}</span>
+                  <h3>{service.name}</h3>
+                  <p>
+                    {service.description ||
+                      "Details for this service are coming soon."}
+                  </p>
+                  <div className="home-service-meta">
+                    <span>{service.duration_minutes} min</span>
+                    <strong>{formatPrice(service.price)}</strong>
+                  </div>
+                  <Link
+                    to={`/book/${service.id}`}
+                    className="service-book-link"
+                  >
+                    Book Now <span aria-hidden="true">↗</span>
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section
@@ -303,25 +450,43 @@ function HomePage() {
             View all providers <span aria-hidden="true">↗</span>
           </Link>
         </div>
-        <div className="provider-preview-grid">
-          {providers.map((provider) => (
-            <article className="provider-preview-card" key={provider.name}>
-              <div
-                className={`provider-avatar provider-avatar--${provider.tone}`}
-              >
-                {provider.initials}
-              </div>
-              <div>
-                <h3>{provider.name}</h3>
-                <p>{provider.type}</p>
-                <small>{provider.services}</small>
-              </div>
-              <Link to="/providers" aria-label={`View ${provider.name}`}>
-                ↗
-              </Link>
-            </article>
-          ))}
-        </div>
+        {providersLoading && (
+          <p className="status-message">Loading providers...</p>
+        )}
+        {providersError && (
+          <div className="status-message status-message--error" role="alert">
+            <strong>We could not load the provider list.</strong>
+            <span>{providersError}</span>
+          </div>
+        )}
+        {!providersLoading && !providersError && providers.length === 0 && (
+          <p className="status-message">
+            No providers are available right now.
+          </p>
+        )}
+        {!providersLoading && !providersError && providers.length > 0 && (
+          <div className="provider-preview-grid">
+            {providers.slice(0, 3).map((provider, index) => (
+              <article className="provider-preview-card" key={provider.id}>
+                <div
+                  className={`provider-avatar provider-avatar--${providerTones[index % providerTones.length]}`}
+                >
+                  {getInitials(provider.name)}
+                </div>
+                <div>
+                  <h3>{provider.name}</h3>
+                  <p>{provider.type === "person" ? "Provider" : "Resource"}</p>
+                  <small>
+                    {provider.availability_status.replace("_", " ")}
+                  </small>
+                </div>
+                <Link to="/providers" aria-label={`View ${provider.name}`}>
+                  ↗
+                </Link>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="home-cta">
