@@ -91,20 +91,14 @@ def test_concurrent_bookings_allow_only_one_success(booking_records):
         AppointmentCreate(
             service_id=service_id,
             provider_id=provider_id,
-            user_name="Concurrency Test One",
-            user_email="concurrency-one@example.com",
+            user_name=f"Concurrency Test {index}",
+            user_email=f"concurrency-{index}@example.com",
             appointment_start=appointment_start,
-        ),
-        AppointmentCreate(
-            service_id=service_id,
-            provider_id=provider_id,
-            user_name="Concurrency Test Two",
-            user_email="concurrency-two@example.com",
-            appointment_start=appointment_start,
-        ),
+        )
+        for index in range(10)
     ]
-    barrier = threading.Barrier(2)
-    results: list[tuple[str, object] | None] = [None, None]
+    barrier = threading.Barrier(10)
+    results: list[tuple[str, object] | None] = [None] * 10
 
     def book(index: int, payload: AppointmentCreate) -> None:
         db = SessionLocal()
@@ -131,10 +125,8 @@ def test_concurrent_bookings_allow_only_one_success(booking_records):
 
     assert all(not thread.is_alive() for thread in threads)
     completed_results = [result for result in results if result is not None]
-    assert sorted(result[0] for result in completed_results) == [
-        "conflict",
-        "success",
-    ]
+    assert sum(result[0] == "success" for result in completed_results) == 1
+    assert sum(result[0] == "conflict" for result in completed_results) == 9
     assert all(result[0] != "error" for result in completed_results), results
 
     verification_db = SessionLocal()

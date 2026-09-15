@@ -16,6 +16,8 @@ from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
 from app.schemas.appointment import AppointmentCancellationRequest, AppointmentCreate
 from app.services.booking import (
+    BookingValidationError,
+    _validate_slot,
     create_appointment,
 )
 
@@ -181,3 +183,103 @@ def test_cancellation_enforces_grace_period(cancellation_records, monkeypatch):
     db.rollback()
     db.close()
     monkeypatch.undo()
+
+
+def test_booking_rejects_past_date(cancellation_records):
+    provider_id, service_id = cancellation_records
+
+    past_start = datetime.now(UTC) - timedelta(days=1)
+
+    db = SessionLocal()
+
+    with pytest.raises(
+        BookingValidationError,
+        match="Appointments cannot be booked in the past",
+    ):
+        create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="Past Date Test",
+                user_email="past-date@example.com",
+                appointment_start=past_start,
+            ),
+        )
+
+    db.rollback()
+    db.close()
+
+
+def test_booking_rejects_outside_working_hours(cancellation_records):
+    provider_id, service_id = cancellation_records
+
+    next_monday = next_monday_at_ten().date()
+    outside_hours_start = datetime.combine(
+        next_monday,
+        time(18, 0),
+        tzinfo=UTC,
+    )
+
+    db = SessionLocal()
+
+    provider = db.get(Provider, provider_id)
+    service = db.get(Service, service_id)
+
+    provider.availability[0].start_time = time(9, 0)
+    provider.availability[0].end_time = time(17, 0)
+    db.commit()
+
+    with pytest.raises(
+        BookingValidationError,
+        match="Appointment is outside working hours",
+    ):
+        _validate_slot(
+            db,
+            outside_hours_start,
+            service.duration_minutes,
+            provider,
+        )
+
+    db.rollback()
+    db.close()
+
+
+def test_completed_appointment_cannot_be_cancelled(cancellation_records):
+    provider_id, service_id = cancellation_records
+    appointment_start = next_monday_at_ten()
+
+    db = SessionLocal()
+
+    appointment = create_appointment(
+        db,
+        AppointmentCreate(
+            service_id=service_id,
+            provider_id=provider_id,
+            user_name="Completed Appointment Test",
+            user_email="completed@example.com",
+            appointment_start=appointment_start,
+        ),
+    )
+
+    appointment.status = AppointmentStatus.COMPLETED
+    db.commit()
+    appointment_id = appointment.id
+    db.close()
+
+    db = SessionLocal()
+
+    with pytest.raises(
+        HTTPException, match="Completed appointments cannot be cancelled"
+    ):
+        cancel_appointment_endpoint(
+            appointment_id,
+            db,
+            AppointmentCancellationRequest(
+                cancelled_by="customer",
+                reason="Testing completed cancellation",
+            ),
+        )
+
+    db.rollback()
+    db.close()
