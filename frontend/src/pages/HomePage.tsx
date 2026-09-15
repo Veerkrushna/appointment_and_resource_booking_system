@@ -308,7 +308,15 @@ function HomePage() {
             <p className="home-form-message" role="status">
               {availabilityResult.total} slot
               {availabilityResult.total === 1 ? "" : "s"} available.{" "}
-              <Link to={`/book/${serviceId}`}>
+              <Link
+                to={{
+                  pathname: `/book/${serviceId}`,
+                  search: `?${new URLSearchParams({
+                    ...(providerId ? { providerId } : {}),
+                    date,
+                  }).toString()}`,
+                }}
+              >
                 Continue to booking <span aria-hidden="true">→</span>
               </Link>
             </p>
