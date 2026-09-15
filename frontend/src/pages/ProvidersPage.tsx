@@ -95,7 +95,8 @@ function ProvidersPage() {
       try {
         const response = await fetch(`/api/appointments?provider_id=${selectedProviderId}`);
         if (!response.ok) throw new Error(await responseMessage(response, "Unable to load provider bookings."));
-        setAppointments(await response.json());
+        const appointmentsData: { appointments: Appointment[] } = await response.json();
+        setAppointments(appointmentsData.appointments);
       } catch (requestError) {
         setError(requestError instanceof Error ? requestError.message : "Unable to load provider bookings.");
       }
