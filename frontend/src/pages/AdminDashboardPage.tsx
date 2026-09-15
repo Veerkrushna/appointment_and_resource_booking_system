@@ -24,6 +24,8 @@ type AdminAppointment = {
 };
 
 type Service = { id: string; price: string | number | null };
+type CalendarView = "month" | "week";
+type AvailabilityStatus = "available" | "booked" | "unavailable" | "limited";
 
 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
@@ -46,11 +48,43 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getCalendarDays(date: Date, view: CalendarView) {
+  const start = new Date(date.getFullYear(), date.getMonth(), view === "month" ? 1 : date.getDate());
+  start.setDate(start.getDate() - start.getDay());
+  return Array.from({ length: view === "month" ? 42 : 7 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+}
+
+function availabilityStatus(date: Date, bookingCount: number): AvailabilityStatus {
+  if (date.getDay() === 0 || date.getDay() === 6) return "unavailable";
+  if (bookingCount >= 3) return "booked";
+  if (bookingCount > 0) return "limited";
+  return "available";
+}
+
+function formatCalendarLabel(date: Date, view: CalendarView) {
+  if (view === "week") {
+    const weekEnd = new Date(date);
+    weekEnd.setDate(date.getDate() + 6);
+    return `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date)} - ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(weekEnd)}`;
+  }
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(date);
+}
+
 function AdminDashboardPage() {
   const month = useMemo(() => monthBounds(), []);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [calendarView, setCalendarView] = useState<CalendarView>("month");
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +120,22 @@ function AdminDashboardPage() {
     const service = services.find((item) => item.id === appointment.service_id);
     return total + Number(service?.price || 0);
   }, 0);
+  const calendarDays = useMemo(() => getCalendarDays(calendarDate, calendarView), [calendarDate, calendarView]);
+  const appointmentsByDay = useMemo(() => appointments.reduce<Record<string, number>>((counts, appointment) => {
+    if (appointment.status !== "cancelled") {
+      const key = dateKey(new Date(appointment.appointment_start));
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, {}), [appointments]);
+
+  function moveCalendar(amount: number) {
+    setCalendarDate((current) => {
+      const next = new Date(current);
+      next.setDate(current.getDate() + (calendarView === "month" ? amount * 31 : amount * 7));
+      return next;
+    });
+  }
 
   return (
     <section className="dashboard-page">
@@ -109,6 +159,28 @@ function AdminDashboardPage() {
             <article className="dashboard-stat dashboard-stat--warm"><span>Cancelled</span><strong>{monthlyStatusCount("cancelled")}</strong><small>Cancelled during {month.label}</small></article>
             <article className="dashboard-stat"><span>Revenue this month</span><strong>{formatMoney(revenue)}</strong><small>Completed services only</small></article>
           </div>
+
+          <section className="dashboard-panel availability-widget">
+            <div className="dashboard-panel__heading availability-widget__heading">
+              <div><p className="panel-kicker">Capacity planning</p><h2>Availability calendar</h2></div>
+              <div className="availability-widget__controls">
+                <div className="availability-view-toggle" role="group" aria-label="Calendar view">
+                  {(["month", "week"] as CalendarView[]).map((view) => <button className={calendarView === view ? "active" : ""} key={view} type="button" aria-pressed={calendarView === view} onClick={() => setCalendarView(view)}>{view}</button>)}
+                </div>
+                <button className="calendar-nav" type="button" aria-label="Previous period" onClick={() => moveCalendar(-1)}>&#8592;</button>
+                <button className="calendar-nav" type="button" aria-label="Next period" onClick={() => moveCalendar(1)}>&#8594;</button>
+              </div>
+            </div>
+            <div className="availability-widget__meta"><strong>{formatCalendarLabel(calendarDays[0], calendarView)}</strong><div className="availability-legend">{(["available", "booked", "unavailable", "limited"] as AvailabilityStatus[]).map((status) => <span key={status}><i className={`availability-swatch availability-swatch--${status}`} />{status}</span>)}</div></div>
+            <div className={`availability-calendar availability-calendar--${calendarView}`} role="grid" aria-label={`${formatCalendarLabel(calendarDays[0], calendarView)} availability`}>
+              {calendarDays.map((day) => {
+                const count = appointmentsByDay[dateKey(day)] || 0;
+                const status = availabilityStatus(day, count);
+                const isCurrentMonth = day.getMonth() === calendarDate.getMonth();
+                return <div className={`availability-day availability-day--${status}${calendarView === "month" && !isCurrentMonth ? " availability-day--outside" : ""}`} key={dateKey(day)} role="gridcell" aria-label={`${day.toLocaleDateString("en-US", { month: "long", day: "numeric" })}: ${status}`}><span>{calendarView === "week" && <small>{new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(day)}</small>}{day.getDate()}</span>{count > 0 && <strong>{count} {count === 1 ? "booking" : "bookings"}</strong>}<em>{status}</em></div>;
+              })}
+            </div>
+          </section>
 
           <div className="dashboard-grid">
             <section className="dashboard-panel dashboard-panel--wide">
