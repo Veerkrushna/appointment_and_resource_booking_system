@@ -37,6 +37,10 @@ type AvailabilityResponse = {
   total_pages: number;
 };
 
+type AppointmentResponse = {
+  id: string;
+};
+
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -74,6 +78,7 @@ function BookingPage() {
   );
   const [step, setStep] = useState(1);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [details, setDetails] = useState<BookingDetails>({
     name: "",
     email: "",
@@ -82,6 +87,7 @@ function BookingPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -195,6 +201,63 @@ function BookingPage() {
   function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStep(3);
+  }
+
+  async function confirmBooking() {
+    if (!selectedSlot || !service) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setBookingError(null);
+    try {
+      const response = await fetch("/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: service.id,
+          provider_id: selectedSlot.provider_id,
+          user_name: details.name,
+          user_email: details.email,
+          user_phone: details.phone || null,
+          appointment_start: selectedSlot.start,
+          notes: details.notes || null,
+        }),
+      });
+
+      if (!response.ok) {
+        let message = "Unable to confirm this booking.";
+        try {
+          const body = await response.json();
+          if (typeof body.detail === "string") {
+            message = body.detail;
+          }
+        } catch {
+          // Keep the fallback for non-JSON error responses.
+        }
+        throw new Error(message);
+      }
+
+      const appointment: AppointmentResponse = await response.json();
+      if (appointment.id) {
+        setIsConfirmed(true);
+        setAvailableSlots((current) =>
+          current.filter(
+            (slot) =>
+              slot.start !== selectedSlot.start ||
+              slot.provider_id !== selectedSlot.provider_id,
+          ),
+        );
+      }
+    } catch (requestError) {
+      setBookingError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to confirm this booking.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (isLoading) {
@@ -463,17 +526,20 @@ function BookingPage() {
                   </button>
                   <button
                     className="primary-button"
-                    onClick={() => setIsConfirmed(true)}
+                    disabled={isSubmitting}
+                    onClick={() => void confirmBooking()}
                     type="button"
                   >
-                    Confirm booking <span aria-hidden="true">&#8594;</span>
+                    {isSubmitting ? "Saving booking..." : "Confirm booking"}{" "}
+                    <span aria-hidden="true">&#8594;</span>
                   </button>
                 </div>
               )}
-              <small className="booking-note">
-                This confirmation is currently a frontend preview until
-                appointment availability and booking endpoints are enabled.
-              </small>
+              {bookingError && (
+                <p className="status-message status-message--error" role="alert">
+                  {bookingError}
+                </p>
+              )}
               {isConfirmed && (
                 <Link className="service-book-link" to="/appointments">
                   View appointments <span aria-hidden="true">&#8594;</span>

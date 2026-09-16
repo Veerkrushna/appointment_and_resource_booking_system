@@ -12,6 +12,10 @@ type Appointment = {
   notes: string | null;
 };
 
+type AppointmentListResponse = {
+  appointments: Appointment[];
+};
+
 type NamedRecord = { id: string; name: string };
 type Tab = "upcoming" | "past" | "cancelled";
 
@@ -83,7 +87,8 @@ function AppointmentsPage() {
         throw new Error(await getMessage(appointmentsResponse, "Unable to load appointments."));
       }
 
-      setAppointments(await appointmentsResponse.json());
+      const appointmentData: AppointmentListResponse = await appointmentsResponse.json();
+      setAppointments(appointmentData.appointments);
       if (servicesResponse.ok) {
         const data: NamedRecord[] = await servicesResponse.json();
         setServices(Object.fromEntries(data.map((item) => [item.id, item.name])));
