@@ -149,18 +149,22 @@ def send_status_email(
     subject: str,
     body: str,
 ) -> None:
-    notification = Notification(
-        appointment_id=appointment.id,
-        notification_type=notification_type,
-        recipient_email=appointment.user_email,
-    )
-    db.add(notification)
-    db.commit()
     try:
+        notification = Notification(
+            appointment_id=appointment.id,
+            notification_type=notification_type,
+            recipient_email=appointment.user_email,
+        )
+        db.add(notification)
+        db.commit()
         _send_email(appointment, subject, body)
     except Exception:
-        logger.exception("Failed to send status notification %s", notification.id)
-        _record_result(db, notification, delivered=False)
+        db.rollback()
+        logger.exception(
+            "Failed to send %s notification for appointment %s",
+            notification_type,
+            appointment.id,
+        )
     else:
         _record_result(db, notification, delivered=True)
 
