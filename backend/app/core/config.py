@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     database_url: str
-    cancellation_grace_period_minutes: int = 120
+    cancellation_grace_period_minutes: int = 60
 
     smtp_host: str | None = None
     smtp_port: int = 587

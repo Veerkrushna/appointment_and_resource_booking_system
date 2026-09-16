@@ -27,6 +27,10 @@ const tabs: { id: Tab; label: string }[] = [
 
 const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(value));
 }
@@ -67,8 +71,12 @@ function AppointmentsPage() {
   async function loadAppointments(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const normalizedEmail = email.trim();
-    if (!normalizedEmail) {
-      setError("Enter the email address used when booking.");
+    if (!isValidEmail(normalizedEmail)) {
+      setError(
+        normalizedEmail
+          ? "Not a valid email. Kindly check Again"
+          : "Enter the email address used when booking.",
+      );
       return;
     }
 
@@ -172,7 +180,7 @@ function AppointmentsPage() {
         {!isLoading && <p className="service-count"><strong>{appointments.length}</strong> total {appointments.length === 1 ? "appointment" : "appointments"}</p>}
       </div>
 
-      <form className="appointment-lookup" onSubmit={loadAppointments}>
+      <form className="appointment-lookup" noValidate onSubmit={loadAppointments}>
         <label className="field-label" htmlFor="appointment-email">Booking email<span>Use the email address attached to your appointments.</span></label>
         <div className="appointment-lookup__controls"><input id="appointment-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /><button className="primary-button" type="submit" disabled={isLoading}>{isLoading ? "Loading..." : "Find appointments"}</button></div>
       </form>

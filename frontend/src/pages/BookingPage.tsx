@@ -61,6 +61,10 @@ function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function BookingPage() {
   const { serviceId } = useParams();
   const [searchParams] = useSearchParams();
@@ -200,6 +204,11 @@ function BookingPage() {
 
   function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isValidEmail(details.email)) {
+      setBookingError("Not a valid email. Kindly check Again");
+      return;
+    }
+    setBookingError(null);
     setStep(3);
   }
 
@@ -440,7 +449,7 @@ function BookingPage() {
           )}
 
           {step === 2 && (
-            <form onSubmit={submitDetails}>
+            <form noValidate onSubmit={submitDetails}>
               <p className="panel-kicker">Step 2 of 3</p>
               <h2>Tell us about you</h2>
               <div className="form-grid">
@@ -459,6 +468,7 @@ function BookingPage() {
                   Email address
                   <input
                     required
+                    aria-describedby="booking-email-error"
                     onChange={(event) =>
                       handleDetailsChange("email", event.target.value)
                     }
@@ -487,6 +497,15 @@ function BookingPage() {
                   />
                 </label>
               </div>
+              {bookingError && (
+                <p
+                  className="status-message status-message--error"
+                  id="booking-email-error"
+                  role="alert"
+                >
+                  {bookingError}
+                </p>
+              )}
               <div className="booking-actions">
                 <button
                   className="secondary-button"
