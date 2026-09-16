@@ -208,6 +208,19 @@ function BookingPage() {
       return;
     }
 
+    if (new Date(selectedSlot.start).getTime() <= Date.now()) {
+      setAvailableSlots((current) =>
+        current.filter(
+          (slot) =>
+            new Date(slot.start).getTime() > Date.now(),
+        ),
+      );
+      setSelectedSlot(null);
+      setStep(1);
+      setBookingError("That time has already passed. Choose another available time.");
+      return;
+    }
+
     setIsSubmitting(true);
     setBookingError(null);
     try {
