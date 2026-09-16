@@ -288,25 +288,9 @@ def reschedule_appointment(
         provider,
         appointment.id,
     )
-    cancellation = AppointmentCancellation(
-        appointment_id=appointment.id,
-        cancelled_by=payload.cancelled_by,
-        reason=payload.reason,
-        refund_status=payload.refund_status,
-    )
-    appointment.status = AppointmentStatus.CANCELLED
-    replacement = Appointment(
-        service_id=appointment.service_id,
-        provider_id=appointment.provider_id,
-        user_name=appointment.user_name,
-        user_email=appointment.user_email,
-        user_phone=appointment.user_phone,
-        appointment_start=start_utc,
-        appointment_end=end_utc,
-        duration_minutes=appointment.duration_minutes,
-        notes=appointment.notes,
-    )
-    db.add_all([cancellation, replacement])
+    appointment.appointment_start = start_utc
+    appointment.appointment_end = end_utc
     db.commit()
-    db.refresh(replacement)
-    return replacement
+    db.refresh(appointment)
+    send_reschedule_email(db, appointment)
+    return appointment

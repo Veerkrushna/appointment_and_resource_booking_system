@@ -12,6 +12,10 @@ type Appointment = {
   notes: string | null;
 };
 
+type AppointmentListResponse = {
+  appointments: Appointment[];
+};
+
 type NamedRecord = { id: string; name: string };
 type Tab = "upcoming" | "past" | "cancelled";
 
@@ -83,7 +87,8 @@ function AppointmentsPage() {
         throw new Error(await getMessage(appointmentsResponse, "Unable to load appointments."));
       }
 
-      setAppointments(await appointmentsResponse.json());
+      const appointmentData: AppointmentListResponse = await appointmentsResponse.json();
+      setAppointments(appointmentData.appointments);
       if (servicesResponse.ok) {
         const data: NamedRecord[] = await servicesResponse.json();
         setServices(Object.fromEntries(data.map((item) => [item.id, item.name])));
@@ -133,13 +138,19 @@ function AppointmentsPage() {
     setActiveAction(id);
     setActionError(null);
     try {
-      const response = await fetch(`/api/appointments/${id}?timezone=${encodeURIComponent(userTimeZone)}`, {
-        method: "PUT",
+      const response = await fetch(`/api/appointments/${id}/reschedule`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointment_start: new Date(rescheduleDate).toISOString() }),
+        body: JSON.stringify({
+          appointment_start: new Date(rescheduleDate).toISOString(),
+          cancelled_by: "customer",
+          reason: "Rescheduled by customer",
+        }),
       });
       if (!response.ok) throw new Error(await getMessage(response, "Unable to reschedule this appointment."));
       setReschedulingId(null);
+      setRescheduleDate("");
+      setSelectedTab("upcoming");
       await loadAppointments();
     } catch (requestError) {
       setActionError(requestError instanceof Error ? requestError.message : "Unable to reschedule this appointment.");

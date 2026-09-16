@@ -14,11 +14,16 @@ from app.models.availability import ProviderAvailability
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
-from app.schemas.appointment import AppointmentCancellationRequest, AppointmentCreate
+from app.schemas.appointment import (
+    AppointmentCancellationRequest,
+    AppointmentCreate,
+    AppointmentRescheduleCreate,
+)
 from app.services.booking import (
     BookingValidationError,
     _validate_slot,
     create_appointment,
+    reschedule_appointment,
 )
 
 
@@ -154,6 +159,52 @@ def test_cancellation_releases_slot_and_records_history(cancellation_records):
     )
     db.close()
     assert replacement.id != appointment.id
+
+
+def test_reschedule_updates_existing_appointment_without_cancellation(
+    cancellation_records,
+):
+    provider_id, service_id = cancellation_records
+    original_start = next_monday_at_ten()
+    new_start = original_start + timedelta(hours=1)
+
+    db = SessionLocal()
+    appointment = create_appointment(
+        db,
+        AppointmentCreate(
+            service_id=service_id,
+            provider_id=provider_id,
+            user_name="Reschedule Test",
+            user_email="reschedule-test@example.com",
+            appointment_start=original_start,
+        ),
+    )
+    appointment_id = appointment.id
+
+    updated = reschedule_appointment(
+        db,
+        appointment_id,
+        AppointmentRescheduleCreate(
+            appointment_start=new_start,
+            cancelled_by="customer",
+            reason="Changed plans",
+        ),
+    )
+    cancellation = db.scalar(
+        select(AppointmentCancellation).where(
+            AppointmentCancellation.appointment_id == appointment_id
+        )
+    )
+    appointments = db.scalars(
+        select(Appointment).where(Appointment.provider_id == provider_id)
+    ).all()
+    db.close()
+
+    assert updated.id == appointment_id
+    assert updated.status != AppointmentStatus.CANCELLED
+    assert updated.appointment_start == new_start
+    assert cancellation is None
+    assert len(appointments) == 1
 
 
 def test_cancellation_enforces_grace_period(cancellation_records, monkeypatch):

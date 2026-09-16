@@ -133,6 +133,7 @@ def _provider_slots(
         service_buffer,
         slot_interval,
     )
+    now = datetime.now(UTC)
     return [
         AvailabilitySlot(
             provider_id=provider.id,
@@ -144,6 +145,7 @@ def _provider_slots(
             duration_minutes=service.duration_minutes,
         )
         for start in starts
+        if start > now
     ]
 
 
