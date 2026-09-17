@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.appointment_cancellation import AppointmentCancellation
+from app.models.customer import Customer
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
@@ -123,7 +124,9 @@ def _validate_slot(
     return start_utc, end_utc
 
 
-def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
+def create_appointment(
+    db: Session, payload: AppointmentCreate, customer: Customer | None = None
+) -> Appointment:
     provider = db.scalar(
         select(Provider).where(Provider.id == payload.provider_id).with_for_update()
     )
@@ -151,6 +154,7 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
 
     appointment = Appointment(
         **payload.model_dump(exclude={"appointment_start"}),
+        customer_id=customer.id if customer is not None else None,
         appointment_start=start_utc,
         appointment_end=end_utc,
         duration_minutes=service.duration_minutes,

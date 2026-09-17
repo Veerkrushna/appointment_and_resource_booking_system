@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.security import require_role
 from app.crud.breaks import (
     create_provider_break,
     delete_provider_break,
@@ -33,6 +34,7 @@ from app.crud.providers import update_provider as update_provider_record
 from app.db.database import get_db
 from app.models.availability import ProviderBlackoutDate
 from app.models.providers import Provider
+from app.models.user import UserRole
 from app.schemas.provider_service import (
     ProviderServiceResponse,
     ProviderServicesUpdate,
@@ -156,7 +158,7 @@ def blackout_item_response(item: ProviderBlackoutDate) -> BlackoutResponse:
     )
 
 
-@router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))])
 def create_provider(
     payload: ProviderCreate,
     db: Annotated[Session, Depends(get_db)],
@@ -201,6 +203,7 @@ def get_services_for_provider(
 @router.put(
     "/{provider_id}/services",
     response_model=list[ProviderServiceResponse],
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def update_services_for_provider(
     provider_id: UUID,
@@ -232,7 +235,7 @@ def update_services_for_provider(
         ) from error
 
 
-@router.put("/{provider_id}", response_model=ProviderResponse)
+@router.put("/{provider_id}", response_model=ProviderResponse, dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))])
 def update_provider(
     provider_id: UUID,
     payload: ProviderUpdate,
@@ -246,6 +249,7 @@ def update_provider(
     "/{provider_id}/breaks",
     response_model=ProviderBreakResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def create_break_for_provider(
     provider_id: UUID,
@@ -288,6 +292,7 @@ def list_breaks_for_provider(
 @router.put(
     "/{provider_id}/breaks/{break_id}",
     response_model=ProviderBreakResponse,
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def update_break_for_provider(
     provider_id: UUID,
@@ -350,6 +355,7 @@ def update_break_for_provider(
 @router.delete(
     "/{provider_id}/breaks/{break_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def delete_break_for_provider(
     provider_id: UUID,
@@ -376,7 +382,7 @@ def delete_break_for_provider(
     )
 
 
-@router.post("/{provider_id}/availability", response_model=ScheduleResponse)
+@router.post("/{provider_id}/availability", response_model=ScheduleResponse, dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))])
 def set_provider_availability(
     provider_id: UUID,
     payload: AvailabilityRequest,
@@ -396,7 +402,7 @@ def get_weekly_schedule(
     return weekly_schedule_response(provider)
 
 
-@router.put("/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse)
+@router.put("/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse, dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))])
 def replace_weekly_schedule_endpoint(
     provider_id: UUID,
     payload: WeeklyScheduleRequest,
@@ -414,6 +420,7 @@ def replace_weekly_schedule_endpoint(
 @router.put(
     "/{provider_id}/schedule/weekly/{day_of_week}",
     response_model=WeeklyScheduleResponse,
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def update_weekly_schedule_day_endpoint(
     provider_id: UUID,
@@ -455,6 +462,7 @@ def list_provider_unavailability(
     "/{provider_id}/unavailability",
     response_model=BlackoutResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def add_provider_unavailability(
     provider_id: UUID,
@@ -468,6 +476,7 @@ def add_provider_unavailability(
 @router.delete(
     "/{provider_id}/unavailability/{blackout_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(UserRole.SERVICE_PROVIDER, UserRole.ADMIN))],
 )
 def remove_provider_unavailability(
     provider_id: UUID,

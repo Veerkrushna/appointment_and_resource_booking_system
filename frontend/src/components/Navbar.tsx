@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 
 function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { customer, logout } = useAuth();
 
   return (
     <nav className="site-nav">
@@ -39,6 +41,7 @@ function Navbar() {
           >
             Home
           </NavLink>
+          {customer ? <><NavLink to="/dashboard" className={({ isActive }) => (isActive ? "active" : "")} onClick={() => setIsMenuOpen(false)}>Dashboard</NavLink><button className="nav-signout" type="button" onClick={logout}>Sign out</button></> : <NavLink to="/login" className={({ isActive }) => (isActive ? "active" : "")} onClick={() => setIsMenuOpen(false)}>Sign in</NavLink>}
 
           <NavLink
             to="/services"

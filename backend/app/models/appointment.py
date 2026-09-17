@@ -24,6 +24,7 @@ from app.models.notification import Notification
 if TYPE_CHECKING:
     from app.models.providers import Provider
     from app.models.service import Service
+    from app.models.user import User
 
 
 class AppointmentStatus(enum.StrEnum):
@@ -59,6 +60,9 @@ class Appointment(Base):
     )
     provider_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("providers.id", ondelete="CASCADE"), nullable=False
+    )
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     user_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -100,6 +104,7 @@ class Appointment(Base):
 
     service: Mapped["Service"] = relationship()
     provider: Mapped["Provider"] = relationship()
+    customer: Mapped["User | None"] = relationship(back_populates="appointments")
     cancellations: Mapped[list["AppointmentCancellation"]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan"
     )

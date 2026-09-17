@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.core.security import require_role
 from app.core.timezones import TimezoneValidationError, get_timezone, to_utc
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
+from app.models.user import UserRole
 from app.schemas.admin import (
     AdminAppointmentListResponse,
     AdminAppointmentResponse,
@@ -20,7 +22,7 @@ from app.schemas.admin import (
 )
 from app.schemas.providers import AvailabilityWindow, BlackoutResponse, BreakWindow
 
-router = APIRouter(prefix="/api/admin", tags=["Admin"])
+router = APIRouter(prefix="/api/admin", tags=["Admin"], dependencies=[Depends(require_role(UserRole.ADMIN))])
 
 
 def _admin_timezone(timezone: str):

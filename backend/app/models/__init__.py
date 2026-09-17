@@ -1,5 +1,7 @@
 from app.models.appointment import Appointment
 from app.models.appointment_cancellation import AppointmentCancellation
+from app.models.customer import Customer
+from app.models.user import User, UserRole
 from app.models.availability import (
     ProviderAvailability,
     ProviderBlackoutDate,
