@@ -8,9 +8,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.timezones import TimezoneValidationError, get_timezone
+from app.core.security import get_optional_customer
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.providers import Provider
+from app.models.customer import Customer
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
     AppointmentCancellationResponse,
@@ -49,11 +51,12 @@ def _validate_timezone(timezone: str) -> str:
 def book_appointment(
     payload: AppointmentCreate,
     db: Annotated[Session, Depends(get_db)],
+    customer: Annotated[Customer | None, Depends(get_optional_customer)],
     timezone: str = Query(default="UTC", min_length=1, max_length=64),
 ):
     timezone = _validate_timezone(timezone)
     try:
-        appointment = create_appointment(db, payload)
+        appointment = create_appointment(db, payload, customer)
         return AppointmentResponse.from_appointment(appointment, timezone)
     except BookingConflictError as error:
         raise HTTPException(

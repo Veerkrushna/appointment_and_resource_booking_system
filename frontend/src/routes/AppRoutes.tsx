@@ -1,4 +1,5 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
+import type { ReactNode } from "react";
 
 import AppLayout from "../components/AppLayout";
 import AdminDashboardPage from "../pages/AdminDashboardPage";
@@ -7,6 +8,16 @@ import BookingPage from "../pages/BookingPage";
 import HomePage from "../pages/HomePage";
 import ProvidersPage from "../pages/ProvidersPage";
 import ServicesPage from "../pages/ServicesPage";
+import AuthPage from "../pages/AuthPage";
+import CustomerDashboardPage from "../pages/CustomerDashboardPage";
+import TermsPage from "../pages/TermsPage";
+import { useAuth } from "../auth/useAuth";
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { customer, isLoading } = useAuth();
+  if (isLoading) return <p className="status-message">Loading your account...</p>;
+  return customer ? children : <Navigate to="/login" replace />;
+}
 
 function AppRoutes() {
   return (
@@ -17,7 +28,11 @@ function AppRoutes() {
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/book/:serviceId" element={<BookingPage />} />
         <Route path="/providers" element={<ProvidersPage />} />
-        <Route path="/appointments" element={<AppointmentsPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/dashboard" element={<ProtectedRoute><CustomerDashboardPage /></ProtectedRoute>} />
+        <Route path="/appointments" element={<ProtectedRoute><AppointmentsPage /></ProtectedRoute>} />
       </Route>
     </Routes>
   );

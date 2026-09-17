@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/1"
 
     feedback_delay_minutes: int = 15
+    auth_secret: str = "change-this-secret-in-production"
+    auth_token_expiry_seconds: int = 60 * 60 * 24 * 7
 
     model_config = SettingsConfigDict(
         env_file=".env",

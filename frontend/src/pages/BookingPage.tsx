@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 
 type Service = {
   id: string;
@@ -66,6 +67,7 @@ function isValidEmail(value: string) {
 }
 
 function BookingPage() {
+  const { token } = useAuth();
   const { serviceId } = useParams();
   const [searchParams] = useSearchParams();
   const initialDate = searchParams.get("date") || "";
@@ -235,7 +237,7 @@ function BookingPage() {
     try {
       const response = await fetch("/api/appointments", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           service_id: service.id,
           provider_id: selectedSlot.provider_id,

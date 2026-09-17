@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useAuth } from "../auth/useAuth";
 
 type Appointment = {
   id: string;
@@ -27,10 +28,6 @@ const tabs: { id: Tab; label: string }[] = [
 
 const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(value));
 }
@@ -55,7 +52,7 @@ async function getMessage(response: Response, fallback: string) {
 }
 
 function AppointmentsPage() {
-  const [email, setEmail] = useState(() => localStorage.getItem("appointment-email") || "");
+  const { token } = useAuth();
   const [currentTime] = useState(() => Date.now());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Record<string, string>>({});
@@ -68,26 +65,14 @@ function AppointmentsPage() {
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
 
-  async function loadAppointments(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    const normalizedEmail = email.trim();
-    if (!isValidEmail(normalizedEmail)) {
-      setError(
-        normalizedEmail
-          ? "Not a valid email. Kindly check Again"
-          : "Enter the email address used when booking.",
-      );
-      return;
-    }
-
-    localStorage.setItem("appointment-email", normalizedEmail);
+  const loadAppointments = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setActionError(null);
 
     try {
       const [appointmentsResponse, servicesResponse, providersResponse] = await Promise.all([
-        fetch(`/api/appointments?user_email=${encodeURIComponent(normalizedEmail)}&timezone=${encodeURIComponent(userTimeZone)}`),
+        fetch(`/api/customer/appointments?timezone=${encodeURIComponent(userTimeZone)}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/services"),
         fetch("/api/providers"),
       ]);
@@ -110,7 +95,12 @@ function AppointmentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [token]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadAppointments(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAppointments]);
 
   const groupedAppointments = useMemo(() => {
     return {
@@ -125,9 +115,9 @@ function AppointmentsPage() {
     setActiveAction(id);
     setActionError(null);
     try {
-      const response = await fetch(`/api/appointments/${id}/cancel`, {
+      const response = await fetch(`/api/customer/appointments/${id}/cancel`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ cancelled_by: "customer", reason: "Cancelled by customer" }),
       });
       if (!response.ok) throw new Error(await getMessage(response, "Unable to cancel this appointment."));
@@ -146,9 +136,9 @@ function AppointmentsPage() {
     setActiveAction(id);
     setActionError(null);
     try {
-      const response = await fetch(`/api/appointments/${id}/reschedule`, {
+      const response = await fetch(`/api/customer/appointments/${id}/reschedule?timezone=${encodeURIComponent(userTimeZone)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           appointment_start: new Date(rescheduleDate).toISOString(),
           cancelled_by: "customer",
@@ -180,15 +170,10 @@ function AppointmentsPage() {
         {!isLoading && <p className="service-count"><strong>{appointments.length}</strong> total {appointments.length === 1 ? "appointment" : "appointments"}</p>}
       </div>
 
-      <form className="appointment-lookup" noValidate onSubmit={loadAppointments}>
-        <label className="field-label" htmlFor="appointment-email">Booking email<span>Use the email address attached to your appointments.</span></label>
-        <div className="appointment-lookup__controls"><input id="appointment-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /><button className="primary-button" type="submit" disabled={isLoading}>{isLoading ? "Loading..." : "Find appointments"}</button></div>
-      </form>
-
       {error && <div className="status-message status-message--error" role="alert"><strong>We could not load your appointments.</strong><span>{error}</span></div>}
       {actionError && <div className="status-message status-message--error" role="alert"><span>{actionError}</span></div>}
 
-      {!isLoading && !error && email && (
+      {!isLoading && !error && (
         <>
           <div className="appointment-tabs" role="tablist" aria-label="Appointment history">
             {tabs.map((tab) => <button className={selectedTab === tab.id ? "filter-button active" : "filter-button"} key={tab.id} type="button" role="tab" aria-selected={selectedTab === tab.id} onClick={() => setSelectedTab(tab.id)}>{tab.label} <span>{groupedAppointments[tab.id].length}</span></button>)}
