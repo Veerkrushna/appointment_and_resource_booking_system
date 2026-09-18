@@ -8,6 +8,7 @@ celery_app = Celery(
     backend=settings.celery_result_backend,
     include=[
         "app.tasks.notification_tasks",
+        "app.tasks.appointment_tasks",
         "app.tasks.test_tasks",
     ],
 )
@@ -22,4 +23,10 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    beat_schedule={
+        "complete-expired-appointments": {
+            "task": "appointments.complete_expired_appointments",
+            "schedule": 60.0,
+        },
+    },
 )
