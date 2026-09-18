@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
+import CustomerHomePage from "./CustomerHomePage";
 
 type Service = {
   id: string;
@@ -57,7 +59,7 @@ function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function HomePage() {
+function PublicHomePage() {
   const [serviceId, setServiceId] = useState("");
   const [providerId, setProviderId] = useState("");
   const [date, setDate] = useState("");
@@ -530,6 +532,12 @@ function HomePage() {
       </footer>
     </div>
   );
+}
+
+function HomePage() {
+  const { customer } = useAuth();
+
+  return customer ? <CustomerHomePage /> : <PublicHomePage />;
 }
 
 export default HomePage;
