@@ -402,6 +402,38 @@ main {
   padding-top: clamp(3rem, 7vw, 6rem);
 }
 
+.profile-page {
+  padding-top: clamp(3rem, 7vw, 6rem);
+}
+
+.profile-details {
+  display: grid;
+  max-width: 38rem;
+  margin: 2rem 0 0;
+  border-top: 1px solid #dbe5dc;
+}
+
+.profile-details div {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid #dbe5dc;
+}
+
+.profile-details dt {
+  color: #8a9b94;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.profile-details dd {
+  margin: 0;
+  color: #18312f;
+  font-size: 0.9rem;
+}
+
 .dashboard-heading {
   display: flex;
   align-items: end;
@@ -647,6 +679,146 @@ main {
 .dashboard-panel {
   padding: 1.35rem;
 }
+
+.dashboard-section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.4rem;
+}
+
+.dashboard-section-heading .section-link {
+  color: #c05d27;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dashboard-appointment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 1fr) auto;
+  gap: 1.5rem;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e9e1;
+}
+
+.dashboard-appointment h3,
+.dashboard-empty h3 {
+  margin: 0.45rem 0 0.25rem;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.3rem;
+}
+
+.dashboard-appointment p,
+.dashboard-empty p {
+  margin: 0;
+  color: #64736e;
+  font-size: 0.85rem;
+}
+
+.dashboard-appointment dl {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0;
+}
+
+.dashboard-appointment dt {
+  color: #8a9b94;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dashboard-appointment dd {
+  margin: 0.35rem 0 0;
+  color: #18312f;
+  font-size: 0.85rem;
+}
+
+.dashboard-empty {
+  padding: 1rem 0 0.3rem;
+  border-top: 1px solid #e2e9e1;
+}
+
+.dashboard-empty .primary-button {
+  display: inline-flex;
+  margin-top: 1.2rem;
+  text-decoration: none;
+}
+
+.dashboard-recent {
+  margin-top: 0.8rem;
+}
+
+.recent-appointment-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.recent-appointment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid #e2e9e1;
+}
+
+.recent-appointment div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.recent-appointment strong {
+  color: #18312f;
+  font-size: 0.85rem;
+}
+
+.recent-appointment span {
+  color: #8a9b94;
+  font-size: 0.75rem;
+}
+
+.appointment-detail {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.8rem;
+  color: #64736e;
+  font-size: 0.78rem;
+}
+
+.reschedule-flow {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.2rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid #e2e9e1;
+}
+
+.reschedule-flow__current {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.reschedule-flow__current span {
+  color: #c05d27;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reschedule-flow__current strong { color: #18312f; font-size: 0.9rem; }
+.reschedule-flow__current small { color: #64736e; font-size: 0.78rem; }
+.reschedule-slots { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.time-slot { border: 1px solid #ccd8d0; border-radius: 5px; padding: 0.65rem 0.8rem; background: #fff; color: #18312f; cursor: pointer; font: inherit; font-size: 0.78rem; }
+.time-slot:hover, .time-slot.selected { border-color: #557b69; background: #eef5ed; }
+.reschedule-confirmation { margin: 0; color: #64736e; font-size: 0.9rem; line-height: 1.55; }
+.reschedule-confirmation strong { color: #18312f; }
 
 .dashboard-panel--quiet {
   background: #eef2e9;
@@ -1614,6 +1786,58 @@ main {
   margin-top: 2rem;
 }
 
+.booking-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+}
+
+.booking-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid #ccd8d0;
+  border-radius: 8px;
+  background: #fff;
+  color: #18312f;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.booking-mode-option:hover {
+  border-color: #557b69;
+  background: #f4f8f4;
+}
+
+.booking-mode-option.selected {
+  border-color: #557b69;
+  background: #e2eee3;
+  box-shadow: inset 0 0 0 1px #557b69;
+}
+
+.booking-mode-option input {
+  margin: 0;
+}
+
+.booking-mode-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.booking-mode-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.booking-mode-description {
+  color: #64736e;
+  font-size: 0.75rem;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1755,6 +1979,14 @@ main {
 
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-appointment {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-appointment .appointment-actions {
+    justify-content: flex-start;
   }
 
   .service-grid {

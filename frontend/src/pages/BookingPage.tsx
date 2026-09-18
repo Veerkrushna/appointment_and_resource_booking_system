@@ -42,6 +42,122 @@ type AppointmentResponse = {
   id: string;
 };
 
+type BookingDraft = {
+  serviceId: string | null;
+  providerId: string | null;
+  step: number;
+  date: string;
+  selectedSlot: AvailabilitySlot | null;
+  bookingMode: "self" | "other";
+  details: BookingDetails;
+};
+
+const BOOKING_DRAFT_STORAGE_KEY = "booking-page-draft";
+
+function normalizeBookingValue(value: string | null | undefined) {
+  return value == null ? "" : value.trim();
+}
+
+function slotMatchesCurrentContext(
+  slot: AvailabilitySlot | null,
+  serviceId: string | undefined,
+  providerId: string,
+  date: string,
+) {
+  if (!slot || !serviceId) {
+    return false;
+  }
+
+  if (slot.service_id !== serviceId || slot.date !== date) {
+    return false;
+  }
+
+  if (providerId) {
+    return slot.provider_id === providerId;
+  }
+
+  return true;
+}
+
+function readBookingDraft(): BookingDraft | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawDraft = window.sessionStorage.getItem(BOOKING_DRAFT_STORAGE_KEY);
+    if (!rawDraft) {
+      return null;
+    }
+
+    const draft = JSON.parse(rawDraft) as Partial<BookingDraft>;
+    if (
+      typeof draft !== "object" ||
+      draft === null ||
+      typeof draft.step !== "number" ||
+      typeof draft.date !== "string" ||
+      !draft.details ||
+      (draft.bookingMode !== "self" && draft.bookingMode !== "other")
+    ) {
+      window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      serviceId: typeof draft.serviceId === "string" ? draft.serviceId : null,
+      providerId:
+        typeof draft.providerId === "string" ? draft.providerId : null,
+      step: draft.step,
+      date: draft.date,
+      selectedSlot: draft.selectedSlot ?? null,
+      bookingMode: draft.bookingMode,
+      details: {
+        name: typeof draft.details.name === "string" ? draft.details.name : "",
+        email:
+          typeof draft.details.email === "string" ? draft.details.email : "",
+        phone:
+          typeof draft.details.phone === "string" ? draft.details.phone : "",
+        notes:
+          typeof draft.details.notes === "string" ? draft.details.notes : "",
+      },
+    };
+  } catch {
+    window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+    return null;
+  }
+}
+
+function draftMatchesCurrentBooking(
+  draft: BookingDraft | null,
+  serviceId: string | undefined,
+  providerId: string,
+  date: string,
+) {
+  if (!draft || !serviceId || draft.serviceId !== serviceId) {
+    return false;
+  }
+
+  const activeProviderId = normalizeBookingValue(providerId);
+  const savedProviderId = normalizeBookingValue(draft.providerId);
+
+  if (
+    activeProviderId &&
+    savedProviderId &&
+    activeProviderId !== savedProviderId
+  ) {
+    return false;
+  }
+
+  const activeDate = normalizeBookingValue(date);
+  const savedDate = normalizeBookingValue(draft.date);
+
+  if (activeDate && savedDate && activeDate !== savedDate) {
+    return false;
+  }
+
+  return true;
+}
+
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -67,33 +183,83 @@ function isValidEmail(value: string) {
 }
 
 function BookingPage() {
-  const { token } = useAuth();
+  const { token, customer } = useAuth();
   const { serviceId } = useParams();
   const [searchParams] = useSearchParams();
   const initialDate = searchParams.get("date") || "";
   const providerId = searchParams.get("providerId") || "";
+  const hasAuthenticatedCustomer = Boolean(customer);
+
+  const initialDraft = readBookingDraft();
+  const initialBookingState: {
+    bookingMode: "self" | "other";
+    date: string;
+    selectedSlot: AvailabilitySlot | null;
+    details: BookingDetails;
+    step: number;
+  } = (() => {
+    const restoredDraft = draftMatchesCurrentBooking(
+      initialDraft,
+      serviceId,
+      providerId,
+      initialDate,
+    )
+      ? initialDraft
+      : null;
+
+    if (!restoredDraft) {
+      return {
+        bookingMode: hasAuthenticatedCustomer ? "self" : "other",
+        date: initialDate,
+        selectedSlot: null,
+        details: hasAuthenticatedCustomer
+          ? {
+              name: customer?.name ?? "",
+              email: customer?.email ?? "",
+              phone: customer?.phone ?? "",
+              notes: "",
+            }
+          : {
+              name: "",
+              email: "",
+              phone: "",
+              notes: "",
+            },
+        step: 1,
+      };
+    }
+
+    return {
+      bookingMode: restoredDraft.bookingMode,
+      date: restoredDraft.date || initialDate,
+      selectedSlot: restoredDraft.selectedSlot,
+      details: restoredDraft.details,
+      step: restoredDraft.step,
+    };
+  })();
+
+  const [bookingMode, setBookingMode] = useState<"self" | "other">(
+    initialBookingState.bookingMode,
+  );
   const [service, setService] = useState<Service | null>(null);
-  const [date, setDate] = useState(initialDate);
+  const [date, setDate] = useState(initialBookingState.date);
   const [availableSlots, setAvailableSlots] = useState<AvailabilitySlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(
-    null,
+    initialBookingState.selectedSlot,
   );
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState<string | null>(
     null,
   );
-  const [step, setStep] = useState(1);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [details, setDetails] = useState<BookingDetails>({
-    name: "",
-    email: "",
-    phone: "",
-    notes: "",
-  });
+  const [details, setDetails] = useState<BookingDetails>(
+    initialBookingState.details,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [step, setStep] = useState(initialBookingState.step);
 
   useEffect(() => {
     let isCurrent = true;
@@ -145,12 +311,21 @@ function BookingPage() {
     }
 
     const selectedServiceId = serviceId;
+    const selectedSlotIsCurrentContext = slotMatchesCurrentContext(
+      selectedSlot,
+      selectedServiceId,
+      providerId,
+      date,
+    );
 
     async function loadAvailability() {
       setAvailabilityLoading(true);
       setAvailabilityError(null);
       setAvailableSlots([]);
-      setSelectedSlot(null);
+
+      if (selectedSlot !== null && !selectedSlotIsCurrentContext) {
+        setSelectedSlot(null);
+      }
 
       const query = new URLSearchParams({
         service_id: selectedServiceId,
@@ -172,6 +347,24 @@ function BookingPage() {
         const data: AvailabilityResponse = await response.json();
         if (isCurrent) {
           setAvailableSlots(data.slots);
+
+          if (
+            selectedSlot !== null &&
+            selectedSlotIsCurrentContext &&
+            !data.slots.some(
+              (slot) =>
+                slot.service_id === selectedServiceId &&
+                slot.provider_id === selectedSlot.provider_id &&
+                slot.date === date &&
+                slot.start === selectedSlot.start,
+            )
+          ) {
+            setSelectedSlot(null);
+            setBookingError(
+              "The previously selected time is no longer available. Please choose another one.",
+            );
+            setStep(1);
+          }
         }
       } catch (requestError) {
         if (isCurrent) {
@@ -193,15 +386,62 @@ function BookingPage() {
     return () => {
       isCurrent = false;
     };
-  }, [date, providerId, serviceId]);
+  }, [date, providerId, selectedSlot, serviceId]);
 
   const steps = useMemo(
     () => ["Date & time", "Your details", "Confirmation"],
     [],
   );
 
+  useEffect(() => {
+    if (!serviceId) {
+      window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    const draft: BookingDraft = {
+      serviceId,
+      providerId: providerId || selectedSlot?.provider_id || null,
+      step,
+      date,
+      selectedSlot,
+      bookingMode,
+      details,
+    };
+
+    window.sessionStorage.setItem(
+      BOOKING_DRAFT_STORAGE_KEY,
+      JSON.stringify(draft),
+    );
+  }, [bookingMode, date, details, providerId, selectedSlot, serviceId, step]);
+
   function handleDetailsChange(field: keyof BookingDetails, value: string) {
     setDetails((current) => ({ ...current, [field]: value }));
+  }
+
+  function applyBookingMode(mode: "self" | "other") {
+    setBookingMode(mode);
+
+    if (!customer) {
+      return;
+    }
+
+    if (mode === "self") {
+      setDetails((current) => ({
+        ...current,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone ?? "",
+      }));
+      return;
+    }
+
+    setDetails((current) => ({
+      ...current,
+      name: "",
+      email: "",
+      phone: "",
+    }));
   }
 
   function submitDetails(event: FormEvent<HTMLFormElement>) {
@@ -221,14 +461,13 @@ function BookingPage() {
 
     if (new Date(selectedSlot.start).getTime() <= Date.now()) {
       setAvailableSlots((current) =>
-        current.filter(
-          (slot) =>
-            new Date(slot.start).getTime() > Date.now(),
-        ),
+        current.filter((slot) => new Date(slot.start).getTime() > Date.now()),
       );
       setSelectedSlot(null);
       setStep(1);
-      setBookingError("That time has already passed. Choose another available time.");
+      setBookingError(
+        "That time has already passed. Choose another available time.",
+      );
       return;
     }
 
@@ -237,7 +476,10 @@ function BookingPage() {
     try {
       const response = await fetch("/api/appointments", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           service_id: service.id,
           provider_id: selectedSlot.provider_id,
@@ -264,6 +506,7 @@ function BookingPage() {
 
       const appointment: AppointmentResponse = await response.json();
       if (appointment.id) {
+        window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
         setIsConfirmed(true);
         setAvailableSlots((current) =>
           current.filter(
@@ -378,6 +621,9 @@ function BookingPage() {
                 min={getToday()}
                 onChange={(event) => {
                   const nextDate = event.target.value;
+                  if (nextDate !== date && selectedSlot) {
+                    setSelectedSlot(null);
+                  }
                   setDate(nextDate);
                   if (!nextDate) {
                     setAvailableSlots([]);
@@ -453,7 +699,51 @@ function BookingPage() {
           {step === 2 && (
             <form noValidate onSubmit={submitDetails}>
               <p className="panel-kicker">Step 2 of 3</p>
-              <h2>Tell us about you</h2>
+              <h2>Who is this appointment for?</h2>
+
+              {hasAuthenticatedCustomer && (
+                <div
+                  className="booking-mode-toggle"
+                  role="radiogroup"
+                  aria-label="Appointment booking recipient"
+                >
+                  <label
+                    className={`booking-mode-option ${bookingMode === "self" ? "selected" : ""}`}
+                  >
+                    <input
+                      checked={bookingMode === "self"}
+                      onChange={() => applyBookingMode("self")}
+                      type="radio"
+                    />
+                    <span className="booking-mode-copy">
+                      <span className="booking-mode-title">
+                        Book for myself
+                      </span>
+                      <span className="booking-mode-description">
+                        Use my account details
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`booking-mode-option ${bookingMode === "other" ? "selected" : ""}`}
+                  >
+                    <input
+                      checked={bookingMode === "other"}
+                      onChange={() => applyBookingMode("other")}
+                      type="radio"
+                    />
+                    <span className="booking-mode-copy">
+                      <span className="booking-mode-title">
+                        Book for someone else
+                      </span>
+                      <span className="booking-mode-description">
+                        Enter their contact details
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <div className="form-grid">
                 <label className="field-label">
                   Full name
@@ -540,7 +830,10 @@ function BookingPage() {
                   : "Everything looks good. Confirm the details below to request this appointment."}
               </p>
               <div className="confirmation-details">
-                <strong>{details.name}</strong>
+                <strong>
+                  {isConfirmed ? "Booked for" : "Appointment for"}:{" "}
+                  {details.name}
+                </strong>
                 <span>{details.email}</span>
                 <span>
                   {formatDate(date)} at{" "}
@@ -570,7 +863,10 @@ function BookingPage() {
                 </div>
               )}
               {bookingError && (
-                <p className="status-message status-message--error" role="alert">
+                <p
+                  className="status-message status-message--error"
+                  role="alert"
+                >
                   {bookingError}
                 </p>
               )}
