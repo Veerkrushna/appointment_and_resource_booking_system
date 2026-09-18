@@ -9,13 +9,14 @@ import HomePage from "../pages/HomePage";
 import ProvidersPage from "../pages/ProvidersPage";
 import ServicesPage from "../pages/ServicesPage";
 import AuthPage from "../pages/AuthPage";
-import CustomerDashboardPage from "../pages/CustomerDashboardPage";
+import ProfilePage from "../pages/ProfilePage";
 import TermsPage from "../pages/TermsPage";
 import { useAuth } from "../auth/useAuth";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { customer, isLoading } = useAuth();
-  if (isLoading) return <p className="status-message">Loading your account...</p>;
+  if (isLoading)
+    return <p className="status-message">Loading your account...</p>;
   return customer ? children : <Navigate to="/login" replace />;
 }
 
@@ -31,8 +32,23 @@ function AppRoutes() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />
         <Route path="/terms" element={<TermsPage />} />
-        <Route path="/dashboard" element={<ProtectedRoute><CustomerDashboardPage /></ProtectedRoute>} />
-        <Route path="/appointments" element={<ProtectedRoute><AppointmentsPage /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<Navigate to="/" replace />} />
+        <Route
+          path="/appointments"
+          element={
+            <ProtectedRoute>
+              <AppointmentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
     </Routes>
   );

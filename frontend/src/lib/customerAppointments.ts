@@ -91,3 +91,39 @@ export async function rescheduleCustomerAppointment(
     );
   }
 }
+export type CustomerProfile = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+  is_active: boolean;
+};
+
+export async function updateCustomerProfile(
+  token: string,
+  profile: {
+    name: string;
+    email: string;
+    phone: string | null;
+  },
+) {
+  const response = await fetch("/api/auth/me", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(profile),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await getMessage(response, "Unable to update your profile."),
+    );
+  }
+
+  const data: CustomerProfile = await response.json();
+
+  return data;
+}

@@ -30,6 +30,14 @@ class CustomerResponse(BaseModel):
     is_active: bool
 
 
+class CustomerProfileUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    phone: str | None = Field(default=None, max_length=30)
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -49,4 +57,6 @@ class AdminUserCreate(BaseModel):
 
     def model_post_init(self, __context: object) -> None:
         if self.role not in {UserRole.ADMIN, UserRole.SERVICE_PROVIDER}:
-            raise ValueError("Admin users can only create admin or service_provider accounts")
+            raise ValueError(
+                "Admin users can only create admin or service_provider accounts"
+            )

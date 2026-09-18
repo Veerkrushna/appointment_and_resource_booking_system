@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy import delete
 
+from app.core.security import hash_password
 from app.db.database import SessionLocal
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.appointment_cancellation import AppointmentCancellation
@@ -15,6 +16,7 @@ from app.models.notification import Notification
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
+from app.models.user import User, UserRole
 
 
 def clear_database(db):
@@ -27,8 +29,88 @@ def clear_database(db):
     db.execute(delete(ProviderService))
     db.execute(delete(Provider))
     db.execute(delete(Service))
+    db.execute(delete(User))
 
     print("Database cleared successfully.")
+
+
+def create_users(db):
+    users = [
+        # Admin
+        User(
+            name="Admin User",
+            email="admin@example.com",
+            password_hash=hash_password("Admin@123"),
+            phone="+919800000000",
+            role=UserRole.ADMIN,
+            is_active=True,
+        ),
+        # Providers
+        User(
+            name="Dr. Ananya Sharma",
+            email="ananya.sharma@example.com",
+            password_hash=hash_password("Provider@123"),
+            phone="+919876543210",
+            role=UserRole.SERVICE_PROVIDER,
+            is_active=True,
+        ),
+        User(
+            name="Dr. Rahul Mehta",
+            email="rahul.mehta@example.com",
+            password_hash=hash_password("Provider@123"),
+            phone="+919876543211",
+            role=UserRole.SERVICE_PROVIDER,
+            is_active=True,
+        ),
+        User(
+            name="Dr. Priya Nair",
+            email="priya.nair@example.com",
+            password_hash=hash_password("Provider@123"),
+            phone="+919876543212",
+            role=UserRole.SERVICE_PROVIDER,
+            is_active=True,
+        ),
+        # Customers
+        User(
+            name="Aarav Patel",
+            email="aarav.patel@example.com",
+            password_hash=hash_password("Customer@123"),
+            phone="+919800000001",
+            role=UserRole.CUSTOMER,
+            is_active=True,
+        ),
+        User(
+            name="Meera Shah",
+            email="meera.shah@example.com",
+            password_hash=hash_password("Customer@123"),
+            phone="+919800000002",
+            role=UserRole.CUSTOMER,
+            is_active=True,
+        ),
+        User(
+            name="Rohan Deshmukh",
+            email="rohan.deshmukh@example.com",
+            password_hash=hash_password("Customer@123"),
+            phone="+919800000003",
+            role=UserRole.CUSTOMER,
+            is_active=True,
+        ),
+        User(
+            name="Kavya Joshi",
+            email="kavya.joshi@example.com",
+            password_hash=hash_password("Customer@123"),
+            phone="+919800000004",
+            role=UserRole.CUSTOMER,
+            is_active=True,
+        ),
+    ]
+
+    db.add_all(users)
+    db.flush()
+
+    print(f"Created {len(users)} users.")
+
+    return users
 
 
 def create_services(db):
@@ -274,14 +356,17 @@ def create_blackout_dates(db, providers):
     return blackout_dates
 
 
-def create_appointments(db, providers, services):
+def create_appointments(db, providers, services, users):
     appointments = [
         Appointment(
+            # Aarav Patel → Dr. Ananya Sharma
             service_id=services[0].id,
             provider_id=providers[0].id,
-            user_name="Aarav Patel",
-            user_email="aarav.patel@example.com",
-            user_phone="+919800000001",
+            customer_id=users[4].id,
+            # Customer snapshot
+            user_name=users[4].name,
+            user_email=users[4].email,
+            user_phone=users[4].phone,
             appointment_start=datetime(2026, 9, 16, 10, 0, tzinfo=UTC),
             appointment_end=datetime(2026, 9, 16, 10, 30, tzinfo=UTC),
             duration_minutes=30,
@@ -289,11 +374,14 @@ def create_appointments(db, providers, services):
             status=AppointmentStatus.CONFIRMED,
         ),
         Appointment(
+            # Meera Shah → Dr. Priya Nair
             service_id=services[1].id,
             provider_id=providers[2].id,
-            user_name="Meera Shah",
-            user_email="meera.shah@example.com",
-            user_phone="+919800000002",
+            customer_id=users[5].id,
+            # Customer snapshot
+            user_name=users[5].name,
+            user_email=users[5].email,
+            user_phone=users[5].phone,
             appointment_start=datetime(2026, 9, 17, 11, 0, tzinfo=UTC),
             appointment_end=datetime(2026, 9, 17, 11, 20, tzinfo=UTC),
             duration_minutes=20,
@@ -301,11 +389,14 @@ def create_appointments(db, providers, services):
             status=AppointmentStatus.PENDING,
         ),
         Appointment(
+            # Rohan Deshmukh → Dr. Rahul Mehta
             service_id=services[2].id,
             provider_id=providers[1].id,
-            user_name="Rohan Deshmukh",
-            user_email="rohan.deshmukh@example.com",
-            user_phone="+919800000003",
+            customer_id=users[6].id,
+            # Customer snapshot
+            user_name=users[6].name,
+            user_email=users[6].email,
+            user_phone=users[6].phone,
             appointment_start=datetime(2026, 9, 14, 10, 0, tzinfo=UTC),
             appointment_end=datetime(2026, 9, 14, 10, 45, tzinfo=UTC),
             duration_minutes=45,
@@ -313,11 +404,14 @@ def create_appointments(db, providers, services):
             status=AppointmentStatus.COMPLETED,
         ),
         Appointment(
+            # Kavya Joshi → Dr. Priya Nair
             service_id=services[3].id,
             provider_id=providers[2].id,
-            user_name="Kavya Joshi",
-            user_email="kavya.joshi@example.com",
-            user_phone="+919800000004",
+            customer_id=users[7].id,
+            # Customer snapshot
+            user_name=users[7].name,
+            user_email=users[7].email,
+            user_phone=users[7].phone,
             appointment_start=datetime(2026, 9, 18, 15, 0, tzinfo=UTC),
             appointment_end=datetime(2026, 9, 18, 16, 0, tzinfo=UTC),
             duration_minutes=60,
@@ -340,6 +434,7 @@ def seed_database():
     try:
         clear_database(db)
 
+        users = create_users(db)
         services = create_services(db)
         providers = create_providers(db)
 
@@ -347,7 +442,7 @@ def seed_database():
         create_availability(db, providers)
         create_breaks(db, providers)
         create_blackout_dates(db, providers)
-        create_appointments(db, providers, services)
+        create_appointments(db, providers, services, users)
 
         db.commit()
 
