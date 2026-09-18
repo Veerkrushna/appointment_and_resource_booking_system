@@ -86,6 +86,98 @@ def _send_once(
 
 
 @celery_app.task(
+    name="appointments.send_confirmation_notification",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
+def send_confirmation_notification(appointment_id: str) -> None:
+    with SessionLocal() as db:
+        appointment = db.get(Appointment, appointment_id)
+        if appointment is None:
+            return
+
+        notification = Notification(
+            appointment_id=appointment.id,
+            notification_type=NotificationType.CONFIRMATION,
+            recipient_email=appointment.user_email,
+        )
+        db.add(notification)
+        db.commit()
+        deliver_notification(db, notification, appointment)
+
+
+@celery_app.task(
+    name="appointments.send_cancellation_notification",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
+def send_cancellation_notification(appointment_id: str) -> None:
+    with SessionLocal() as db:
+        appointment = db.get(Appointment, appointment_id)
+        if appointment is None:
+            return
+
+        notification = Notification(
+            appointment_id=appointment.id,
+            notification_type=NotificationType.CANCELLATION,
+            recipient_email=appointment.user_email,
+        )
+        db.add(notification)
+        db.commit()
+        deliver_notification(db, notification, appointment)
+
+
+@celery_app.task(
+    name="appointments.send_reschedule_notification",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
+def send_reschedule_notification(appointment_id: str) -> None:
+    with SessionLocal() as db:
+        appointment = db.get(Appointment, appointment_id)
+        if appointment is None:
+            return
+
+        notification = Notification(
+            appointment_id=appointment.id,
+            notification_type=NotificationType.RESCHEDULE,
+            recipient_email=appointment.user_email,
+        )
+        db.add(notification)
+        db.commit()
+        deliver_notification(db, notification, appointment)
+
+
+@celery_app.task(
+    name="appointments.send_confirmation_status_notification",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={"max_retries": 3},
+)
+def send_confirmation_status_notification(appointment_id: str) -> None:
+    with SessionLocal() as db:
+        appointment = db.get(Appointment, appointment_id)
+        if appointment is None:
+            return
+
+        notification = Notification(
+            appointment_id=appointment.id,
+            notification_type=NotificationType.CONFIRMATION,
+            recipient_email=appointment.user_email,
+        )
+        db.add(notification)
+        db.commit()
+        deliver_notification(db, notification, appointment)
+
+
+@celery_app.task(
     name="appointments.send_email_reminder",
     autoretry_for=(Exception,),
     retry_backoff=True,

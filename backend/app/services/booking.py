@@ -17,13 +17,13 @@ from app.schemas.appointment import (
     AppointmentRescheduleCreate,
     AppointmentUpdate,
 )
-from app.services.notifications import (
-    send_booking_confirmation,
-    send_cancellation_email,
-    send_confirmation_status_email,
-    send_reschedule_email,
+from app.tasks.notification_tasks import (
+    schedule_appointment_notifications,
+    send_cancellation_notification,
+    send_confirmation_notification,
+    send_confirmation_status_notification,
+    send_reschedule_notification,
 )
-from app.tasks.notification_tasks import schedule_appointment_notifications
 
 
 class BookingValidationError(ValueError):
@@ -162,7 +162,7 @@ def create_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
-    send_booking_confirmation(db, appointment)
+    send_confirmation_notification.delay(str(appointment.id))
     db.refresh(appointment)
     schedule_appointment_notifications(appointment)
     return appointment
@@ -203,10 +203,10 @@ def update_appointment(
     db.commit()
     db.refresh(appointment)
     if confirmed:
-        send_confirmation_status_email(db, appointment)
+        send_confirmation_status_notification.delay(str(appointment.id))
     if rescheduled:
         db.refresh(appointment)
-        send_reschedule_email(db, appointment)
+        send_reschedule_notification.delay(str(appointment.id))
     return appointment
 
 
@@ -254,7 +254,7 @@ def cancel_appointment(
     db.commit()
     db.refresh(cancellation)
     db.refresh(appointment)
-    send_cancellation_email(db, appointment)
+    send_cancellation_notification.delay(str(appointment.id))
     return cancellation
 
 
@@ -264,9 +264,7 @@ def reschedule_appointment(
     payload: AppointmentRescheduleCreate,
 ) -> Appointment:
     appointment = db.scalar(
-        select(Appointment)
-        .where(Appointment.id == appointment_id)
-        .with_for_update()
+        select(Appointment).where(Appointment.id == appointment_id).with_for_update()
     )
     if appointment is None:
         raise BookingValidationError("Appointment not found")
@@ -276,9 +274,7 @@ def reschedule_appointment(
         raise BookingValidationError("Completed appointments cannot be rescheduled")
 
     provider = db.scalar(
-        select(Provider)
-        .where(Provider.id == appointment.provider_id)
-        .with_for_update()
+        select(Provider).where(Provider.id == appointment.provider_id).with_for_update()
     )
     if provider is None:
         raise BookingValidationError("Provider not found")
@@ -296,5 +292,5 @@ def reschedule_appointment(
     appointment.appointment_end = end_utc
     db.commit()
     db.refresh(appointment)
-    send_reschedule_email(db, appointment)
+    send_reschedule_notification.delay(str(appointment.id))
     return appointment
