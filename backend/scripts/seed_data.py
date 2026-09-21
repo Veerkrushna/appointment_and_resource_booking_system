@@ -51,7 +51,7 @@ def create_users(db):
             email="ananya.sharma@example.com",
             password_hash=hash_password("Provider@123"),
             phone="+919876543210",
-            role=UserRole.SERVICE_PROVIDER,
+            role=UserRole.PROVIDER,
             is_active=True,
         ),
         User(
@@ -59,7 +59,7 @@ def create_users(db):
             email="rahul.mehta@example.com",
             password_hash=hash_password("Provider@123"),
             phone="+919876543211",
-            role=UserRole.SERVICE_PROVIDER,
+            role=UserRole.PROVIDER,
             is_active=True,
         ),
         User(
@@ -67,7 +67,7 @@ def create_users(db):
             email="priya.nair@example.com",
             password_hash=hash_password("Provider@123"),
             phone="+919876543212",
-            role=UserRole.SERVICE_PROVIDER,
+            role=UserRole.PROVIDER,
             is_active=True,
         ),
         # Customers

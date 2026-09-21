@@ -19,8 +19,8 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.execute("ALTER TABLE customers RENAME TO users")
-    op.execute("CREATE TYPE user_role AS ENUM ('CUSTOMER', 'SERVICE_PROVIDER', 'ADMIN')")
-    op.add_column("users", sa.Column("role", postgresql.ENUM("CUSTOMER", "SERVICE_PROVIDER", "ADMIN", name="user_role", create_type=False), nullable=True))
+    op.execute("CREATE TYPE user_role AS ENUM ('CUSTOMER', 'PROVIDER', 'ADMIN')")
+    op.add_column("users", sa.Column("role", postgresql.ENUM("CUSTOMER", "PROVIDER", "ADMIN", name="user_role", create_type=False), nullable=True))
     op.add_column("users", sa.Column("created_by", sa.UUID(), nullable=True))
     op.add_column("users", sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=True))
     op.execute("UPDATE users SET role = 'CUSTOMER', is_active = TRUE")
