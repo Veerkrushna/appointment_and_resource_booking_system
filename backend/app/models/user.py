@@ -11,7 +11,7 @@ from app.db.database import Base
 
 class UserRole(enum.StrEnum):
     CUSTOMER = "customer"
-    SERVICE_PROVIDER = "service_provider"
+    PROVIDER = "provider"
     ADMIN = "admin"
 
 

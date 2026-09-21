@@ -56,7 +56,7 @@ class AdminUserCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=30)
 
     def model_post_init(self, __context: object) -> None:
-        if self.role not in {UserRole.ADMIN, UserRole.SERVICE_PROVIDER}:
+        if self.role not in {UserRole.ADMIN, UserRole.PROVIDER}:
             raise ValueError(
                 "Admin users can only create admin or service_provider accounts"
             )
