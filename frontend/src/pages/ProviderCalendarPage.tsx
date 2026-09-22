@@ -34,7 +34,14 @@ function getCalendarDays(month: Date) {
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
   const start = new Date(firstDay);
   start.setDate(firstDay.getDate() - firstDay.getDay());
-  return Array.from({ length: 42 }, (_, index) => {
+
+  const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const end = new Date(lastDay);
+  end.setDate(lastDay.getDate() + (6 - lastDay.getDay()));
+
+  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  return Array.from({ length: totalDays }, (_, index) => {
     const day = new Date(start);
     day.setDate(start.getDate() + index);
     return day;
@@ -59,17 +66,36 @@ export default function ProviderCalendarPage() {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scheduleData, setScheduleData] = useState<any>(null);
 
   useEffect(() => {
     async function loadData() {
-      if (!customer?.id) return;
+      if (!customer?.email) return;
       try {
-        const [appointmentsResponse, servicesResponse] = await Promise.all([
-          fetch(`/api/appointments?provider_id=${customer.id}`, {
+        const providersResponse = await fetch('/api/providers');
+        if (!providersResponse.ok) throw new Error(await responseMessage(providersResponse, "Unable to load providers."));
+        const providers = await providersResponse.json();
+        const provider = providers.find((p: any) => p.email === customer.email);
+
+        if (!provider) {
+          setAppointments([]);
+          setServices({});
+          setIsLoading(false);
+          return;
+        }
+
+        const [appointmentsResponse, servicesResponse, scheduleResponse] = await Promise.all([
+          fetch(`/api/appointments?provider_id=${provider.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           }),
-          fetch("/api/services")
+          fetch("/api/services"),
+          fetch(`/api/providers/${provider.id}/schedule`)
         ]);
+        
+        if (scheduleResponse.ok) {
+          const schedule = await scheduleResponse.json();
+          setScheduleData(schedule);
+        }
         
         if (!appointmentsResponse.ok) throw new Error(await responseMessage(appointmentsResponse, "Unable to load bookings."));
         const appointmentsData = await appointmentsResponse.json();
@@ -107,12 +133,17 @@ export default function ProviderCalendarPage() {
 
   return (
     <section className="dashboard-page">
-      <header className="dashboard-heading">
+      <header className="dashboard-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <p className="eyebrow">Schedule</p>
           <h1>My Calendar</h1>
           <p className="services-intro">Manage your appointments, available slots, and breaks.</p>
         </div>
+        {!isLoading && !error && (
+          <p className="service-count">
+            <strong>{appointments.filter((appointment) => appointment.status !== "cancelled").length}</strong> active bookings
+          </p>
+        )}
       </header>
 
       {error && <div className="status-message status-message--error" role="alert"><strong>We could not load your schedule.</strong><span>{error}</span></div>}
@@ -135,6 +166,27 @@ export default function ProviderCalendarPage() {
                 const dayAppointments = appointmentsByDay[key] || [];
                 const isCurrentMonth = day.getMonth() === month.getMonth();
                 const isSelected = key === selectedDate;
+                
+                let isDisabled = false;
+                if (scheduleData) {
+                  const pythonDayOfWeek = day.getDay() === 0 ? 6 : day.getDay() - 1;
+                  const availabilityWindow = scheduleData.availability?.find((w: any) => w.day_of_week === pythonDayOfWeek);
+                  if (availabilityWindow && !availabilityWindow.is_working_day) {
+                    isDisabled = true;
+                  }
+                  
+                  if (!isDisabled && scheduleData.blackout_dates) {
+                    const isBlackout = scheduleData.blackout_dates.some((blackout: any) => {
+                      const bStartKey = dateKey(new Date(blackout.blackout_start));
+                      const bEndKey = dateKey(new Date(blackout.blackout_end));
+                      return key >= bStartKey && key <= bEndKey;
+                    });
+                    if (isBlackout) {
+                      isDisabled = true;
+                    }
+                  }
+                }
+
                 return (
                   <button 
                     className={`calendar-day${isCurrentMonth ? "" : " calendar-day--outside"}${isSelected ? " calendar-day--selected" : ""}`} 
@@ -142,7 +194,10 @@ export default function ProviderCalendarPage() {
                     type="button" 
                     role="gridcell" 
                     aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings`} 
-                    onClick={() => setSelectedDate(key)}
+                    onClick={() => {
+                      if (!isDisabled) setSelectedDate(key);
+                    }}
+                    disabled={isDisabled}
                   >
                     <span>{day.getDate()}</span>
                     {dayAppointments.length > 0 && <small className="calendar-day__count">{dayAppointments.length}</small>}

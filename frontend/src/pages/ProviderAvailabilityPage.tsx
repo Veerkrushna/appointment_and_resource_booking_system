@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "../auth/useAuth";
 
 type DaySchedule = {
   active: boolean;
@@ -19,12 +20,36 @@ export default function ProviderAvailabilityPage() {
     Sunday: { active: false, start: "10:00", end: "14:00" },
   });
 
-  const [blackoutDates] = useState([
-    { id: "1", date: "2026-10-15", reason: "Vacation" },
-    { id: "2", date: "2026-11-20", reason: "Medical Leave" }
-  ]);
-
+  const { customer, token } = useAuth();
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [blackoutDates, setBlackoutDates] = useState<any[]>([]);
+  const [isAddingBlackout, setIsAddingBlackout] = useState(false);
+  const [newBlackoutDate, setNewBlackoutDate] = useState("");
+  const [newBlackoutReason, setNewBlackoutReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    async function fetchProviderData() {
+      if (!customer?.email) return;
+      try {
+        const pRes = await fetch('/api/providers');
+        if (!pRes.ok) return;
+        const providers = await pRes.json();
+        const provider = providers.find((p: any) => p.email === customer.email);
+        if (provider) {
+          setProviderId(provider.id);
+          const bRes = await fetch(`/api/providers/${provider.id}/schedule`);
+          if (bRes.ok) {
+            const data = await bRes.json();
+            setBlackoutDates(data.blackout_dates || []);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load provider data", err);
+      }
+    }
+    void fetchProviderData();
+  }, [customer?.email]);
 
   const toggleDay = (day: string) => {
     setSchedule(prev => ({
@@ -48,6 +73,51 @@ export default function ProviderAvailabilityPage() {
     }, 800);
   };
 
+  const handleConfirmBlackout = async () => {
+    if (!providerId || !newBlackoutDate) return;
+    try {
+      const res = await fetch(`/api/providers/${providerId}/unavailability`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          start_date: newBlackoutDate,
+          end_date: newBlackoutDate,
+          reason: newBlackoutReason || "Unavailable"
+        })
+      });
+      if (res.ok) {
+        const newBlackout = await res.json();
+        setBlackoutDates(prev => [...prev, newBlackout].sort((a, b) => new Date(a.blackout_start).getTime() - new Date(b.blackout_start).getTime()));
+        setIsAddingBlackout(false);
+        setNewBlackoutDate("");
+        setNewBlackoutReason("");
+      } else {
+        alert("Failed to add blackout date");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error adding blackout date");
+    }
+  };
+
+  const handleDeleteBlackout = async (id: string) => {
+    if (!providerId) return;
+    try {
+      const res = await fetch(`/api/providers/${providerId}/unavailability/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok || res.status === 204) {
+        setBlackoutDates(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <section className="dashboard-page">
       <header className="dashboard-heading">
@@ -61,7 +131,7 @@ export default function ProviderAvailabilityPage() {
             className="action-button" 
             onClick={handleSave} 
             disabled={isSaving}
-            style={{ padding: '0.75rem 1.5rem', backgroundColor: 'var(--accent-color)', color: 'var(--bg-color)', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ padding: '0.75rem 1.5rem', backgroundColor: '#e2784d', color: 'white', border: '1px solid black', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 'bold' }}
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
@@ -130,16 +200,57 @@ export default function ProviderAvailabilityPage() {
               {blackoutDates.map(date => (
                 <div key={date.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
                   <div>
-                    <strong>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(date.date))}</strong>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{date.reason}</div>
+                    <strong>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(date.blackout_start || date.date))}</strong>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{date.reason || "Unavailable"}</div>
                   </div>
-                  <button style={{ background: 'none', border: 'none', color: 'var(--error-color)', cursor: 'pointer', fontSize: '1.2rem' }}>&times;</button>
+                  <button onClick={() => handleDeleteBlackout(date.id)} aria-label="Remove blackout date" style={{ backgroundColor: 'white', border: '1px solid black', color: 'black', cursor: 'pointer', fontSize: '1.2rem', width: '2rem', height: '2rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
                 </div>
               ))}
+              {blackoutDates.length === 0 && (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>No blackout dates configured.</div>
+              )}
             </div>
-            <button style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: 'transparent', border: '1px dashed var(--border-color)', borderRadius: '4px', color: 'var(--text-color)', cursor: 'pointer' }}>
-              + Add Blackout Date
-            </button>
+            
+            {isAddingBlackout ? (
+              <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--panel-bg)' }}>
+                <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>Select Date</p>
+                <input 
+                  type="date" 
+                  value={newBlackoutDate} 
+                  onChange={(e) => setNewBlackoutDate(e.target.value)} 
+                  style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-color)', backgroundColor: 'var(--bg-color)' }}
+                />
+                <input 
+                  type="text" 
+                  placeholder="Reason (optional)"
+                  value={newBlackoutReason} 
+                  onChange={(e) => setNewBlackoutReason(e.target.value)} 
+                  style={{ width: '100%', padding: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-color)', backgroundColor: 'var(--bg-color)' }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button 
+                    onClick={handleConfirmBlackout}
+                    disabled={!newBlackoutDate}
+                    style={{ flex: 1, padding: '0.5rem', backgroundColor: 'var(--accent-color)', color: 'var(--bg-color)', border: 'none', borderRadius: '4px', cursor: newBlackoutDate ? 'pointer' : 'not-allowed', fontWeight: 'bold', opacity: newBlackoutDate ? 1 : 0.6 }}
+                  >
+                    Confirm
+                  </button>
+                  <button 
+                    onClick={() => setIsAddingBlackout(false)}
+                    style={{ flex: 1, padding: '0.5rem', backgroundColor: 'transparent', color: 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setIsAddingBlackout(true)}
+                style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                + Add Blackout Date
+              </button>
+            )}
           </section>
 
           <section className="dashboard-panel">
@@ -156,10 +267,10 @@ export default function ProviderAvailabilityPage() {
                 <strong>Lunch Break</strong>
                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>12:00 PM - 1:00 PM</div>
               </div>
-              <button style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer' }}>Edit</button>
+              <button style={{ backgroundColor: 'white', border: '1px solid black', color: 'black', cursor: 'pointer', padding: '0.25rem 0.75rem', borderRadius: '4px', fontWeight: 'bold' }}>Edit</button>
             </div>
             
-            <button style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: 'transparent', border: '1px dashed var(--border-color)', borderRadius: '4px', color: 'var(--text-color)', cursor: 'pointer' }}>
+            <button style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
               + Add Break
             </button>
           </section>
