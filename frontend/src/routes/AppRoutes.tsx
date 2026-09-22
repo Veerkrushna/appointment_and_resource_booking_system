@@ -16,6 +16,7 @@ import ProviderCalendarPage from "../pages/ProviderCalendarPage";
 import ProviderAvailabilityPage from "../pages/ProviderAvailabilityPage";
 import ProviderServicesPage from "../pages/ProviderServicesPage";
 import { useAuth } from "../auth/useAuth";
+import AdminAppointmentsPage from "../pages/AdminAppointmentsPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { customer, isLoading } = useAuth();
@@ -26,26 +27,97 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 function ProviderRoute({ children }: { children: ReactNode }) {
   const { customer, isLoading } = useAuth();
-  if (isLoading)
+
+  if (isLoading) {
     return <p className="status-message">Loading your account...</p>;
-  if (!customer) return <Navigate to="/login" replace />;
-  return customer.role === "provider" ? children : <Navigate to="/" replace />;
+  }
+
+  if (!customer) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return customer.role.toLowerCase() === "service_provider" ? (
+    children
+  ) : (
+    <Navigate to="/" replace />
+  );
+}
+
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { customer, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <p className="status-message">Loading your account...</p>;
+  }
+
+  if (!customer) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return customer.role.toLowerCase() === "admin" ? (
+    children
+  ) : (
+    <Navigate to="/" replace />
+  );
 }
 
 function DashboardRedirect() {
   const { customer, isLoading } = useAuth();
-  if (isLoading) return <p className="status-message">Loading...</p>;
-  if (customer?.role === "provider") return <Navigate to="/provider/dashboard" replace />;
-  if (customer?.role === "admin") return <Navigate to="/admin" replace />;
+
+  if (isLoading) {
+    return <p className="status-message">Loading...</p>;
+  }
+
+  const userRole = customer?.role?.toLowerCase();
+
+  if (userRole === "service_provider") {
+    return <Navigate to="/provider/dashboard" replace />;
+  }
+
+  if (userRole === "admin") {
+    return <Navigate to="/admin" replace />;
+  }
+
   return <Navigate to="/" replace />;
+}
+
+function HomeRoute() {
+  const { customer, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <p className="status-message">Loading...</p>;
+  }
+
+  const userRole = customer?.role?.toLowerCase();
+
+  if (userRole === "admin") {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return <HomePage />;
 }
 
 function AppRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/admin" element={<AdminDashboardPage />} />
-        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminDashboardPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/appointments"
+          element={
+            <AdminRoute>
+              <AdminAppointmentsPage />
+            </AdminRoute>
+          }
+        />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/book/:serviceId" element={<BookingPage />} />
         <Route path="/providers" element={<ProvidersPage />} />

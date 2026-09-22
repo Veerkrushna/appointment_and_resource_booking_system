@@ -16,6 +16,7 @@ function Navbar() {
   const [profileError, setProfileError] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const { customer, token, logout, updateCustomer } = useAuth();
+  const userRole = customer?.role?.toLowerCase();
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const handleProfileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -73,17 +74,18 @@ function Navbar() {
         id="main-navigation"
       >
         <div className="nav-links">
-          <NavLink
-            to="/"
-            className={({ isActive }) => (isActive ? "active" : "")}
-            onClick={() => setIsMenuOpen(false)}
-            end
-          >
-            Home
-          </NavLink>
+          {userRole !== "admin" && (
+            <NavLink
+              to="/"
+              className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Home
+            </NavLink>
+          )}
           {customer ? (
             <>
-              {customer.role === "provider" ? (
+              {userRole === "service_provider" ? (
                 <>
                   <NavLink
                     to="/provider/dashboard"
@@ -121,6 +123,37 @@ function Navbar() {
                     My Services
                   </NavLink>
                 </>
+              ) : userRole === "admin" ? (
+                <>
+                  <NavLink
+                    to="/admin"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Admin Dashboard
+                  </NavLink>
+                  <NavLink
+                    to="/admin/appointments"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Appointments
+                  </NavLink>
+                  <NavLink
+                    to="/admin/services"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Services
+                  </NavLink>
+                  <NavLink
+                    to="/admin/providers"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Providers
+                  </NavLink>
+                </>
               ) : (
                 <>
                   <NavLink
@@ -139,8 +172,7 @@ function Navbar() {
                   </NavLink>
                 </>
               )}
-              
-              {/* Profile and Sign Out - Shared for all logged-in users */}
+
               <div className="profile-menu" ref={profileMenuRef}>
                 <button
                   className="profile-menu__trigger"
@@ -296,6 +328,7 @@ function Navbar() {
                   </div>
                 )}
               </div>
+
               <button
                 className="nav-auth-btn"
                 type="button"
