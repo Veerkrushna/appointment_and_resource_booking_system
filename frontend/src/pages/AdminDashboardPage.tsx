@@ -154,7 +154,7 @@ function AdminDashboardPage() {
       {!isLoading && !error && overview && (
         <>
           <div className="dashboard-stat-grid">
-            <article className="dashboard-stat dashboard-stat--accent"><span>Bookings this month</span><strong>{appointments.length}</strong><small>{overview.appointments_today} scheduled today</small></article>
+            <article className="dashboard-stat dashboard-stat--warm"><span>Bookings this month</span><strong>{appointments.length}</strong><small>{overview.appointments_today} scheduled today</small></article>
             <article className="dashboard-stat"><span>Completed</span><strong>{monthlyStatusCount("completed")}</strong><small>Completed during {month.label}</small></article>
             <article className="dashboard-stat dashboard-stat--warm"><span>Cancelled</span><strong>{monthlyStatusCount("cancelled")}</strong><small>Cancelled during {month.label}</small></article>
             <article className="dashboard-stat"><span>Revenue this month</span><strong>{formatMoney(revenue)}</strong><small>Completed services only</small></article>

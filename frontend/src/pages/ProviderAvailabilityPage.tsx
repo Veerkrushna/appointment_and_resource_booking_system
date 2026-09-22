@@ -128,10 +128,9 @@ export default function ProviderAvailabilityPage() {
         </div>
         <div>
           <button 
-            className="action-button" 
+            className="btn-accent btn-accent--inline" 
             onClick={handleSave} 
             disabled={isSaving}
-            style={{ padding: '0.75rem 1.5rem', backgroundColor: '#e2784d', color: 'white', border: '1px solid black', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 'bold' }}
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
@@ -246,7 +245,7 @@ export default function ProviderAvailabilityPage() {
             ) : (
               <button 
                 onClick={() => setIsAddingBlackout(true)}
-                style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn-accent btn-accent--full"
               >
                 + Add Blackout Date
               </button>
@@ -270,7 +269,7 @@ export default function ProviderAvailabilityPage() {
               <button style={{ backgroundColor: 'white', border: '1px solid black', color: 'black', cursor: 'pointer', padding: '0.25rem 0.75rem', borderRadius: '4px', fontWeight: 'bold' }}>Edit</button>
             </div>
             
-            <button style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
+            <button className="btn-accent btn-accent--full">
               + Add Break
             </button>
           </section>

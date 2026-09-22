@@ -29,10 +29,7 @@ export default function ProviderServicesPage() {
           <p className="services-intro">Manage the services you offer to customers.</p>
         </div>
         <div>
-          <button 
-            className="action-button"
-            style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
-          >
+          <button className="btn-accent btn-accent--full">
             + Add New Service
           </button>
         </div>

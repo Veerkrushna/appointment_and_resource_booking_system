@@ -51,17 +51,17 @@ export default function ProviderDashboardPage() {
       </header>
 
       <div className="dashboard-stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-        <article className="dashboard-stat dashboard-stat--accent">
+        <article className="dashboard-stat dashboard-stat--warm">
           <span>Today's Appointments</span>
           <strong>{stats.today}</strong>
           <small>Total scheduled today</small>
         </article>
-        <article className="dashboard-stat">
+        <article className="dashboard-stat dashboard-stat--warm">
           <span>Remaining Today</span>
           <strong>{stats.remainingToday}</strong>
           <small>Appointments left</small>
         </article>
-        <article className="dashboard-stat">
+        <article className="dashboard-stat dashboard-stat--warm">
           <span>Upcoming Appointments</span>
           <strong>{stats.upcoming}</strong>
           <small>In the next 7 days</small>

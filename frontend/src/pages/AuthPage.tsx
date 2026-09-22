@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -39,6 +39,16 @@ function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+    setConfirmPassword("");
+    setValidationError(null);
+    setError(null);
+  }, [mode, location.pathname]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(null); setValidationError(null);
     if (mode === "register") {
@@ -64,14 +74,14 @@ function AuthPage() {
           {isRegister && <div className="oauth-options"><button className="oauth-button" type="button"><Icon name="google" />Sign up with Google</button><button className="oauth-button" type="button"><Icon name="apple" />Sign up with Apple</button></div>}
           {isRegister && <div className="auth-divider"><span>or continue with email</span></div>}
           <form className="auth-form" onSubmit={submit} noValidate>
-            {isRegister && <label className="auth-field"><span>Full name</span><input autoComplete="name" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
-            <label className="auth-field"><span>Email address</span><input autoComplete="email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
-            {isRegister && <label className="auth-field"><span>Phone number <em>Optional</em></span><input autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(555) 123-4567" /></label>}
-            <label className="auth-field"><span>Password</span><div className="auth-input-wrap"><input autoComplete={isRegister ? "new-password" : "current-password"} required minLength={8} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /><button className="password-toggle" type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}><Icon name={showPassword ? "eye-off" : "eye"} /></button></div>{isRegister && password && <div className="password-meter" aria-live="polite"><div className="password-meter__bars">{[1, 2, 3, 4].map((bar) => <i className={bar <= score ? `is-level-${score}` : ""} key={bar} />)}</div><span>{score < 2 ? "Needs more strength" : score < 4 ? "Good password" : "Strong password"}</span></div>}</label>
+            {isRegister && <label className="auth-field"><span>Full name</span><input autoComplete="off" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
+            <label className="auth-field"><span>Email address</span><input autoComplete="off" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
+            {isRegister && <label className="auth-field"><span>Phone number <em>Optional</em></span><input autoComplete="off" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(555) 123-4567" /></label>}
+            <label className="auth-field"><span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>Password {!isRegister && <a href="/forgot-password" style={{ fontSize: '0.8rem', color: '#e2784d', textDecoration: 'none' }}>Forgot password?</a>}</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /><button className="password-toggle" type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}><Icon name={showPassword ? "eye-off" : "eye"} /></button></div>{isRegister && password && <div className="password-meter" aria-live="polite"><div className="password-meter__bars">{[1, 2, 3, 4].map((bar) => <i className={bar <= score ? `is-level-${score}` : ""} key={bar} />)}</div><span>{score < 2 ? "Needs more strength" : score < 4 ? "Good password" : "Strong password"}</span></div>}</label>
             {isRegister && <label className="auth-field"><span>Confirm password</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" /></div></label>}
             {isRegister && <label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /><span>I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></span></label>}
             {(validationError || error) && <p className="auth-error" role="alert">{validationError || error}</p>}
-            <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? <><span className="auth-spinner" />Creating your account...</> : isRegister ? "Create Account" : "Sign In"}</button>
+            <button className="auth-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? <><span className="auth-spinner" />{isRegister ? "Creating your account..." : "Signing you in..."}</> : isRegister ? "Create Account" : "Sign In"}</button>
           </form>
           <p className="auth-footer">{isRegister ? "Already have an account?" : "New to Appointment Booking?"} <button type="button" onClick={() => setMode(isRegister ? "login" : "register")}>{isRegister ? "Sign In" : "Create an account"}</button></p>
         </div>
