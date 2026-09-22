@@ -40,7 +40,14 @@ function getCalendarDays(month: Date) {
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
   const start = new Date(firstDay);
   start.setDate(firstDay.getDate() - firstDay.getDay());
-  return Array.from({ length: 42 }, (_, index) => {
+
+  const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const end = new Date(lastDay);
+  end.setDate(lastDay.getDate() + (6 - lastDay.getDay()));
+
+  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  return Array.from({ length: totalDays }, (_, index) => {
     const day = new Date(start);
     day.setDate(start.getDate() + index);
     return day;

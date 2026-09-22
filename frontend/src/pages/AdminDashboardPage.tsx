@@ -24,7 +24,6 @@ type AdminAppointment = {
   provider_name: string;
 };
 
-type Service = { id: string; price: string | number | null };
 type CalendarView = "month" | "week";
 type AvailabilityStatus = "available" | "booked" | "unavailable" | "limited";
 
@@ -42,14 +41,6 @@ function monthBounds() {
       year: "numeric",
     }).format(today),
   };
-}
-
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "Rupees",
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function formatDate(value: string) {
@@ -106,7 +97,6 @@ function AdminDashboardPage() {
   const month = useMemo(() => monthBounds(), []);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
   const [calendarView, setCalendarView] = useState<CalendarView>("month");
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [isLoading, setIsLoading] = useState(true);
@@ -145,7 +135,6 @@ function AdminDashboardPage() {
         const appointmentsData = await appointmentsResponse.json();
         setOverview(await overviewResponse.json());
         setAppointments(appointmentsData.appointments);
-        setServices(await servicesResponse.json());
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -160,13 +149,6 @@ function AdminDashboardPage() {
     void loadDashboard();
   }, [month.end, month.start, token]);
 
-  const monthlyStatusCount = (status: string) =>
-    appointments.filter((appointment) => appointment.status === status).length;
-  const revenue = appointments.reduce((total, appointment) => {
-    if (appointment.status !== "completed") return total;
-    const service = services.find((item) => item.id === appointment.service_id);
-    return total + Number(service?.price || 0);
-  }, 0);
   const calendarDays = useMemo(
     () => getCalendarDays(calendarDate, calendarView),
     [calendarDate, calendarView],

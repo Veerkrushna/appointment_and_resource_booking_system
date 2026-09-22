@@ -84,523 +84,300 @@ function Navbar() {
             </NavLink>
           )}
           {customer ? (
-            customer.role === "service_provider" ? (
-              <>
-                <NavLink
-                  to="/provider/dashboard"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Dashboard
-                </NavLink>
-                <NavLink
-                  to="/appointments"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  My Appointments
-                </NavLink>
-                <NavLink
-                  to="/provider/calendar"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Calendar
-                </NavLink>
-                <NavLink
-                  to="/provider/availability"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Availability
-                </NavLink>
-                <NavLink
-                  to="/provider/services"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  My Services
-                </NavLink>
-                <div className="profile-menu" ref={profileMenuRef}>
-                  <button
-                    className="profile-menu__trigger"
-                    type="button"
-                    aria-expanded={isProfileOpen}
-                    onClick={() => {
-                      setIsProfileOpen((open) => !open);
-                      setIsEditingProfile(false);
-                      setProfileError("");
-                    }}
+            <>
+              {userRole === "service_provider" ? (
+                <>
+                  <NavLink
+                    to="/provider/dashboard"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
                   >
-                    Profile
-                  </button>
+                    Dashboard
+                  </NavLink>
+                  <NavLink
+                    to="/appointments"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    My Appointments
+                  </NavLink>
+                  <NavLink
+                    to="/provider/calendar"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Calendar
+                  </NavLink>
+                  <NavLink
+                    to="/provider/availability"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Availability
+                  </NavLink>
+                  <NavLink
+                    to="/provider/services"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    My Services
+                  </NavLink>
+                </>
+              ) : userRole === "admin" ? (
+                <>
+                  <NavLink
+                    to="/admin"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Admin Dashboard
+                  </NavLink>
+                  <NavLink
+                    to="/admin/appointments"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Appointments
+                  </NavLink>
+                  <NavLink
+                    to="/admin/services"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Services
+                  </NavLink>
+                  <NavLink
+                    to="/admin/providers"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Providers
+                  </NavLink>
+                </>
+              ) : (
+                <>
+                  <NavLink
+                    to="/services"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Book Appointment
+                  </NavLink>
+                  <NavLink
+                    to="/appointments"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    My Appointments
+                  </NavLink>
+                </>
+              )}
 
-                  {isProfileOpen && (
-                    <div className="profile-menu__panel">
-                      <div className="profile-menu__header">
-                        <strong>{customer?.name || "Your Profile"}</strong>
-                        <span>{customer?.email}</span>
-                      </div>
-
-                      {isEditingProfile ? (
-                        <div className="profile-menu__form">
-                          <label>
-                            Name
-                            <input
-                              name="name"
-                              type="text"
-                              value={profileForm.name}
-                              onChange={handleProfileChange}
-                            />
-                          </label>
-
-                          <label>
-                            Email
-                            <input
-                              name="email"
-                              type="email"
-                              value={profileForm.email}
-                              onChange={handleProfileChange}
-                            />
-                          </label>
-
-                          <label>
-                            Phone
-                            <input
-                              name="phone"
-                              type="tel"
-                              value={profileForm.phone}
-                              onChange={handleProfileChange}
-                            />
-                          </label>
-
-                          {profileError && (
-                            <p className="profile-menu__error">
-                              {profileError}
-                            </p>
-                          )}
-
-                          <div className="profile-menu__actions">
-                            <button
-                              type="button"
-                              className="profile-menu__cancel"
-                              onClick={() => {
-                                setIsEditingProfile(false);
-                                setProfileError("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-
-                            <button
-                              type="button"
-                              className="profile-menu__save"
-                              disabled={isSavingProfile}
-                              onClick={async () => {
-                                const name = profileForm.name.trim();
-                                const email = profileForm.email.trim();
-                                const phone = profileForm.phone.trim();
-
-                                if (!name) {
-                                  setProfileError("Name is required.");
-                                  return;
-                                }
-
-                                if (!email) {
-                                  setProfileError("Email is required.");
-                                  return;
-                                }
-
-                                setProfileError("");
-                                setIsSavingProfile(true);
-
-                                try {
-                                  const updatedProfile =
-                                    await updateCustomerProfile(token || "", {
-                                      name,
-                                      email,
-                                      phone: phone || null,
-                                    });
-
-                                  updateCustomer(updatedProfile);
-                                  setIsEditingProfile(false);
-                                } catch (error) {
-                                  setProfileError(
-                                    error instanceof Error
-                                      ? error.message
-                                      : "Unable to update your profile.",
-                                  );
-                                } finally {
-                                  setIsSavingProfile(false);
-                                }
-                              }}
-                            >
-                              {isSavingProfile ? "Saving..." : "Save Changes"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="profile-menu__details">
-                            <div>
-                              <span>Name</span>
-                              <strong>
-                                {customer?.name || "Not provided"}
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span>Email</span>
-                              <strong>
-                                {customer?.email || "Not provided"}
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span>Phone</span>
-                              <strong>
-                                {customer?.phone || "Not provided"}
-                              </strong>
-                            </div>
-                          </div>
-
-                          <button
-                            className="profile-menu__edit"
-                            type="button"
-                            onClick={() => {
-                              setProfileForm({
-                                name: customer?.name || "",
-                                email: customer?.email || "",
-                                phone: customer?.phone || "",
-                              });
-                              setProfileError("");
-                              setIsEditingProfile(true);
-                            }}
-                          >
-                            Edit Profile
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
+              <div className="profile-menu" ref={profileMenuRef}>
                 <button
-                  className="nav-signout"
+                  className="profile-menu__trigger"
                   type="button"
+                  aria-expanded={isProfileOpen}
                   onClick={() => {
-                    if (window.confirm("Are you sure to exit ?")) {
-                      setIsMenuOpen(false);
-                      logout();
-                      navigate("/login");
-                    }
+                    setIsProfileOpen((open) => !open);
+                    setIsEditingProfile(false);
+                    setProfileError("");
                   }}
                 >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: "0.5rem",
-                      lineHeight: 0,
-                    }}
-                  >
-                    <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden="true"
-                      style={{ display: "block" }}
-                    >
-                      <path
-                        d="M9 7V5.5C9 4.67 9.67 4 10.5 4H17.5C18.33 4 19 4.67 19 5.5V18.5C19 19.33 18.33 20 17.5 20H10.5C9.67 20 9 19.33 9 18.5V17"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M15 12H4M4 12L7 9M4 12L7 15"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <span>Sign out</span>
+                  Profile
                 </button>
-              </>
-            ) : (
-              <>
-                {customer.role === "admin" ? (
-                  <>
-                    <NavLink
-                      to="/admin"
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Admin Dashboard
-                    </NavLink>
 
-                    <NavLink
-                      to="/admin/appointments"
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Appointments
-                    </NavLink>
+                {isProfileOpen && (
+                  <div className="profile-menu__panel">
+                    <div className="profile-menu__header">
+                      <strong>{customer?.name || "Your Profile"}</strong>
+                      <span>{customer?.email}</span>
+                    </div>
 
-                    <NavLink
-                      to="/admin/services"
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Services
-                    </NavLink>
+                    {isEditingProfile ? (
+                      <div className="profile-menu__form">
+                        <label>
+                          Name
+                          <input
+                            name="name"
+                            type="text"
+                            value={profileForm.name}
+                            onChange={handleProfileChange}
+                          />
+                        </label>
 
-                    <NavLink
-                      to="/admin/providers"
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Providers
-                    </NavLink>
-                  </>
-                ) : (
-                  <>
-                    <NavLink
-                      to="/services"
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Book Appointment
-                    </NavLink>
+                        <label>
+                          Email
+                          <input
+                            name="email"
+                            type="email"
+                            value={profileForm.email}
+                            onChange={handleProfileChange}
+                          />
+                        </label>
 
-                    <NavLink
-                      to="/appointments"
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      My Appointments
-                    </NavLink>
-                  </>
+                        <label>
+                          Phone
+                          <input
+                            name="phone"
+                            type="tel"
+                            value={profileForm.phone}
+                            onChange={handleProfileChange}
+                          />
+                        </label>
+
+                        {profileError && (
+                          <p className="profile-menu__error">{profileError}</p>
+                        )}
+
+                        <div className="profile-menu__actions">
+                          <button
+                            type="button"
+                            className="profile-menu__cancel"
+                            onClick={() => {
+                              setIsEditingProfile(false);
+                              setProfileError("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="button"
+                            className="profile-menu__save"
+                            disabled={isSavingProfile}
+                            onClick={async () => {
+                              const name = profileForm.name.trim();
+                              const email = profileForm.email.trim();
+                              const phone = profileForm.phone.trim();
+
+                              if (!name) {
+                                setProfileError("Name is required.");
+                                return;
+                              }
+
+                              if (!email) {
+                                setProfileError("Email is required.");
+                                return;
+                              }
+
+                              setProfileError("");
+                              setIsSavingProfile(true);
+
+                              try {
+                                const updatedProfile =
+                                  await updateCustomerProfile(token || "", {
+                                    name,
+                                    email,
+                                    phone: phone || null,
+                                  });
+
+                                updateCustomer(updatedProfile);
+                                setIsEditingProfile(false);
+                              } catch (error) {
+                                setProfileError(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Unable to update your profile.",
+                                );
+                              } finally {
+                                setIsSavingProfile(false);
+                              }
+                            }}
+                          >
+                            {isSavingProfile ? "Saving..." : "Save Changes"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="profile-menu__details">
+                          <div>
+                            <span>Name</span>
+                            <strong>{customer?.name || "Not provided"}</strong>
+                          </div>
+
+                          <div>
+                            <span>Email</span>
+                            <strong>{customer?.email || "Not provided"}</strong>
+                          </div>
+
+                          <div>
+                            <span>Phone</span>
+                            <strong>{customer?.phone || "Not provided"}</strong>
+                          </div>
+                        </div>
+
+                        <button
+                          className="btn-accent btn-accent--full"
+                          type="button"
+                          onClick={() => {
+                            setProfileForm({
+                              name: customer?.name || "",
+                              email: customer?.email || "",
+                              phone: customer?.phone || "",
+                            });
+                            setProfileError("");
+                            setIsEditingProfile(true);
+                          }}
+                        >
+                          Edit Profile
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
-                <div className="profile-menu" ref={profileMenuRef}>
-                  <button
-                    className="profile-menu__trigger"
-                    type="button"
-                    aria-expanded={isProfileOpen}
-                    onClick={() => {
-                      setIsProfileOpen((open) => !open);
-                      setIsEditingProfile(false);
-                      setProfileError("");
-                    }}
-                  >
-                    Profile
-                  </button>
+              </div>
 
-                  {isProfileOpen && (
-                    <div className="profile-menu__panel">
-                      <div className="profile-menu__header">
-                        <strong>{customer?.name || "Your Profile"}</strong>
-                        <span>{customer?.email}</span>
-                      </div>
-
-                      {isEditingProfile ? (
-                        <div className="profile-menu__form">
-                          <label>
-                            Name
-                            <input
-                              name="name"
-                              type="text"
-                              value={profileForm.name}
-                              onChange={handleProfileChange}
-                            />
-                          </label>
-
-                          <label>
-                            Email
-                            <input
-                              name="email"
-                              type="email"
-                              value={profileForm.email}
-                              onChange={handleProfileChange}
-                            />
-                          </label>
-
-                          <label>
-                            Phone
-                            <input
-                              name="phone"
-                              type="tel"
-                              value={profileForm.phone}
-                              onChange={handleProfileChange}
-                            />
-                          </label>
-
-                          {profileError && (
-                            <p className="profile-menu__error">
-                              {profileError}
-                            </p>
-                          )}
-
-                          <div className="profile-menu__actions">
-                            <button
-                              type="button"
-                              className="profile-menu__cancel"
-                              onClick={() => {
-                                setIsEditingProfile(false);
-                                setProfileError("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-
-                            <button
-                              type="button"
-                              className="profile-menu__save"
-                              disabled={isSavingProfile}
-                              onClick={async () => {
-                                const name = profileForm.name.trim();
-                                const email = profileForm.email.trim();
-                                const phone = profileForm.phone.trim();
-
-                                if (!name) {
-                                  setProfileError("Name is required.");
-                                  return;
-                                }
-
-                                if (!email) {
-                                  setProfileError("Email is required.");
-                                  return;
-                                }
-
-                                setProfileError("");
-                                setIsSavingProfile(true);
-
-                                try {
-                                  const updatedProfile =
-                                    await updateCustomerProfile(token || "", {
-                                      name,
-                                      email,
-                                      phone: phone || null,
-                                    });
-
-                                  updateCustomer(updatedProfile);
-                                  setIsEditingProfile(false);
-                                } catch (error) {
-                                  setProfileError(
-                                    error instanceof Error
-                                      ? error.message
-                                      : "Unable to update your profile.",
-                                  );
-                                } finally {
-                                  setIsSavingProfile(false);
-                                }
-                              }}
-                            >
-                              {isSavingProfile ? "Saving..." : "Save Changes"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="profile-menu__details">
-                            <div>
-                              <span>Name</span>
-                              <strong>
-                                {customer?.name || "Not provided"}
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span>Email</span>
-                              <strong>
-                                {customer?.email || "Not provided"}
-                              </strong>
-                            </div>
-
-                            <div>
-                              <span>Phone</span>
-                              <strong>
-                                {customer?.phone || "Not provided"}
-                              </strong>
-                            </div>
-                          </div>
-
-                          <button
-                            className="profile-menu__edit"
-                            type="button"
-                            onClick={() => {
-                              setProfileForm({
-                                name: customer?.name || "",
-                                email: customer?.email || "",
-                                phone: customer?.phone || "",
-                              });
-                              setProfileError("");
-                              setIsEditingProfile(true);
-                            }}
-                          >
-                            Edit Profile
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button
-                  className="nav-signout"
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm("Are you sure to exit ?")) {
-                      setIsMenuOpen(false);
-                      logout();
-                      navigate("/login");
-                    }
+              <button
+                className="nav-auth-btn"
+                type="button"
+                onClick={() => {
+                  if (window.confirm("Are you sure to exit ?")) {
+                    setIsMenuOpen(false);
+                    logout();
+                    navigate("/login");
+                  }
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "0.5rem",
+                    lineHeight: 0,
                   }}
                 >
-                  <span
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
                     aria-hidden="true"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: "0.5rem",
-                      lineHeight: 0,
-                    }}
+                    style={{ display: "block" }}
                   >
-                    <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden="true"
-                      style={{ display: "block" }}
-                    >
-                      <path
-                        d="M9 7V5.5C9 4.67 9.67 4 10.5 4H17.5C18.33 4 19 4.67 19 5.5V18.5C19 19.33 18.33 20 17.5 20H10.5C9.67 20 9 19.33 9 18.5V17"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M15 12H4M4 12L7 9M4 12L7 15"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <span>Sign out</span>
-                </button>
-              </>
-            )
+                    <path
+                      d="M9 7V5.5C9 4.67 9.67 4 10.5 4H17.5C18.33 4 19 4.67 19 5.5V18.5C19 19.33 18.33 20 17.5 20H10.5C9.67 20 9 19.33 9 18.5V17"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M15 12H4M4 12L7 9M4 12L7 15"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span>Sign out</span>
+              </button>
+            </>
           ) : (
             <>
               <NavLink
@@ -619,9 +396,44 @@ function Navbar() {
               </NavLink>
               <NavLink
                 to="/login"
-                className={({ isActive }) => (isActive ? "active" : "")}
+                className="nav-auth-btn"
                 onClick={() => setIsMenuOpen(false)}
               >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "0.5rem",
+                    lineHeight: 0,
+                  }}
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                    style={{ display: "block" }}
+                  >
+                    <path
+                      d="M9 7V5.5C9 4.67 9.67 4 10.5 4H17.5C18.33 4 19 4.67 19 5.5V18.5C19 19.33 18.33 20 17.5 20H10.5C9.67 20 9 19.33 9 18.5V17"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M4 12H15M15 12L12 9M15 12L12 15"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
                 Sign in
               </NavLink>
             </>
