@@ -1922,13 +1922,13 @@ main {
 }
 
 @media (max-width: 800px) {
-  nav {
+  nav:not(.site-nav) {
     align-items: flex-start;
     flex-direction: column;
     gap: 1rem;
   }
 
-  nav div {
+  nav:not(.site-nav) div {
     flex-wrap: wrap;
     gap: 0.8rem 1rem;
   }
@@ -2109,6 +2109,7 @@ main {
 .site-nav {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   width: 100%;
@@ -3208,7 +3209,7 @@ main {
   font-size: 0.7rem;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1150px) {
   .site-nav {
     min-height: 4.5rem;
     padding: 0 1.25rem;
@@ -3259,6 +3260,9 @@ main {
   .site-nav .nav-signout {
     justify-content: center;
   }
+}
+
+@media (max-width: 800px) {
 
   .home-hero {
     grid-template-columns: 1fr;
@@ -3389,5 +3393,37 @@ main {
 
   .footer-note {
     display: block;
+  }
+}
+
+/* Dashboard Responsiveness */
+@media (max-width: 900px) {
+  .dashboard-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-appointment {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+  }
+  
+  .dashboard-period {
+    min-width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-stat-grid {
+    grid-template-columns: 1fr;
   }
 }

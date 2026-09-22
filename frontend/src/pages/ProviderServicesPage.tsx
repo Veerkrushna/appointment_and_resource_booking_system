@@ -31,14 +31,14 @@ export default function ProviderServicesPage() {
         <div>
           <button 
             className="action-button"
-            style={{ padding: '0.75rem 1.5rem', backgroundColor: 'var(--accent-color)', color: 'var(--bg-color)', border: 'none', borderRadius: 'var(--radius)', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
           >
             + Add New Service
           </button>
         </div>
       </header>
 
-      <div className="dashboard-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))' }}>
+      <div className="dashboard-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))' }}>
         {services.map(service => (
           <section key={service.id} className="dashboard-panel" style={{ opacity: service.active ? 1 : 0.6, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -57,7 +57,7 @@ export default function ProviderServicesPage() {
               {service.description}
             </p>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>

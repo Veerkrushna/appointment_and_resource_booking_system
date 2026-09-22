@@ -149,7 +149,7 @@ export default function ProviderAvailabilityPage() {
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
             {Object.entries(schedule).map(([day, data]) => (
-              <div key={day} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
+              <div key={day} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', gap: '1rem', backgroundColor: 'var(--bg-color)', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '150px', cursor: 'pointer' }}>
                   <input 
                     type="checkbox" 
@@ -161,7 +161,7 @@ export default function ProviderAvailabilityPage() {
                 </label>
                 
                 {data.active ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem' }}>
                     <input 
                       type="time" 
                       value={data.start}
@@ -227,7 +227,7 @@ export default function ProviderAvailabilityPage() {
                   onChange={(e) => setNewBlackoutReason(e.target.value)} 
                   style={{ width: '100%', padding: '0.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-color)', backgroundColor: 'var(--bg-color)' }}
                 />
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <button 
                     onClick={handleConfirmBlackout}
                     disabled={!newBlackoutDate}
@@ -262,7 +262,7 @@ export default function ProviderAvailabilityPage() {
             </div>
             <p className="dashboard-note" style={{ marginBottom: '1rem' }}>Standard breaks applied to every working day.</p>
             
-            <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: 'var(--bg-color)', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <strong>Lunch Break</strong>
                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>12:00 PM - 1:00 PM</div>

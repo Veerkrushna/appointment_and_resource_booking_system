@@ -256,6 +256,7 @@ function Navbar() {
 
                           <button
                             className="profile-menu__edit"
+                            style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
                             type="button"
                             onClick={() => {
                               setProfileForm({
@@ -476,6 +477,7 @@ function Navbar() {
 
                           <button
                             className="profile-menu__edit"
+                            style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', backgroundColor: '#e2784d', border: '1px solid black', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}
                             type="button"
                             onClick={() => {
                               setProfileForm({
