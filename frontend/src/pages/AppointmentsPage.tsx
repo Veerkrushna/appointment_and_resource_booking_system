@@ -235,6 +235,7 @@ function AppointmentsPage() {
                         with{" "}
                         {providers[appointment.provider_id] || "your provider"}
                       </p>
+
                       {appointment.notes && (
                         <div className="appointment-detail">
                           <span>Note: {appointment.notes}</span>

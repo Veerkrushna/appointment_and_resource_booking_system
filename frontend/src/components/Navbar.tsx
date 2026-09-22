@@ -16,6 +16,7 @@ function Navbar() {
   const [profileError, setProfileError] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const { customer, token, logout, updateCustomer } = useAuth();
+  const userRole = customer?.role?.toLowerCase();
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const handleProfileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -73,16 +74,17 @@ function Navbar() {
         id="main-navigation"
       >
         <div className="nav-links">
-          <NavLink
-            to="/"
-            className={({ isActive }) => (isActive ? "active" : "")}
-            onClick={() => setIsMenuOpen(false)}
-            end
-          >
-            Home
-          </NavLink>
+          {userRole !== "admin" && (
+            <NavLink
+              to="/"
+              className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Home
+            </NavLink>
+          )}
           {customer ? (
-            customer.role === "provider" ? (
+            customer.role === "service_provider" ? (
               <>
                 <NavLink
                   to="/provider/dashboard"
@@ -173,7 +175,9 @@ function Navbar() {
                           </label>
 
                           {profileError && (
-                            <p className="profile-menu__error">{profileError}</p>
+                            <p className="profile-menu__error">
+                              {profileError}
+                            </p>
                           )}
 
                           <div className="profile-menu__actions">
@@ -240,17 +244,23 @@ function Navbar() {
                           <div className="profile-menu__details">
                             <div>
                               <span>Name</span>
-                              <strong>{customer?.name || "Not provided"}</strong>
+                              <strong>
+                                {customer?.name || "Not provided"}
+                              </strong>
                             </div>
 
                             <div>
                               <span>Email</span>
-                              <strong>{customer?.email || "Not provided"}</strong>
+                              <strong>
+                                {customer?.email || "Not provided"}
+                              </strong>
                             </div>
 
                             <div>
                               <span>Phone</span>
-                              <strong>{customer?.phone || "Not provided"}</strong>
+                              <strong>
+                                {customer?.phone || "Not provided"}
+                              </strong>
                             </div>
                           </div>
 
@@ -325,20 +335,59 @@ function Navbar() {
               </>
             ) : (
               <>
-                <NavLink
-                  to="/services"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Book Appointment
-                </NavLink>
-                <NavLink
-                  to="/appointments"
-                  className={({ isActive }) => (isActive ? "active" : "")}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  My Appointments
-                </NavLink>
+                {customer.role === "admin" ? (
+                  <>
+                    <NavLink
+                      to="/admin"
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Admin Dashboard
+                    </NavLink>
+
+                    <NavLink
+                      to="/admin/appointments"
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Appointments
+                    </NavLink>
+
+                    <NavLink
+                      to="/admin/services"
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Services
+                    </NavLink>
+
+                    <NavLink
+                      to="/admin/providers"
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Providers
+                    </NavLink>
+                  </>
+                ) : (
+                  <>
+                    <NavLink
+                      to="/services"
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Book Appointment
+                    </NavLink>
+
+                    <NavLink
+                      to="/appointments"
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      My Appointments
+                    </NavLink>
+                  </>
+                )}
                 <div className="profile-menu" ref={profileMenuRef}>
                   <button
                     className="profile-menu__trigger"
@@ -393,7 +442,9 @@ function Navbar() {
                           </label>
 
                           {profileError && (
-                            <p className="profile-menu__error">{profileError}</p>
+                            <p className="profile-menu__error">
+                              {profileError}
+                            </p>
                           )}
 
                           <div className="profile-menu__actions">
@@ -460,17 +511,23 @@ function Navbar() {
                           <div className="profile-menu__details">
                             <div>
                               <span>Name</span>
-                              <strong>{customer?.name || "Not provided"}</strong>
+                              <strong>
+                                {customer?.name || "Not provided"}
+                              </strong>
                             </div>
 
                             <div>
                               <span>Email</span>
-                              <strong>{customer?.email || "Not provided"}</strong>
+                              <strong>
+                                {customer?.email || "Not provided"}
+                              </strong>
                             </div>
 
                             <div>
                               <span>Phone</span>
-                              <strong>{customer?.phone || "Not provided"}</strong>
+                              <strong>
+                                {customer?.phone || "Not provided"}
+                              </strong>
                             </div>
                           </div>
 
