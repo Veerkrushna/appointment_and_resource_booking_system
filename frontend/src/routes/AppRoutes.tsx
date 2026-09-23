@@ -5,10 +5,10 @@ import AppLayout from "../components/AppLayout";
 import AdminDashboardPage from "../pages/AdminDashboardPage";
 import AppointmentsPage from "../pages/AppointmentsPage";
 import BookingPage from "../pages/BookingPage";
-import HomePage from "../pages/HomePage";
 import ProvidersPage from "../pages/ProvidersPage";
 import ServicesPage from "../pages/ServicesPage";
 import AuthPage from "../pages/AuthPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ProfilePage from "../pages/ProfilePage";
 import TermsPage from "../pages/TermsPage";
 import ProviderDashboardPage from "../pages/ProviderDashboardPage";
@@ -38,7 +38,7 @@ function ProviderRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return customer.role.toLowerCase() === "service_provider" ? (
+  return customer.role.toLowerCase() === "provider" ? (
     children
   ) : (
     <Navigate to="/" replace />
@@ -72,7 +72,7 @@ function DashboardRedirect() {
 
   const userRole = customer?.role?.toLowerCase();
 
-  if (userRole === "service_provider") {
+  if (userRole === "provider") {
     return <Navigate to="/provider/dashboard" replace />;
   }
 
@@ -96,7 +96,11 @@ function HomeRoute() {
     return <Navigate to="/admin" replace />;
   }
 
-  return <HomePage />;
+  if (userRole === "provider") {
+    return <Navigate to="/provider/dashboard" replace />;
+  }
+
+  return <Navigate to="/services" replace />;
 }
 
 function AppRoutes() {
@@ -141,6 +145,7 @@ function AppRoutes() {
         />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/dashboard" element={<DashboardRedirect />} />
         <Route
@@ -164,6 +169,14 @@ function AppRoutes() {
           element={
             <ProviderRoute>
               <ProviderDashboardPage />
+            </ProviderRoute>
+          }
+        />
+        <Route
+          path="/provider/appointments"
+          element={
+            <ProviderRoute>
+              <AppointmentsPage />
             </ProviderRoute>
           }
         />

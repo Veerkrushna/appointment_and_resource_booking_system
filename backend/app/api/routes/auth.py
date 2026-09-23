@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     get_current_user,
@@ -12,6 +13,7 @@ from app.core.security import (
 )
 from app.db.database import get_db
 from app.models.user import User
+from app.services.notifications import send_email
 from app.schemas.auth import (
     AuthResponse,
     CustomerLogin,
@@ -40,7 +42,7 @@ def _auth_response(user: User) -> AuthResponse:
     include_in_schema=False,
 )
 def register_customer(
-    payload: CustomerRegister, db: Annotated[Session, Depends(get_db)]
+    payload: CustomerRegister, background_tasks: BackgroundTasks, db: Annotated[Session, Depends(get_db)]
 ):
     email = payload.email.lower()
     if db.scalar(select(User).where(User.email == email)) is not None:
@@ -57,6 +59,16 @@ def register_customer(
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    subject = f"Welcome to {settings.app_name}!"
+    body = (
+        f"Dear {user.name},\n"
+        f"Welcome to {settings.app_name}.\n"
+        "Your account has been created Successfully !\n"
+        "Avoid last moment rush by booking Appointments at anytime from anywhere !"
+    )
+    background_tasks.add_task(send_email, user.email, subject, body)
+
     return _auth_response(user)
 
 

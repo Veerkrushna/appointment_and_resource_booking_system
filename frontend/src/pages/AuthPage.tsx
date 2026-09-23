@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 
 import { useAuth } from "../auth/useAuth";
 
@@ -37,6 +37,9 @@ function AuthPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(
+    location.state?.message || null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -47,6 +50,7 @@ function AuthPage() {
     setConfirmPassword("");
     setValidationError(null);
     setError(null);
+    setSuccessMessage(null);
   }, [mode, location.pathname]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -71,13 +75,14 @@ function AuthPage() {
         <div className="auth-form-content">
           <div className="auth-heading"><p className="auth-kicker">{isRegister ? "Start organizing" : "Welcome back"}</p><h1 id="auth-title">{isRegister ? "Create your account" : "Sign in to your account"}</h1><p>{isRegister ? "Book appointments and manage your schedule in one place." : "Your schedule is ready when you are."}</p></div>
           <div className="auth-switch" role="tablist" aria-label="Authentication options"><button className={isRegister ? "active" : ""} type="button" role="tab" aria-selected={isRegister} onClick={() => setMode("register")}>Create account</button><button className={!isRegister ? "active" : ""} type="button" role="tab" aria-selected={!isRegister} onClick={() => setMode("login")}>Sign in</button></div>
+          {successMessage && <p className="auth-error" style={{ background: "#e6f4ea", color: "#1e8e3e", marginBottom: "1rem" }} role="status">{successMessage}</p>}
           {isRegister && <div className="oauth-options"><button className="oauth-button" type="button"><Icon name="google" />Sign up with Google</button><button className="oauth-button" type="button"><Icon name="apple" />Sign up with Apple</button></div>}
           {isRegister && <div className="auth-divider"><span>or continue with email</span></div>}
           <form className="auth-form" onSubmit={submit} noValidate>
             {isRegister && <label className="auth-field"><span>Full name</span><input autoComplete="off" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
             <label className="auth-field"><span>Email address</span><input autoComplete="off" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
             {isRegister && <label className="auth-field"><span>Phone number <em>Optional</em></span><input autoComplete="off" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(555) 123-4567" /></label>}
-            <label className="auth-field"><span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>Password {!isRegister && <a href="/forgot-password" style={{ fontSize: '0.8rem', color: '#e2784d', textDecoration: 'none' }}>Forgot password?</a>}</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /><button className="password-toggle" type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}><Icon name={showPassword ? "eye-off" : "eye"} /></button></div>{isRegister && password && <div className="password-meter" aria-live="polite"><div className="password-meter__bars">{[1, 2, 3, 4].map((bar) => <i className={bar <= score ? `is-level-${score}` : ""} key={bar} />)}</div><span>{score < 2 ? "Needs more strength" : score < 4 ? "Good password" : "Strong password"}</span></div>}</label>
+            <label className="auth-field"><span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>Password {!isRegister && <Link to="/forgot-password" style={{ fontSize: '0.8rem', color: '#e2784d', textDecoration: 'none' }}>Forgot password?</Link>}</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /><button className="password-toggle" type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}><Icon name={showPassword ? "eye-off" : "eye"} /></button></div>{isRegister && password && <div className="password-meter" aria-live="polite"><div className="password-meter__bars">{[1, 2, 3, 4].map((bar) => <i className={bar <= score ? `is-level-${score}` : ""} key={bar} />)}</div><span>{score < 2 ? "Needs more strength" : score < 4 ? "Good password" : "Strong password"}</span></div>}</label>
             {isRegister && <label className="auth-field"><span>Confirm password</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" /></div></label>}
             {isRegister && <label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /><span>I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></span></label>}
             {(validationError || error) && <p className="auth-error" role="alert">{validationError || error}</p>}

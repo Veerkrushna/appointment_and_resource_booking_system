@@ -11,3 +11,4 @@ from app.models.notification import Notification
 from app.models.provider_service import ProviderService
 from app.models.providers import Provider
 from app.models.service import Service
+from app.models.password_reset_otp import PasswordResetOtp
