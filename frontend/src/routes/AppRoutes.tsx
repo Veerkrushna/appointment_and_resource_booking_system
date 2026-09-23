@@ -39,7 +39,7 @@ function ProviderRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return customer.role.toLowerCase() === "service_provider" ? (
+  return customer.role.toLowerCase() === "provider" ? (
     children
   ) : (
     <Navigate to="/" replace />
@@ -73,7 +73,7 @@ function DashboardRedirect() {
 
   const userRole = customer?.role?.toLowerCase();
 
-  if (userRole === "service_provider") {
+  if (userRole === "provider") {
     return <Navigate to="/provider/dashboard" replace />;
   }
 

@@ -58,7 +58,7 @@ class AdminUserCreate(BaseModel):
     def model_post_init(self, __context: object) -> None:
         if self.role not in {UserRole.ADMIN, UserRole.PROVIDER}:
             raise ValueError(
-                "Admin users can only create admin or service_provider accounts"
+                "Admin users can only create admin or provider accounts"
             )
 
 

@@ -85,7 +85,7 @@ function Navbar() {
           )}
           {customer ? (
             <>
-              {userRole === "service_provider" ? (
+              {userRole === "provider" ? (
                 <>
                   <NavLink
                     to="/provider/dashboard"
