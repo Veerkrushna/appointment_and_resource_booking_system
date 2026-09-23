@@ -15,13 +15,13 @@ from app.models.notification import Notification, NotificationStatus, Notificati
 logger = logging.getLogger(__name__)
 
 
-def _send_email(appointment: Appointment, subject: str, body: str) -> None:
+def send_email(to_email: str, subject: str, body: str) -> None:
     if not settings.smtp_host or not settings.smtp_from:
         raise RuntimeError("SMTP is not configured")
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = settings.smtp_from
-    message["To"] = appointment.user_email
+    message["To"] = to_email
     message.set_content(body)
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as client:
         if settings.smtp_starttls:
@@ -29,6 +29,10 @@ def _send_email(appointment: Appointment, subject: str, body: str) -> None:
         if settings.smtp_username:
             client.login(settings.smtp_username, settings.smtp_password or "")
         client.send_message(message)
+
+
+def _send_email(appointment: Appointment, subject: str, body: str) -> None:
+    send_email(appointment.user_email, subject, body)
 
 
 def _send_sms(appointment: Appointment, body_text: str) -> None:

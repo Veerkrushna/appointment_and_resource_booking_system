@@ -60,3 +60,22 @@ class AdminUserCreate(BaseModel):
             raise ValueError(
                 "Admin users can only create admin or service_provider accounts"
             )
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetVerify(BaseModel):
+    email: EmailStr
+    pin: str = Field(min_length=6, max_length=6)
+
+
+class PasswordResetVerifyResponse(BaseModel):
+    reset_token: str
+
+
+class PasswordResetConfirm(BaseModel):
+    reset_token: str
+    new_password: str = Field(min_length=8, max_length=128)
+

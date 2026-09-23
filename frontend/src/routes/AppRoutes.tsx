@@ -9,6 +9,7 @@ import HomePage from "../pages/HomePage";
 import ProvidersPage from "../pages/ProvidersPage";
 import ServicesPage from "../pages/ServicesPage";
 import AuthPage from "../pages/AuthPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ProfilePage from "../pages/ProfilePage";
 import TermsPage from "../pages/TermsPage";
 import ProviderDashboardPage from "../pages/ProviderDashboardPage";
@@ -141,6 +142,7 @@ function AppRoutes() {
         />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/dashboard" element={<DashboardRedirect />} />
         <Route
