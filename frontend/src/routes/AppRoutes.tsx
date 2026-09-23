@@ -17,6 +17,8 @@ import ProviderAvailabilityPage from "../pages/ProviderAvailabilityPage";
 import ProviderServicesPage from "../pages/ProviderServicesPage";
 import { useAuth } from "../auth/useAuth";
 import AdminAppointmentsPage from "../pages/AdminAppointmentsPage";
+import AdminServicesPage from "../pages/AdminServicesPage";
+import AdminProvidersPage from "../pages/AdminProvidersPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { customer, isLoading } = useAuth();
@@ -119,8 +121,24 @@ function AppRoutes() {
         />
         <Route path="/" element={<HomeRoute />} />
         <Route path="/services" element={<ServicesPage />} />
+        <Route
+          path="/admin/services"
+          element={
+            <AdminRoute>
+              <AdminServicesPage />
+            </AdminRoute>
+          }
+        />
         <Route path="/book/:serviceId" element={<BookingPage />} />
         <Route path="/providers" element={<ProvidersPage />} />
+        <Route
+          path="/admin/providers"
+          element={
+            <AdminRoute>
+              <AdminProvidersPage />
+            </AdminRoute>
+          }
+        />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage />} />
         <Route path="/terms" element={<TermsPage />} />
