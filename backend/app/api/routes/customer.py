@@ -24,7 +24,7 @@ from app.services.booking import (
     reschedule_appointment,
 )
 
-router = APIRouter(prefix="/api/customer/appointments", tags=["Customer Appointments"], dependencies=[Depends(require_role(UserRole.CUSTOMER))])
+router = APIRouter(prefix="/api/customer/appointments", tags=["Customer Appointments"], dependencies=[Depends(require_role(UserRole.CUSTOMER, UserRole.PROVIDER))])
 
 
 def _owned(db: Session, appointment_id: UUID, customer: Customer) -> Appointment:

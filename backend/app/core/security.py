@@ -101,7 +101,7 @@ def require_role(*roles: UserRole | str) -> Callable:
 
 
 def get_current_customer(user: Annotated[User, Depends(get_current_user)]) -> User:
-    if user.role != UserRole.CUSTOMER:
+    if user.role not in {UserRole.CUSTOMER, UserRole.PROVIDER}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Customer access required")
     return user
 

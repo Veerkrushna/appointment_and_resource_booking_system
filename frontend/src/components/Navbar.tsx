@@ -74,15 +74,6 @@ function Navbar() {
         id="main-navigation"
       >
         <div className="nav-links">
-          {userRole !== "admin" && (
-            <NavLink
-              to="/"
-              className={({ isActive }) => (isActive ? "active" : "")}
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Home
-            </NavLink>
-          )}
           {customer ? (
             <>
               {userRole === "provider" ? (
@@ -93,13 +84,6 @@ function Navbar() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     Dashboard
-                  </NavLink>
-                  <NavLink
-                    to="/appointments"
-                    className={({ isActive }) => (isActive ? "active" : "")}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    My Appointments
                   </NavLink>
                   <NavLink
                     to="/provider/calendar"
@@ -121,6 +105,20 @@ function Navbar() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     My Services
+                  </NavLink>
+                  <NavLink
+                    to="/services"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Book Appointment
+                  </NavLink>
+                  <NavLink
+                    to="/provider/appointments"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    My Appointments
                   </NavLink>
                 </>
               ) : userRole === "admin" ? (

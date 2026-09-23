@@ -1816,7 +1816,7 @@ main {
 
 .provider-booking section h3 {
   margin: 0 0 0.25rem;
-  color: #18312f;
+  color: #31867f;
   font-family: "Space Grotesk", sans-serif;
   font-size: 0.95rem;
 }
@@ -1890,8 +1890,8 @@ main {
 
 .filter-button:hover,
 .filter-button.active {
-  border-color: #18312f;
-  background: #18312f;
+  border-color: black;
+  background: #c05d27;
   color: #f6f4ec;
 }
 
@@ -1978,7 +1978,7 @@ main {
 }
 
 .service-book-link:hover {
-  color: #18312f;
+  color: #a85020;
 }
 
 .booking-page {
@@ -2243,13 +2243,13 @@ main {
 }
 
 .primary-button {
-  border: 1px solid #18312f;
-  background: #18312f;
+  border: 1px solid #0b0302;
+  background: #c05d27;
   color: #f6f4ec;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #31544d;
+  background: #a85020;
 }
 
 .primary-button:disabled {
@@ -4095,7 +4095,7 @@ main {
 }
 
 .admin-appointments-table td strong,
-.admin-appointments-table td > span:not([class^="admin-appointment-status"]) {
+.admin-appointments-table td>span:not([class^="admin-appointment-status"]) {
   display: block;
 }
 
@@ -4325,7 +4325,7 @@ main {
     grid-column: auto;
   }
 
-  .admin-appointments-filters > button {
+  .admin-appointments-filters>button {
     width: 100%;
     justify-self: stretch;
   }

@@ -5,7 +5,6 @@ import AppLayout from "../components/AppLayout";
 import AdminDashboardPage from "../pages/AdminDashboardPage";
 import AppointmentsPage from "../pages/AppointmentsPage";
 import BookingPage from "../pages/BookingPage";
-import HomePage from "../pages/HomePage";
 import ProvidersPage from "../pages/ProvidersPage";
 import ServicesPage from "../pages/ServicesPage";
 import AuthPage from "../pages/AuthPage";
@@ -97,7 +96,11 @@ function HomeRoute() {
     return <Navigate to="/admin" replace />;
   }
 
-  return <HomePage />;
+  if (userRole === "provider") {
+    return <Navigate to="/provider/dashboard" replace />;
+  }
+
+  return <Navigate to="/services" replace />;
 }
 
 function AppRoutes() {
@@ -166,6 +169,14 @@ function AppRoutes() {
           element={
             <ProviderRoute>
               <ProviderDashboardPage />
+            </ProviderRoute>
+          }
+        />
+        <Route
+          path="/provider/appointments"
+          element={
+            <ProviderRoute>
+              <AppointmentsPage />
             </ProviderRoute>
           }
         />
