@@ -4359,30 +4359,34 @@ main {
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   background-color: #fff;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  margin-top: 1rem;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  margin-top: 1.5rem;
+  border: 2px solid #000;
+}
+
+.admin-table thead {
+  background-color: #e2784d;
 }
 
 .admin-table th {
-  background-color: #f8fafc;
-  color: #64748b;
+  color: #ffffff;
   text-transform: uppercase;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   font-size: 0.75rem;
-  padding: 1rem;
+  padding: 1.25rem 1rem;
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 3px solid #cf6740;
 }
 
 .admin-table td {
-  padding: 1rem;
-  border-bottom: 1px solid #f1f5f9;
-  color: #334155;
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid #d1d5db;
+  color: #000000;
   vertical-align: middle;
 }
 
@@ -4390,9 +4394,12 @@ main {
   border-bottom: none;
 }
 
-.admin-table tr:hover {
-  background-color: #f8fafc;
+.admin-table tbody tr {
   transition: background-color 0.2s ease;
+}
+
+.admin-table tbody tr:hover {
+  background-color: #fff4ed;
 }
 
 .admin-appointments-card__content form label {
@@ -4406,7 +4413,7 @@ main {
 .admin-appointments-card__content form input,
 .admin-appointments-card__content form select,
 .admin-appointments-card__content form textarea {
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e2784d;
   border-radius: 8px;
   background-color: #f8fafc;
   color: #1e293b;
@@ -4444,7 +4451,7 @@ main {
 .services-dropdown-trigger {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e2784d;
   border-radius: 8px;
   background-color: #f8fafc;
   color: #1e293b;
@@ -4472,7 +4479,7 @@ main {
   right: 0;
   margin-top: 0.4rem;
   background: white;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e2784d;
   border-radius: 8px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   z-index: 50;

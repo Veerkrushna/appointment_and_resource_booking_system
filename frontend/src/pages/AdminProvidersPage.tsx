@@ -261,6 +261,7 @@ function AdminProvidersPage() {
             No providers found. Add a provider to get started.
           </p>
         ) : (
+          <div style={{ overflowX: "auto", width: "100%" }}>
           <table className="admin-table">
             <thead>
               <tr>
@@ -312,6 +313,7 @@ function AdminProvidersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </main>
