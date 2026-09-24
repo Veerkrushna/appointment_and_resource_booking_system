@@ -15,6 +15,12 @@ from app.models.user import User, UserRole
 client = TestClient(app)
 
 
+def test_user_role_uses_provider_value_and_legacy_alias():
+    assert UserRole.PROVIDER.value == "PROVIDER"
+    assert UserRole("PROVIDER") is UserRole.PROVIDER
+    assert UserRole("SERVICE_PROVIDER") is UserRole.PROVIDER
+
+
 @pytest.fixture
 def reset_user():
     db = SessionLocal()
@@ -47,7 +53,9 @@ def test_password_reset_request(reset_user):
             "/api/password-reset/request", json={"email": reset_user.email}
         )
         assert response.status_code == 200
-        assert response.json() == {"message": "If this email exists, a code has been sent"}
+        assert response.json() == {
+            "message": "If this email exists, a code has been sent"
+        }
         mock_send.assert_called_once()
 
         db = SessionLocal()
@@ -59,12 +67,11 @@ def test_password_reset_request(reset_user):
 
 def test_password_reset_verify_and_confirm(reset_user, monkeypatch):
     import secrets
+
     monkeypatch.setattr(secrets, "randbelow", lambda _: 123456)
 
     with patch("app.api.routes.password_reset.send_email"):
-        client.post(
-            "/api/password-reset/request", json={"email": reset_user.email}
-        )
+        client.post("/api/password-reset/request", json={"email": reset_user.email})
 
     verify_response = client.post(
         "/api/password-reset/verify",
