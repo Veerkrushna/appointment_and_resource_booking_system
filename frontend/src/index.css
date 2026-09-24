@@ -4354,3 +4354,154 @@ main {
     justify-content: center;
   }
 }
+
+/* Admin Table & Premium Form Styles */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  background-color: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  margin-top: 1rem;
+}
+
+.admin-table th {
+  background-color: #f8fafc;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.admin-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tr:hover {
+  background-color: #f8fafc;
+  transition: background-color 0.2s ease;
+}
+
+.admin-appointments-card__content form label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+.admin-appointments-card__content form input,
+.admin-appointments-card__content form select,
+.admin-appointments-card__content form textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.admin-appointments-card__content form input:focus,
+.admin-appointments-card__content form select:focus,
+.admin-appointments-card__content form textarea:focus {
+  outline: none;
+  border-color: #e2784d;
+  box-shadow: 0 0 0 3px rgba(226, 120, 77, 0.15);
+  background-color: #fff;
+}
+
+.orange-action-btn {
+  background-color: #e2784d !important;
+  color: white !important;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(226, 120, 77, 0.2);
+}
+
+.orange-action-btn:hover {
+  background-color: #cf6740 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 10px rgba(226, 120, 77, 0.25);
+}
+
+.services-dropdown-trigger {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.services-dropdown-trigger:focus,
+.services-dropdown-trigger:hover {
+  outline: none;
+  border-color: #e2784d;
+  background-color: #fff;
+}
+
+.services-dropdown-container {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.4rem;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+}
+
+.services-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.service-checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem !important;
+  color: #334155 !important;
+  font-weight: 500 !important;
+  margin: 0 !important;
+}
+
+.service-checkbox-label input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #e2784d;
+  cursor: pointer;
+  margin: 0;
+}

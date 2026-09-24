@@ -32,3 +32,4 @@ class User(Base):
     created_by_user: Mapped["User | None"] = relationship(remote_side=[id], back_populates="created_users")
     created_users: Mapped[list["User"]] = relationship(back_populates="created_by_user")
     appointments = relationship("Appointment", back_populates="customer")
+    provider_profile: Mapped["Provider | None"] = relationship(back_populates="user")
