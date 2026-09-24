@@ -13,6 +13,10 @@ class ProviderCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=30)
     timezone: str = Field(default="UTC", min_length=1, max_length=64)
     availability_status: AvailabilityStatus = AvailabilityStatus.AVAILABLE
+    photo: str | None = Field(default=None, max_length=500)
+    bio: str | None = None
+    specializations: list[str] = Field(default_factory=list)
+    password: str = Field(min_length=1)
 
 
 class ProviderUpdate(BaseModel):
@@ -22,6 +26,9 @@ class ProviderUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=30)
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     availability_status: AvailabilityStatus | None = None
+    photo: str | None = Field(default=None, max_length=500)
+    bio: str | None = None
+    specializations: list[str] | None = None
 
 
 class ProviderResponse(BaseModel):
@@ -34,6 +41,10 @@ class ProviderResponse(BaseModel):
     phone: str | None
     timezone: str
     availability_status: AvailabilityStatus
+    photo: str | None
+    bio: str | None
+    specializations: list[str]
+    user_id: UUID | None
     created_at: datetime
 
 
