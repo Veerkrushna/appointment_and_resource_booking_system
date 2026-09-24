@@ -3,9 +3,9 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, String, ForeignKey, Text, func
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
         ProviderBreak,
     )
     from app.models.provider_service import ProviderService
+    from app.models.user import User
 
 
 # Providers can be people who deliver services or physical resources that
@@ -61,6 +62,18 @@ class Provider(Base):
         SQLEnum(AvailabilityStatus, name="availability_status"), nullable=False
     )
 
+    photo: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    specializations: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String), default=list, server_default="{}"
+    )
+
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
     # PostgreSQL sets this timestamp when the row is inserted.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -80,6 +93,8 @@ class Provider(Base):
     service_links: Mapped[list["ProviderService"]] = relationship(
         back_populates="provider", cascade="all, delete-orphan"
     )
+
+    user: Mapped["User | None"] = relationship(back_populates="provider_profile")
 
     def __repr__(self) -> str:
         return (

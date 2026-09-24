@@ -36,7 +36,29 @@ def list_providers(
 
 
 def create_provider(db: Session, payload: ProviderCreate) -> Provider:
-    provider = Provider(**payload.model_dump())
+    data = payload.model_dump()
+    password = data.pop("password")
+
+    from app.models.user import User, UserRole
+    from app.core.security import hash_password
+    from fastapi import HTTPException
+
+    existing_user = db.scalar(select(User).where(User.email == data["email"]))
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+
+    user = User(
+        name=data["name"],
+        email=data["email"],
+        phone=data["phone"],
+        password_hash=hash_password(password),
+        role=UserRole.PROVIDER,
+    )
+    db.add(user)
+    db.flush()
+    user_id = user.id
+
+    provider = Provider(**data, user_id=user_id)
     db.add(provider)
     db.commit()
     db.refresh(provider)
