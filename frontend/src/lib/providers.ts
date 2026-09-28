@@ -11,6 +11,8 @@ export type Provider = {
   specializations: string[];
   user_id: string | null;
   created_at: string;
+  availability_time?: string | null;
+  blackout_days?: string[];
 };
 
 export type ProviderCreate = {
@@ -24,6 +26,9 @@ export type ProviderCreate = {
   bio?: string;
   specializations?: string[];
   password: string;
+  confirm_password?: string;
+  availability_time?: string;
+  blackout_days?: string[];
 };
 
 export type ProviderUpdate = Partial<ProviderCreate>;
@@ -94,6 +99,16 @@ export async function fetchServices(): Promise<Service[]> {
   const response = await fetch("/api/services");
   if (!response.ok) {
     throw new Error("Failed to fetch services");
+  }
+  return response.json();
+}
+
+export async function fetchProviderServices(
+  providerId: string
+): Promise<{ service_id: string }[]> {
+  const response = await fetch(`/api/providers/${providerId}/services`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch provider services");
   }
   return response.json();
 }

@@ -36,12 +36,16 @@ def list_providers(
 
 
 def create_provider(db: Session, payload: ProviderCreate) -> Provider:
-    data = payload.model_dump()
-    password = data.pop("password")
-
     from app.models.user import User, UserRole
     from app.core.security import hash_password
     from fastapi import HTTPException
+
+    if payload.confirm_password and payload.confirm_password != payload.password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    data = payload.model_dump()
+    password = data.pop("password")
+    data.pop("confirm_password", None)
 
     existing_user = db.scalar(select(User).where(User.email == data["email"]))
     if existing_user:
@@ -62,16 +66,101 @@ def create_provider(db: Session, payload: ProviderCreate) -> Provider:
     db.add(provider)
     db.commit()
     db.refresh(provider)
+
+    if provider.availability_time:
+        import re
+        from datetime import datetime as dt
+        time_match = re.match(
+            r"^\s*(\d{1,2}:\d{2}\s*(?:am|pm))\s+to\s+(\d{1,2}:\d{2}\s*(?:am|pm))\s*$",
+            provider.availability_time.strip(),
+            re.IGNORECASE,
+        )
+        if time_match:
+            try:
+                start_t = dt.strptime(time_match.group(1).strip().upper(), "%I:%M %p").time()
+                end_t = dt.strptime(time_match.group(2).strip().upper(), "%I:%M %p").time()
+                blackout_set = {d.strip().lower() for d in (provider.blackout_days or [])}
+                day_map = {
+                    "monday": 0,
+                    "tuesday": 1,
+                    "wednesday": 2,
+                    "thursday": 3,
+                    "friday": 4,
+                    "saturday": 5,
+                    "sunday": 6,
+                }
+                for day_name, day_num in day_map.items():
+                    is_blackout = day_name in blackout_set
+                    db.add(
+                        ProviderAvailability(
+                            provider_id=provider.id,
+                            day_of_week=day_num,
+                            start_time=None if is_blackout else start_t,
+                            end_time=None if is_blackout else end_t,
+                            is_working_day=not is_blackout,
+                        )
+                    )
+                db.commit()
+                db.refresh(provider)
+            except Exception:
+                pass
+
     return provider
 
 
 def update_provider(
     db: Session, provider: Provider, payload: ProviderUpdate
 ) -> Provider:
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
         setattr(provider, field, value)
     db.commit()
     db.refresh(provider)
+
+    if "availability_time" in update_data or "blackout_days" in update_data:
+        if provider.availability_time:
+            import re
+            from datetime import datetime as dt
+            time_match = re.match(
+                r"^\s*(\d{1,2}:\d{2}\s*(?:am|pm))\s+to\s+(\d{1,2}:\d{2}\s*(?:am|pm))\s*$",
+                provider.availability_time.strip(),
+                re.IGNORECASE,
+            )
+            if time_match:
+                try:
+                    start_t = dt.strptime(time_match.group(1).strip().upper(), "%I:%M %p").time()
+                    end_t = dt.strptime(time_match.group(2).strip().upper(), "%I:%M %p").time()
+                    blackout_set = {d.strip().lower() for d in (provider.blackout_days or [])}
+                    day_map = {
+                        "monday": 0,
+                        "tuesday": 1,
+                        "wednesday": 2,
+                        "thursday": 3,
+                        "friday": 4,
+                        "saturday": 5,
+                        "sunday": 6,
+                    }
+                    db.execute(
+                        delete(ProviderAvailability).where(
+                            ProviderAvailability.provider_id == provider.id
+                        )
+                    )
+                    for day_name, day_num in day_map.items():
+                        is_blackout = day_name in blackout_set
+                        db.add(
+                            ProviderAvailability(
+                                provider_id=provider.id,
+                                day_of_week=day_num,
+                                start_time=None if is_blackout else start_t,
+                                end_time=None if is_blackout else end_t,
+                                is_working_day=not is_blackout,
+                            )
+                        )
+                    db.commit()
+                    db.refresh(provider)
+                except Exception:
+                    pass
+
     return provider
 
 

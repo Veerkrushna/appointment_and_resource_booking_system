@@ -70,6 +70,12 @@ class Provider(Base):
         ARRAY(String), default=list, server_default="{}"
     )
 
+    availability_time: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    blackout_days: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String), default=list, server_default="{}"
+    )
+
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
