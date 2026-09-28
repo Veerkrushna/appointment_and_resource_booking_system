@@ -29,7 +29,7 @@ export default function AdminAppointmentsPage() {
   const [pagination, setPagination] =
     useState<AdminAppointmentListResponse | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

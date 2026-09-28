@@ -17,6 +17,9 @@ class ProviderCreate(BaseModel):
     bio: str | None = None
     specializations: list[str] = Field(default_factory=list)
     password: str = Field(min_length=1)
+    confirm_password: str | None = None
+    availability_time: str | None = Field(default=None, max_length=100)
+    blackout_days: list[str] = Field(default_factory=list)
 
 
 class ProviderUpdate(BaseModel):
@@ -29,6 +32,8 @@ class ProviderUpdate(BaseModel):
     photo: str | None = Field(default=None, max_length=500)
     bio: str | None = None
     specializations: list[str] | None = None
+    availability_time: str | None = Field(default=None, max_length=100)
+    blackout_days: list[str] | None = None
 
 
 class ProviderResponse(BaseModel):
@@ -46,6 +51,8 @@ class ProviderResponse(BaseModel):
     specializations: list[str]
     user_id: UUID | None
     created_at: datetime
+    availability_time: str | None = None
+    blackout_days: list[str] | None = Field(default_factory=list)
 
 
 class AvailabilityWindow(BaseModel):

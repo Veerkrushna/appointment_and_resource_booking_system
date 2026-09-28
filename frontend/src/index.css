@@ -4402,6 +4402,44 @@ main {
   background-color: #fff4ed;
 }
 
+.admin-providers-page {
+  width: 100%;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.admin-providers-page .admin-appointments-card {
+  width: 100%;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.admin-table-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e2784d;
+  background-color: #fff;
+  border: 1.5px solid #e2784d;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-table-edit-btn:hover {
+  background-color: #e2784d;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(226, 120, 77, 0.25);
+}
+
+.admin-table-edit-btn:active {
+  transform: translateY(0);
+}
+
 .admin-appointments-card__content form label {
   font-size: 0.85rem;
   font-weight: 600;
@@ -4511,4 +4549,229 @@ main {
   accent-color: #e2784d;
   cursor: pointer;
   margin: 0;
+}
+
+/* Ant Design Time Picker Panel & Inner Cell Styles */
+.ant-time-picker-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.ant-time-picker-trigger {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #e2784d !important;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #1e293b;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.ant-time-picker-trigger:focus,
+.ant-time-picker-trigger:hover {
+  border-color: #e2784d !important;
+  box-shadow: 0 0 0 3px rgba(226, 120, 77, 0.15);
+}
+
+.ant-time-picker-placeholder {
+  color: #94a3b8;
+}
+
+.ant-time-picker-icon {
+  font-size: 0.95rem;
+  color: #e2784d;
+}
+
+.ant-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1050;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2784d;
+  overflow: hidden;
+  animation: antSlideDown 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes antSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ant-picker-panel-container {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.ant-time-picker-panels-row {
+  display: flex;
+  align-items: stretch;
+  padding: 0.75rem;
+  gap: 0.75rem;
+}
+
+.ant-time-picker-section {
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.ant-time-picker-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e2784d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+  text-align: center;
+}
+
+.ant-time-picker-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  padding: 0 0.25rem;
+}
+
+.ant-picker-time-panel {
+  display: flex;
+  outline: none;
+}
+
+.ant-picker-time-panel-inner {
+  display: flex;
+  position: relative;
+  gap: 0.25rem;
+}
+
+.ant-picker-time-panel-column {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  width: 48px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ant-picker-time-panel-column-ampm {
+  width: 44px;
+}
+
+.ant-picker-time-panel-column::-webkit-scrollbar {
+  width: 4px;
+}
+
+.ant-picker-time-panel-column::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.ant-picker-time-panel-cell {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.ant-picker-time-panel-cell-inner,
+.ant-time-picker-panel-inner-cell {
+  width: 100%;
+  height: 28px;
+  line-height: 28px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #334155;
+  border-radius: 6px;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.ant-picker-time-panel-cell:hover .ant-picker-time-panel-cell-inner,
+.ant-picker-time-panel-cell:hover .ant-time-picker-panel-inner-cell {
+  background-color: #fff1eb;
+  color: #e2784d;
+}
+
+.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner,
+.ant-picker-time-panel-cell-selected .ant-time-picker-panel-inner-cell {
+  background-color: #e2784d !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(226, 120, 77, 0.35);
+}
+
+.ant-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  background: #fafafa;
+}
+
+.ant-picker-btn-clear {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ant-picker-btn-clear:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.ant-picker-btn-ok {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: #e2784d;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ant-picker-btn-ok:hover {
+  background: #cf6740;
 }
