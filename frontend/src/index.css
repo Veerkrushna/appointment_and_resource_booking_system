@@ -908,6 +908,36 @@ main {
   border-style: solid;
 }
 
+.dashboard-stat--completed {
+  background: #3b82f6;
+  border-color: #2563eb;
+}
+
+.dashboard-stat--cancelled {
+  background: #ef4444;
+  border-color: #dc2626;
+}
+
+.dashboard-stat--upcoming {
+  background: #facc15;
+  border-color: #eab308;
+}
+
+.dashboard-stat--confirmed {
+  background: #27f56c;
+  border-color: #16a34a;
+}
+
+.dashboard-stat--providers {
+  background: #a855f7;
+  border-color: #9333ea;
+}
+
+.dashboard-stat--services {
+  background: #f97316;
+  border-color: #ea580c;
+}
+
 .dashboard-stat span,
 .dashboard-stat small {
   display: block;
@@ -930,6 +960,60 @@ main {
 
 .dashboard-stat--accent strong {
   color: #f6f4ec;
+}
+
+.dashboard-stat--completed strong {
+  color: #ffffff;
+}
+
+.dashboard-stat--completed span,
+.dashboard-stat--completed small {
+  color: #eff6ff;
+}
+
+.dashboard-stat--cancelled strong {
+  color: #ffffff;
+}
+
+.dashboard-stat--cancelled span,
+.dashboard-stat--cancelled small {
+  color: #fef2f2;
+}
+
+.dashboard-stat--upcoming strong {
+  color: #1c1917;
+}
+
+.dashboard-stat--upcoming span,
+.dashboard-stat--upcoming small {
+  color: #44403c;
+}
+
+.dashboard-stat--confirmed strong {
+  color: #022c22;
+}
+
+.dashboard-stat--confirmed span,
+.dashboard-stat--confirmed small {
+  color: #064e3b;
+}
+
+.dashboard-stat--providers strong {
+  color: #ffffff;
+}
+
+.dashboard-stat--providers span,
+.dashboard-stat--providers small {
+  color: #f3e8ff;
+}
+
+.dashboard-stat--services strong {
+  color: #ffffff;
+}
+
+.dashboard-stat--services span,
+.dashboard-stat--services small {
+  color: #ffedd5;
 }
 
 .availability-widget {
@@ -1425,19 +1509,36 @@ main {
 }
 
 .dashboard-status {
-  color: #557b69;
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  background-color: #e5e7eb;
+  color: #374151;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.dashboard-status--cancelled {
-  color: #a15c44;
+.dashboard-status--completed {
+  background-color: #bfdbfe;
+  color: #1e40af;
 }
 
-.dashboard-status--pending {
-  color: #b1782f;
+.dashboard-status--cancelled {
+  background-color: #fca5a5;
+  color: #991b1b;
+}
+
+.dashboard-status--pending,
+.dashboard-status--upcoming {
+  background-color: #fde047;
+  color: #854d0e;
+}
+
+.dashboard-status--confirmed {
+  background-color: #27f56c;
+  color: #064e3b;
 }
 
 .appointment-lookup {
@@ -5025,7 +5126,7 @@ main {
   white-space: nowrap;
 }
 
-.admin-services-page .admin-services-table td:last-child button + button {
+.admin-services-page .admin-services-table td:last-child button+button {
   margin-left: 0.35rem;
 }
 
