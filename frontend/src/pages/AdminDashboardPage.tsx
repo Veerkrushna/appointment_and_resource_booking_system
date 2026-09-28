@@ -218,31 +218,31 @@ function AdminDashboardPage() {
               <small>{overview.appointments_today} scheduled today</small>
             </article>
 
-            <article className="dashboard-stat">
+            <article className="dashboard-stat dashboard-stat--upcoming">
               <span>Upcoming appointments</span>
               <strong>{overview.upcoming_appointments}</strong>
               <small>Confirmed and pending future appointments</small>
             </article>
 
-            <article className="dashboard-stat">
+            <article className="dashboard-stat dashboard-stat--completed">
               <span>Completed</span>
               <strong>{statusCount("completed")}</strong>
               <small>Completed appointments</small>
             </article>
 
-            <article className="dashboard-stat dashboard-stat--warm">
+            <article className="dashboard-stat dashboard-stat--cancelled">
               <span>Cancelled</span>
               <strong>{statusCount("cancelled")}</strong>
               <small>Cancelled appointments</small>
             </article>
 
-            <article className="dashboard-stat">
+            <article className="dashboard-stat dashboard-stat--providers">
               <span>Total providers</span>
               <strong>{overview.total_providers}</strong>
               <small>{overview.active_providers} active providers</small>
             </article>
 
-            <article className="dashboard-stat">
+            <article className="dashboard-stat dashboard-stat--services">
               <span>Total services</span>
               <strong>{overview.total_services}</strong>
               <small>{overview.active_services} active services</small>
