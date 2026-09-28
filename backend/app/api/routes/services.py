@@ -6,18 +6,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import require_role
-from app.crud.service_providers import assign_providers_to_service
+from app.crud.service_providers import (
+    assign_providers_to_service,
+    get_service_providers,
+)
 from app.crud.services import (
     create_service,
     get_service,
     list_services,
+    list_services_with_providers,
     update_service,
 )
 from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.schemas.provider_service import ProviderServiceResponse
 from app.schemas.service import (
+    AdminServiceResponse,
     ServiceCreate,
+    ServiceProviderSummary,
     ServiceResponse,
     ServiceUpdate,
 )
@@ -56,6 +62,30 @@ def get_services(
 
 
 @router.get(
+    "/admin-with-providers",
+    response_model=list[AdminServiceResponse],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+def get_admin_services_with_providers(
+    db: Annotated[Session, Depends(get_db)],
+):
+    return [
+        AdminServiceResponse(
+            **ServiceResponse.model_validate(service).model_dump(),
+            providers=[
+                ServiceProviderSummary(
+                    provider_id=link.provider_id,
+                    provider_name=link.provider.name,
+                )
+                for link in service.provider_links
+                if link.is_active
+            ],
+        )
+        for service in list_services_with_providers(db=db)
+    ]
+
+
+@router.get(
     "/{service_id}",
     response_model=ServiceResponse,
 )
@@ -75,6 +105,32 @@ def get_service_by_id(
         )
 
     return service
+
+
+@router.get(
+    "/{service_id}/providers",
+    response_model=list[ServiceProviderSummary],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+def get_service_provider_names(
+    service_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+):
+    try:
+        provider_links = get_service_providers(db=db, service_id=service_id)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error),
+        ) from error
+
+    return [
+        ServiceProviderSummary(
+            provider_id=link.provider_id,
+            provider_name=link.provider.name,
+        )
+        for link in provider_links
+    ]
 
 
 @router.put(

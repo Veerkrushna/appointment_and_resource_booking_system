@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.provider_service import ProviderService
 from app.models.providers import Provider
@@ -88,6 +88,7 @@ def get_service_providers(
 
     statement = (
         select(ProviderService)
+        .options(joinedload(ProviderService.provider))
         .where(
             ProviderService.service_id == service_id,
             ProviderService.is_active.is_(True),
@@ -132,9 +133,7 @@ def update_service_providers(
         ProviderService.service_id == service_id
     )
     existing_links = list(db.scalars(relationship_statement).all())
-    existing_links_by_provider_id = {
-        link.provider_id: link for link in existing_links
-    }
+    existing_links_by_provider_id = {link.provider_id: link for link in existing_links}
 
     # 5. Activate existing relationships or create new ones.
     for provider_id in requested_provider_ids:
@@ -160,4 +159,3 @@ def update_service_providers(
 
     # 8. Return all active providers assigned to this service.
     return get_service_providers(db=db, service_id=service_id)
-
