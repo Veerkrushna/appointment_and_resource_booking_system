@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.admin import router as admin_router
 from app.api.routes.admin_users import router as admin_users_router
@@ -10,6 +11,7 @@ from app.api.routes.providers import router as providers_router
 from app.api.routes.services import router as services_router
 from app.api.routes.terms import router as terms_router
 from app.api.routes.password_reset import router as password_reset_router
+from app.api.routes.uploads import router as uploads_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -30,6 +32,10 @@ app.include_router(auth_router)
 app.include_router(customer_router)
 app.include_router(terms_router)
 app.include_router(password_reset_router)
+app.include_router(uploads_router)
+
+# Mount the static files directory for uploads
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/health")

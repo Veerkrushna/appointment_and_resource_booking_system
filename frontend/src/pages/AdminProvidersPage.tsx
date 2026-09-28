@@ -288,6 +288,30 @@ function AdminProvidersPage() {
     }
   };
 
+  const handleDeactivate = async (provider: Provider) => {
+    if (window.confirm("Are you sure to deactivate this account?")) {
+      try {
+        if (!token) return;
+        await updateProvider(token, provider.id, { availability_status: "inactive" });
+        loadData();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+  };
+
+  const handleActivate = async (provider: Provider) => {
+    if (window.confirm("Are you sure to activate this account?")) {
+      try {
+        if (!token) return;
+        await updateProvider(token, provider.id, { availability_status: "available" });
+        loadData();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+  };
+
   const toggleService = (serviceId: string) => {
     setSelectedServices(prev => 
       prev.includes(serviceId) 
@@ -466,8 +490,41 @@ function AdminProvidersPage() {
               </div>
 
               <div>
-                <label>Photo URL</label>
-                <input name="photo" value={formData.photo || ""} onChange={handleInputChange} style={{ width: "100%", padding: "0.5rem" }} />
+                <label>Photo (.jpg, .jpeg)</label>
+                <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const uploadData = new FormData();
+                      uploadData.append("file", file);
+                      try {
+                        const res = await fetch("/api/upload/image", {
+                          method: "POST",
+                          body: uploadData,
+                        });
+                        if (!res.ok) {
+                          const errorData = await res.json();
+                          throw new Error(errorData.detail || "Upload failed");
+                        }
+                        const data = await res.json();
+                        setFormData((prev) => ({ ...prev, photo: `http://localhost:8000${data.url}` }));
+                      } catch (err: any) {
+                        setFormError(err.message);
+                      }
+                    }}
+                    style={{ flex: 1, padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+                  />
+                  {formData.photo && (
+                    <img 
+                      src={formData.photo} 
+                      alt="Preview" 
+                      style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} 
+                    />
+                  )}
+                </div>
               </div>
 
               <div>
@@ -686,13 +743,34 @@ function AdminProvidersPage() {
                       )}
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <button
-                        type="button"
-                        className="admin-table-edit-btn"
-                        onClick={() => handleEdit(provider)}
-                      >
-                        ✏️ Edit
-                      </button>
+                      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+                        <button
+                          type="button"
+                          className="admin-table-edit-btn"
+                          onClick={() => handleEdit(provider)}
+                        >
+                          ✏️ Edit
+                        </button>
+                        {provider.availability_status !== "inactive" ? (
+                          <button
+                            type="button"
+                            className="admin-table-edit-btn"
+                            style={{ color: "#dc2626", borderColor: "#fca5a5", backgroundColor: "#fee2e2" }}
+                            onClick={() => handleDeactivate(provider)}
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="admin-table-edit-btn"
+                            style={{ color: "#16a34a", borderColor: "#86efac", backgroundColor: "#dcfce7" }}
+                            onClick={() => handleActivate(provider)}
+                          >
+                            Activate
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
