@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../auth/useAuth";
 
@@ -10,7 +10,15 @@ type Service = {
   duration_minutes: number;
   price: string | number | null;
   category: string;
+  capacity?: number;
+  buffer_time_minutes?: number | null;
   status: "active" | "inactive";
+  providers: ServiceProviderSummary[];
+};
+
+type ServiceProviderSummary = {
+  provider_id: string;
+  provider_name: string;
 };
 
 type Provider = {
@@ -38,18 +46,83 @@ function AdminServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [updatingServiceIds, setUpdatingServiceIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [providersServiceId, setProvidersServiceId] = useState<string | null>(
+    null,
+  );
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedProviderId, setSelectedProviderId] = useState("");
   const [error, setError] = useState("");
   const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
 
+  const formRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isCreateFormOpen && editingServiceId && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [isCreateFormOpen, editingServiceId]);
+
+  useEffect(() => {
+    if (!providersServiceId) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProvidersServiceId(null);
+      }
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [providersServiceId]);
+
   const [serviceForm, setServiceForm] = useState(initialServiceForm);
 
   const selectedProviders = providers.filter((provider) =>
     serviceForm.provider_ids.includes(provider.id),
   );
+
+  const categories = [
+    ...new Set(services.map((service) => service.category)),
+  ].sort((firstCategory, secondCategory) =>
+    firstCategory.localeCompare(secondCategory),
+  );
+  const normalizedSearch = serviceSearch.trim().toLowerCase();
+  const filteredServices = services.filter((service) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      `${service.name} ${service.description ?? ""}`
+        .toLowerCase()
+        .includes(normalizedSearch);
+    const matchesCategory =
+      !selectedCategory || service.category === selectedCategory;
+    const matchesStatus = !selectedStatus || service.status === selectedStatus;
+    const matchesProvider =
+      !selectedProviderId ||
+      service.providers.some(
+        (provider) => provider.provider_id === selectedProviderId,
+      );
+
+    return matchesSearch && matchesCategory && matchesStatus && matchesProvider;
+  });
+
+  const clearServiceFilters = () => {
+    setServiceSearch("");
+    setSelectedCategory("");
+    setSelectedStatus("");
+    setSelectedProviderId("");
+  };
 
   const validateServiceForm = () => {
     const nextErrors: Record<string, string> = {};
@@ -155,7 +228,44 @@ function AdminServicesPage() {
     });
   };
 
-  const handleCreateService = async (event: FormEvent<HTMLFormElement>) => {
+  const handleCancel = () => {
+    setServiceForm(initialServiceForm);
+    setEditingServiceId(null);
+    setValidationErrors({});
+    setIsProviderDropdownOpen(false);
+    setIsCreateFormOpen(false);
+  };
+
+  const handleEditService = (service: Service) => {
+    setEditingServiceId(service.id);
+    setServiceForm({
+      name: service.name,
+      description: service.description ?? "",
+      category: service.category,
+      duration_minutes: String(service.duration_minutes),
+      price:
+        service.price !== null && service.price !== undefined
+          ? String(service.price)
+          : "",
+      capacity:
+        service.capacity !== null && service.capacity !== undefined
+          ? String(service.capacity)
+          : "1",
+      buffer_time_minutes:
+        service.buffer_time_minutes !== null &&
+        service.buffer_time_minutes !== undefined
+          ? String(service.buffer_time_minutes)
+          : "",
+      status: service.status,
+      provider_ids: [],
+    });
+    setValidationErrors({});
+    setError("");
+    setIsProviderDropdownOpen(false);
+    setIsCreateFormOpen(true);
+  };
+
+  const handleSubmitService = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const nextErrors = validateServiceForm();
@@ -184,61 +294,171 @@ function AdminServicesPage() {
         status: serviceForm.status,
       };
 
-      const serviceResponse = await fetch("/api/services", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(servicePayload),
-      });
-
-      if (!serviceResponse.ok) {
-        const errorData = await serviceResponse.json().catch(() => null);
-
-        throw new Error(errorData?.detail || "Failed to create service");
-      }
-
-      const createdService: Service = await serviceResponse.json();
-
-      if (serviceForm.provider_ids.length > 0) {
-        const providerResponse = await fetch(
-          `/api/services/${createdService.id}/providers`,
+      if (editingServiceId !== null) {
+        const updateResponse = await fetch(
+          `/api/services/${editingServiceId}`,
           {
-            method: "POST",
+            method: "PUT",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({
-              provider_ids: serviceForm.provider_ids,
-            }),
+            body: JSON.stringify(servicePayload),
           },
         );
 
-        if (!providerResponse.ok) {
-          const errorData = await providerResponse.json().catch(() => null);
+        if (!updateResponse.ok) {
+          const errorData = await updateResponse.json().catch(() => null);
 
-          throw new Error(
-            errorData?.detail ||
-              "Service created, but provider assignment failed",
-          );
+          throw new Error(errorData?.detail || "Failed to update service");
         }
-      }
 
-      setServices((previousServices) => [...previousServices, createdService]);
-      setServiceForm(initialServiceForm);
-      setValidationErrors({});
-      setIsProviderDropdownOpen(false);
-      setIsCreateFormOpen(false);
+        const updatedService: Service = await updateResponse.json();
+
+        setServices((previousServices) =>
+          previousServices.map((service) =>
+            service.id === updatedService.id
+              ? { ...updatedService, providers: service.providers }
+              : service,
+          ),
+        );
+        setServiceForm(initialServiceForm);
+        setEditingServiceId(null);
+        setValidationErrors({});
+        setIsProviderDropdownOpen(false);
+        setIsCreateFormOpen(false);
+      } else {
+        const serviceResponse = await fetch("/api/services", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(servicePayload),
+        });
+
+        if (!serviceResponse.ok) {
+          const errorData = await serviceResponse.json().catch(() => null);
+
+          throw new Error(errorData?.detail || "Failed to create service");
+        }
+
+        const createdService: Service = await serviceResponse.json();
+
+        if (serviceForm.provider_ids.length > 0) {
+          const providerResponse = await fetch(
+            `/api/services/${createdService.id}/providers`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                provider_ids: serviceForm.provider_ids,
+              }),
+            },
+          );
+
+          if (!providerResponse.ok) {
+            const errorData = await providerResponse.json().catch(() => null);
+
+            throw new Error(
+              errorData?.detail ||
+                "Service created, but provider assignment failed",
+            );
+          }
+        }
+
+        setServices((previousServices) => [
+          ...previousServices,
+          {
+            ...createdService,
+            providers: serviceForm.provider_ids.flatMap((providerId) => {
+              const provider = providers.find(
+                (candidate) => candidate.id === providerId,
+              );
+              return provider
+                ? [{ provider_id: provider.id, provider_name: provider.name }]
+                : [];
+            }),
+          },
+        ]);
+        setServiceForm(initialServiceForm);
+        setEditingServiceId(null);
+        setValidationErrors({});
+        setIsProviderDropdownOpen(false);
+        setIsCreateFormOpen(false);
+      }
     } catch (error) {
-      console.error("Error creating service:", error);
+      console.error(
+        editingServiceId
+          ? "Error updating service:"
+          : "Error creating service:",
+        error,
+      );
 
       setError(
         error instanceof Error
           ? error.message
-          : "Unable to create service. Please try again.",
+          : editingServiceId
+            ? "Unable to update service. Please try again."
+            : "Unable to create service. Please try again.",
       );
+    }
+  };
+
+  const handleToggleServiceStatus = async (service: Service) => {
+    const nextStatus = service.status === "active" ? "inactive" : "active";
+
+    if (
+      nextStatus === "inactive" &&
+      !window.confirm(`Deactivate "${service.name}"?`)
+    ) {
+      return;
+    }
+
+    setUpdatingServiceIds((previousIds) =>
+      new Set(previousIds).add(service.id),
+    );
+    setError("");
+
+    try {
+      const response = await fetch(`/api/services/${service.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || "Failed to update service status");
+      }
+
+      const updatedService: Service = await response.json();
+      setServices((previousServices) =>
+        previousServices.map((previousService) =>
+          previousService.id === updatedService.id
+            ? { ...updatedService, providers: previousService.providers }
+            : previousService,
+        ),
+      );
+    } catch (error) {
+      console.error("Error updating service status:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update service status. Please try again.",
+      );
+    } finally {
+      setUpdatingServiceIds((previousIds) => {
+        const nextIds = new Set(previousIds);
+        nextIds.delete(service.id);
+        return nextIds;
+      });
     }
   };
 
@@ -249,7 +469,9 @@ function AdminServicesPage() {
         setError("");
 
         const [servicesResponse, providersResponse] = await Promise.all([
-          fetch("/api/services"),
+          fetch("/api/services/admin-with-providers", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
           fetch("/api/providers"),
         ]);
 
@@ -275,7 +497,11 @@ function AdminServicesPage() {
     };
 
     loadServicesAndProviders();
-  }, []);
+  }, [token]);
+
+  const providersService = services.find(
+    (service) => service.id === providersServiceId,
+  );
 
   return (
     <main className="admin-services-page">
@@ -290,33 +516,41 @@ function AdminServicesPage() {
         <button
           type="button"
           className="admin-primary-button"
-          onClick={() => setIsCreateFormOpen(true)}
+          onClick={() => {
+            setServiceForm(initialServiceForm);
+            setEditingServiceId(null);
+            setValidationErrors({});
+            setError("");
+            setIsProviderDropdownOpen(false);
+            setIsCreateFormOpen(true);
+          }}
         >
           + Create Service
         </button>
       </header>
 
       {isCreateFormOpen && (
-        <section className="admin-appointments-card">
+        <section ref={formRef} className="admin-appointments-card">
           <div className="admin-appointments-card__header">
             <div>
-              <h2>Create Service</h2>
+              <h2>{editingServiceId ? "Edit Service" : "Create Service"}</h2>
 
-              <p>Add a new service to the booking system.</p>
+              <p>
+                {editingServiceId
+                  ? "Update service details."
+                  : "Add a new service to the booking system."}
+              </p>
             </div>
 
             <button
               type="button"
               className="admin-secondary-button"
-              onClick={() => {
-                setValidationErrors({});
-                setIsCreateFormOpen(false);
-              }}
+              onClick={handleCancel}
             >
               Cancel
             </button>
           </div>
-          <form className="admin-service-form" onSubmit={handleCreateService}>
+          <form className="admin-service-form" onSubmit={handleSubmitService}>
             <div className="admin-form-field">
               <label htmlFor="service-name">Service Name</label>
 
@@ -543,93 +777,97 @@ function AdminServicesPage() {
               </select>
             </div>
 
-            <div className="admin-form-field">
-              <label htmlFor="provider-selection">
-                Assign Providers (Optional)
-              </label>
+            {!editingServiceId && (
+              <div className="admin-form-field">
+                <label htmlFor="provider-selection">
+                  Assign Providers (Optional)
+                </label>
 
-              <div className="admin-provider-dropdown">
-                <button
-                  id="provider-selection"
-                  type="button"
-                  className="admin-provider-dropdown__trigger"
-                  onClick={() => setIsProviderDropdownOpen((isOpen) => !isOpen)}
-                  aria-expanded={isProviderDropdownOpen}
-                >
-                  <span>
-                    {selectedProviders.length === 0
-                      ? "Select providers"
-                      : `${selectedProviders.length} provider${
-                          selectedProviders.length > 1 ? "s" : ""
-                        } selected`}
-                  </span>
+                <div className="admin-provider-dropdown">
+                  <button
+                    id="provider-selection"
+                    type="button"
+                    className="admin-provider-dropdown__trigger"
+                    onClick={() =>
+                      setIsProviderDropdownOpen((isOpen) => !isOpen)
+                    }
+                    aria-expanded={isProviderDropdownOpen}
+                  >
+                    <span>
+                      {selectedProviders.length === 0
+                        ? "Select providers"
+                        : `${selectedProviders.length} provider${
+                            selectedProviders.length > 1 ? "s" : ""
+                          } selected`}
+                    </span>
 
-                  <span aria-hidden="true">
-                    {isProviderDropdownOpen ? "▲" : "▼"}
-                  </span>
-                </button>
+                    <span aria-hidden="true">
+                      {isProviderDropdownOpen ? "▲" : "▼"}
+                    </span>
+                  </button>
 
-                {isProviderDropdownOpen && (
-                  <div className="admin-provider-dropdown__menu">
-                    {providers.length === 0 ? (
-                      <p className="admin-services-message">
-                        No providers available.
-                      </p>
-                    ) : (
-                      providers.map((provider) => (
-                        <label
-                          key={provider.id}
-                          className="admin-provider-dropdown__option"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={serviceForm.provider_ids.includes(
-                              provider.id,
-                            )}
-                            onChange={() =>
-                              handleProviderSelection(provider.id)
-                            }
-                          />
+                  {isProviderDropdownOpen && (
+                    <div className="admin-provider-dropdown__menu">
+                      {providers.length === 0 ? (
+                        <p className="admin-services-message">
+                          No providers available.
+                        </p>
+                      ) : (
+                        providers.map((provider) => (
+                          <label
+                            key={provider.id}
+                            className="admin-provider-dropdown__option"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={serviceForm.provider_ids.includes(
+                                provider.id,
+                              )}
+                              onChange={() =>
+                                handleProviderSelection(provider.id)
+                              }
+                            />
 
-                          <span className="admin-provider-dropdown__details">
-                            <strong>{provider.name}</strong>
+                            <span className="admin-provider-dropdown__details">
+                              <strong>{provider.name}</strong>
 
-                            <small>
-                              {provider.type} · {provider.availability_status}
-                            </small>
-                          </span>
-                        </label>
-                      ))
-                    )}
+                              <small>
+                                {provider.type} · {provider.availability_status}
+                              </small>
+                            </span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {selectedProviders.length > 0 && (
+                  <div className="admin-provider-dropdown__selected">
+                    {selectedProviders.map((provider) => (
+                      <span
+                        key={provider.id}
+                        className="admin-provider-dropdown__tag"
+                      >
+                        {provider.name}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
-
-              {selectedProviders.length > 0 && (
-                <div className="admin-provider-dropdown__selected">
-                  {selectedProviders.map((provider) => (
-                    <span
-                      key={provider.id}
-                      className="admin-provider-dropdown__tag"
-                    >
-                      {provider.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
 
             <div className="admin-service-form__actions">
               <button
                 type="button"
                 className="admin-secondary-button"
-                onClick={() => setIsCreateFormOpen(false)}
+                onClick={handleCancel}
               >
                 Cancel
               </button>
 
               <button type="submit" className="admin-primary-button">
-                Create Service
+                {editingServiceId ? "Save Changes" : "Create Service"}
               </button>
             </div>
           </form>
@@ -645,6 +883,80 @@ function AdminServicesPage() {
           </div>
         </div>
 
+        {!isLoading && (
+          <div className="admin-services-filters">
+            <label className="admin-services-filter-field admin-services-filter-field--search">
+              <span className="admin-services-filter-label">Search</span>
+              <input
+                type="search"
+                placeholder="Search services..."
+                value={serviceSearch}
+                onChange={(event) => setServiceSearch(event.target.value)}
+                aria-label="Search services by name or description"
+              />
+            </label>
+
+            <label className="admin-services-filter-field">
+              <span className="admin-services-filter-label">Category</span>
+              <select
+                value={selectedCategory}
+                onChange={(event) => setSelectedCategory(event.target.value)}
+                aria-label="Filter services by category"
+              >
+                <option value="">All Categories</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="admin-services-filter-field">
+              <span className="admin-services-filter-label">Status</span>
+              <select
+                value={selectedStatus}
+                onChange={(event) => setSelectedStatus(event.target.value)}
+                aria-label="Filter services by status"
+              >
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+
+            <label className="admin-services-filter-field">
+              <span className="admin-services-filter-label">Provider</span>
+              <select
+                value={selectedProviderId}
+                onChange={(event) => setSelectedProviderId(event.target.value)}
+                aria-label="Filter services by provider"
+              >
+                <option value="">All Providers</option>
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              className="admin-secondary-button admin-services-clear-filters"
+              onClick={clearServiceFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
+
+        {!isLoading && (
+          <p className="admin-services-result-count" aria-live="polite">
+            Showing {filteredServices.length} of {services.length} services
+          </p>
+        )}
+
         {isLoading && (
           <p className="admin-services-message">Loading services...</p>
         )}
@@ -659,7 +971,22 @@ function AdminServicesPage() {
           <p className="admin-services-message">No services found.</p>
         )}
 
-        {!isLoading && !error && services.length > 0 && (
+        {!isLoading && services.length > 0 && filteredServices.length === 0 && (
+          <div className="admin-services-filter-empty">
+            <p className="admin-services-message">
+              No services match your filters.
+            </p>
+            <button
+              type="button"
+              className="admin-secondary-button"
+              onClick={clearServiceFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
+
+        {!isLoading && filteredServices.length > 0 && (
           <div className="admin-services-table-wrapper">
             <table className="admin-services-table">
               <thead>
@@ -668,13 +995,14 @@ function AdminServicesPage() {
                   <th>Category</th>
                   <th>Duration</th>
                   <th>Price</th>
+                  <th>Providers</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
-                {services.map((service) => (
+                {filteredServices.map((service) => (
                   <tr key={service.id}>
                     <td>
                       <strong>{service.name}</strong>
@@ -691,6 +1019,22 @@ function AdminServicesPage() {
                     </td>
 
                     <td>
+                      {service.providers.length === 0 ? (
+                        <span>No providers</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="admin-service-provider-count"
+                          onClick={() => setProvidersServiceId(service.id)}
+                          aria-haspopup="dialog"
+                        >
+                          {service.providers.length} provider
+                          {service.providers.length === 1 ? "" : "s"}
+                        </button>
+                      )}
+                    </td>
+
+                    <td>
                       <span
                         className={`service-status service-status--${service.status}`}
                       >
@@ -702,9 +1046,21 @@ function AdminServicesPage() {
                       <button
                         type="button"
                         className="admin-service-action-button"
-                        disabled
+                        onClick={() => handleEditService(service)}
                       >
                         Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-service-action-button"
+                        onClick={() => handleToggleServiceStatus(service)}
+                        disabled={updatingServiceIds.has(service.id)}
+                      >
+                        {updatingServiceIds.has(service.id)
+                          ? "Updating..."
+                          : service.status === "active"
+                            ? "Deactivate"
+                            : "Activate"}
                       </button>
                     </td>
                   </tr>
@@ -714,6 +1070,40 @@ function AdminServicesPage() {
           </div>
         )}
       </section>
+
+      {providersService && (
+        <div
+          className="admin-service-providers-backdrop"
+          onClick={() => setProvidersServiceId(null)}
+        >
+          <section
+            className="admin-service-providers-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-service-providers-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="admin-service-providers-dialog__header">
+              <h2 id="admin-service-providers-title">
+                Providers for {providersService.name}
+              </h2>
+              <button
+                type="button"
+                className="admin-service-providers-dialog__close"
+                onClick={() => setProvidersServiceId(null)}
+                aria-label="Close providers dialog"
+              >
+                ×
+              </button>
+            </header>
+            <ul className="admin-service-providers-list">
+              {providersService.providers.map((provider) => (
+                <li key={provider.provider_id}>{provider.provider_name}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
