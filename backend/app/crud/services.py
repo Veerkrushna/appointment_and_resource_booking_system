@@ -1,8 +1,9 @@
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.models.provider_service import ProviderService
 from app.models.service import Service
 from app.schemas.service import ServiceCreate, ServiceUpdate
 
@@ -26,6 +27,20 @@ def list_services(db: Session) -> list[Service]:
     result = db.execute(statement)
 
     return list(result.scalars().all())
+
+
+def list_services_with_providers(db: Session) -> list[Service]:
+    statement = (
+        select(Service)
+        .options(
+            selectinload(
+                Service.provider_links.and_(ProviderService.is_active.is_(True))
+            ).selectinload(ProviderService.provider)
+        )
+        .order_by(Service.created_at.desc())
+    )
+
+    return list(db.scalars(statement).all())
 
 
 def get_service(

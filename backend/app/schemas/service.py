@@ -121,3 +121,12 @@ class ServiceResponse(BaseModel):
     created_at: datetime
 
     updated_at: datetime
+
+
+class ServiceProviderSummary(BaseModel):
+    provider_id: uuid.UUID
+    provider_name: str
+
+
+class AdminServiceResponse(ServiceResponse):
+    providers: list[ServiceProviderSummary] = Field(default_factory=list)
