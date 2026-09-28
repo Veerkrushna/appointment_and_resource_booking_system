@@ -4556,12 +4556,29 @@ main {
    ========================================================================== */
 
 .admin-services-page {
-  padding-top: clamp(3rem, 7vw, 6rem);
-  padding-bottom: clamp(3rem, 7vw, 6rem);
+  padding-top: clamp(2rem, 4vw, 3.5rem);
+  padding-bottom: 3rem;
 }
 
 .admin-services-page .admin-page-header {
-  margin-bottom: 2rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.admin-services-page .admin-appointments-card {
+  margin-bottom: 1.25rem;
+  padding: 1.15rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.admin-services-page .admin-appointments-card__header {
+  margin: 0 0 0.9rem;
+}
+
+.admin-services-page .admin-appointments-card__header h2 {
+  font-size: 1.05rem;
 }
 
 /* ---------- Shared Buttons (Admin) ---------- */
@@ -4571,16 +4588,16 @@ main {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1.4rem;
-  border: 1px solid #ea580c;
+  border: 1px solid #e2784d;
   border-radius: 8px;
-  background: #ea580c;
+  background: #e2784d;
   color: #ffffff;
   font-family: inherit;
   font-size: 0.92rem;
   font-weight: 600;
   line-height: 1.25;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.22);
+  box-shadow: 0 2px 4px rgba(226, 120, 77, 0.22);
   transition:
     background-color 0.18s ease,
     border-color 0.18s ease,
@@ -4870,37 +4887,38 @@ main {
   width: 100%;
   overflow-x: auto;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #ffffff;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .admin-services-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
   text-align: left;
-  font-size: 0.92rem;
-  color: #0f172a;
+  font-size: 0.82rem;
+  color: #1e293b;
 }
 
 .admin-services-table thead {
-  background: #f8fafc;
-  border-bottom: 2px solid #e2e8f0;
+  background: #e2784d;
+  border-bottom: 2px solid #cf6740;
 }
 
 .admin-services-table th {
-  padding: 0.9rem 1.1rem;
-  color: #0f172a;
-  font-size: 0.8rem;
+  padding: 0.7rem 0.8rem;
+  color: #ffffff;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .admin-services-table td {
-  padding: 1rem 1.1rem;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid #e2e8f0;
   vertical-align: middle;
 }
 
@@ -4909,7 +4927,7 @@ main {
 }
 
 .admin-services-table tbody tr:hover {
-  background: #fffbf7;
+  background: #fff8f4;
 }
 
 .admin-services-table tbody tr:last-child td {
@@ -4919,17 +4937,17 @@ main {
 .admin-services-table td strong {
   display: block;
   color: #0f172a;
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   font-weight: 600;
   line-height: 1.3;
 }
 
 .admin-services-table td p {
-  margin: 0.25rem 0 0;
+  margin: 0.15rem 0 0;
   color: #64748b;
-  font-size: 0.83rem;
+  font-size: 0.73rem;
   line-height: 1.4;
-  max-width: 420px;
+  max-width: 300px;
 }
 
 /* ---------- Status Pill Badge ---------- */
@@ -4937,25 +4955,85 @@ main {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 0.66rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   line-height: 1;
 }
 
 .service-status--active {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #15803d;
+  background: #ecfdf3;
+  border-color: #b7e4c7;
+  color: #16803c;
 }
 
 .service-status--inactive {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-color: #e2e8f0;
   color: #64748b;
+}
+
+.admin-service-provider-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-width: 18rem;
+}
+
+.admin-service-provider-chip {
+  max-width: 9rem;
+  overflow: hidden;
+  padding: 0.2rem 0.42rem;
+  border: 1px solid #fdba74;
+  border-radius: 4px;
+  background: #fff4ed;
+  color: #e2784d;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-service-provider-chip:hover {
+  border-color: #e2784d;
+  background: #ffede2;
+}
+
+.admin-service-provider-chip:focus-visible {
+  outline: 2px solid #e2784d;
+  outline-offset: 2px;
+}
+
+.admin-service-no-providers {
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.admin-services-page .admin-table-edit-btn {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.admin-services-page .admin-services-table td:last-child {
+  white-space: nowrap;
+}
+
+.admin-services-page .admin-services-table td:last-child button + button {
+  margin-left: 0.35rem;
+}
+
+.admin-services-page .admin-services-table td:last-child button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ---------- Action Button ---------- */

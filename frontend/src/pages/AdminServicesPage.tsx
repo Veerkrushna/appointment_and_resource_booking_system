@@ -877,9 +877,7 @@ function AdminServicesPage() {
       <section className="admin-appointments-card">
         <div className="admin-appointments-card__header">
           <div>
-            <h2>Service management</h2>
-
-            <p>View and manage all services available for booking.</p>
+            <h2>Service List</h2>
           </div>
         </div>
 
@@ -1020,17 +1018,33 @@ function AdminServicesPage() {
 
                     <td>
                       {service.providers.length === 0 ? (
-                        <span>No providers</span>
+                        <span className="admin-service-no-providers">
+                          No providers
+                        </span>
                       ) : (
-                        <button
-                          type="button"
-                          className="admin-service-provider-count"
-                          onClick={() => setProvidersServiceId(service.id)}
-                          aria-haspopup="dialog"
-                        >
-                          {service.providers.length} provider
-                          {service.providers.length === 1 ? "" : "s"}
-                        </button>
+                        <div className="admin-service-provider-chips">
+                          {service.providers.slice(0, 2).map((provider) => (
+                            <button
+                              key={provider.provider_id}
+                              type="button"
+                              className="admin-service-provider-chip"
+                              onClick={() => setProvidersServiceId(service.id)}
+                              aria-haspopup="dialog"
+                            >
+                              {provider.provider_name}
+                            </button>
+                          ))}
+                          {service.providers.length > 2 && (
+                            <button
+                              type="button"
+                              className="admin-service-provider-chip"
+                              onClick={() => setProvidersServiceId(service.id)}
+                              aria-haspopup="dialog"
+                            >
+                              + {service.providers.length - 2} more
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
 
@@ -1045,14 +1059,14 @@ function AdminServicesPage() {
                     <td>
                       <button
                         type="button"
-                        className="admin-service-action-button"
+                        className="admin-table-edit-btn"
                         onClick={() => handleEditService(service)}
                       >
                         Edit
                       </button>
                       <button
                         type="button"
-                        className="admin-service-action-button"
+                        className="admin-table-edit-btn"
                         onClick={() => handleToggleServiceStatus(service)}
                         disabled={updatingServiceIds.has(service.id)}
                       >
