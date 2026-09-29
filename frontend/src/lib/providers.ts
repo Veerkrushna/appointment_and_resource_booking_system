@@ -13,6 +13,8 @@ export type Provider = {
   created_at: string;
   availability_time?: string | null;
   blackout_days?: string[];
+  average_rating?: number | null;
+  rating_count?: number;
 };
 
 export type ProviderCreate = {
@@ -104,7 +106,7 @@ export async function fetchServices(): Promise<Service[]> {
 }
 
 export async function fetchProviderServices(
-  providerId: string
+  providerId: string,
 ): Promise<{ service_id: string }[]> {
   const response = await fetch(`/api/providers/${providerId}/services`);
   if (!response.ok) {
@@ -116,7 +118,7 @@ export async function fetchProviderServices(
 export async function updateProviderServices(
   token: string,
   providerId: string,
-  serviceIds: string[]
+  serviceIds: string[],
 ): Promise<any> {
   const response = await fetch(`/api/providers/${providerId}/services`, {
     method: "PUT",

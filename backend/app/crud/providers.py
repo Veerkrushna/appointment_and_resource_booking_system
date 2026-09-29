@@ -1,9 +1,10 @@
 from datetime import UTC, datetime, time
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.crud.provider_ratings import provider_rating_subquery
 from app.models.availability import (
     ProviderAvailability,
     ProviderBlackoutDate,
@@ -26,19 +27,29 @@ def list_providers(
     db: Session,
     provider_type: str | None = None,
     availability_status: str | None = None,
-) -> list[Provider]:
-    query = select(Provider).order_by(Provider.name)
+) -> list[tuple[Provider, float | None, int]]:
+    ratings = provider_rating_subquery()
+    query = (
+        select(
+            Provider,
+            ratings.c.average_rating,
+            func.coalesce(ratings.c.rating_count, 0),
+        )
+        .outerjoin(ratings, ratings.c.provider_id == Provider.id)
+        .order_by(Provider.name)
+    )
     if provider_type is not None:
         query = query.where(Provider.type == provider_type)
     if availability_status is not None:
         query = query.where(Provider.availability_status == availability_status)
-    return list(db.scalars(query).all())
+    return list(db.execute(query).tuples().all())
 
 
 def create_provider(db: Session, payload: ProviderCreate) -> Provider:
-    from app.models.user import User, UserRole
-    from app.core.security import hash_password
     from fastapi import HTTPException
+
+    from app.core.security import hash_password
+    from app.models.user import User, UserRole
 
     if payload.confirm_password and payload.confirm_password != payload.password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
@@ -49,7 +60,9 @@ def create_provider(db: Session, payload: ProviderCreate) -> Provider:
 
     existing_user = db.scalar(select(User).where(User.email == data["email"]))
     if existing_user:
-        raise HTTPException(status_code=400, detail="User with this email already exists")
+        raise HTTPException(
+            status_code=400, detail="User with this email already exists"
+        )
 
     user = User(
         name=data["name"],
@@ -70,6 +83,7 @@ def create_provider(db: Session, payload: ProviderCreate) -> Provider:
     if provider.availability_time:
         import re
         from datetime import datetime as dt
+
         time_match = re.match(
             r"^\s*(\d{1,2}:\d{2}\s*(?:am|pm))\s+to\s+(\d{1,2}:\d{2}\s*(?:am|pm))\s*$",
             provider.availability_time.strip(),
@@ -77,9 +91,15 @@ def create_provider(db: Session, payload: ProviderCreate) -> Provider:
         )
         if time_match:
             try:
-                start_t = dt.strptime(time_match.group(1).strip().upper(), "%I:%M %p").time()
-                end_t = dt.strptime(time_match.group(2).strip().upper(), "%I:%M %p").time()
-                blackout_set = {d.strip().lower() for d in (provider.blackout_days or [])}
+                start_t = dt.strptime(
+                    time_match.group(1).strip().upper(), "%I:%M %p"
+                ).time()
+                end_t = dt.strptime(
+                    time_match.group(2).strip().upper(), "%I:%M %p"
+                ).time()
+                blackout_set = {
+                    d.strip().lower() for d in (provider.blackout_days or [])
+                }
                 day_map = {
                     "monday": 0,
                     "tuesday": 1,
@@ -121,6 +141,7 @@ def update_provider(
         if provider.availability_time:
             import re
             from datetime import datetime as dt
+
             time_match = re.match(
                 r"^\s*(\d{1,2}:\d{2}\s*(?:am|pm))\s+to\s+(\d{1,2}:\d{2}\s*(?:am|pm))\s*$",
                 provider.availability_time.strip(),
@@ -128,9 +149,15 @@ def update_provider(
             )
             if time_match:
                 try:
-                    start_t = dt.strptime(time_match.group(1).strip().upper(), "%I:%M %p").time()
-                    end_t = dt.strptime(time_match.group(2).strip().upper(), "%I:%M %p").time()
-                    blackout_set = {d.strip().lower() for d in (provider.blackout_days or [])}
+                    start_t = dt.strptime(
+                        time_match.group(1).strip().upper(), "%I:%M %p"
+                    ).time()
+                    end_t = dt.strptime(
+                        time_match.group(2).strip().upper(), "%I:%M %p"
+                    ).time()
+                    blackout_set = {
+                        d.strip().lower() for d in (provider.blackout_days or [])
+                    }
                     day_map = {
                         "monday": 0,
                         "tuesday": 1,

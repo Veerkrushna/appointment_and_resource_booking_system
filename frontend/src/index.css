@@ -1645,6 +1645,218 @@ main {
   font-size: 0.9rem;
 }
 
+.appointment-review {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.appointment-review__loading {
+  color: #64736e;
+  font-size: 0.78rem;
+}
+
+.appointment-review__load-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: #8d4c31;
+  font-size: 0.8rem;
+}
+
+.appointment-review__summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.appointment-review__summary-rating {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.appointment-review__summary-stars {
+  color: #c05d27;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.appointment-review__summary-stars > span {
+  color: #aeb8b1;
+}
+
+.appointment-review__summary-rating small {
+  color: #64736e;
+  font-size: 0.72rem;
+}
+
+.appointment-review__comment {
+  max-width: 34rem;
+  margin: 0;
+  color: #64736e;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.appointment-review__feedback {
+  margin: 0;
+  color: #557b69;
+  font-size: 0.8rem;
+}
+
+.appointment-review__feedback.is-error {
+  color: #8d4c31;
+}
+
+.appointment-review__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgba(11, 3, 2, 0.55);
+}
+
+.appointment-review__dialog {
+  width: min(100%, 31rem);
+  max-height: min(100%, 42rem);
+  overflow-y: auto;
+  padding: clamp(1.1rem, 4vw, 1.5rem);
+  border: 1px solid #dbe5dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #18312f;
+  box-shadow: 0 16px 40px rgba(11, 3, 2, 0.2);
+}
+
+.appointment-review__dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid #dbe5dc;
+}
+
+.appointment-review__dialog-header h2 {
+  margin: 0;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.2rem;
+}
+
+.appointment-review__close {
+  flex: 0 0 auto;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border: 0;
+  background: transparent;
+  color: #64736e;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.appointment-review__close:hover {
+  color: #c05d27;
+}
+
+.appointment-review__context {
+  display: grid;
+  gap: 0.2rem;
+  margin: 1rem 0 1.35rem;
+}
+
+.appointment-review__context strong {
+  color: #18312f;
+  font-size: 0.95rem;
+}
+
+.appointment-review__context span {
+  color: #64736e;
+  font-size: 0.82rem;
+}
+
+.appointment-review__rating-field {
+  min-width: 0;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border: 0;
+}
+
+.appointment-review__rating-field legend {
+  margin-bottom: 0.55rem;
+  color: #18312f;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.appointment-review__stars {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.appointment-review__star {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #aeb8b1;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.8rem;
+  line-height: 1;
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.appointment-review__star:hover,
+.appointment-review__star.is-selected {
+  color: #c05d27;
+}
+
+.appointment-review__star:hover {
+  transform: translateY(-1px);
+}
+
+.appointment-review__star:focus-visible,
+.appointment-review__close:focus-visible {
+  outline: 2px solid #c05d27;
+  outline-offset: 2px;
+}
+
+.appointment-review__dialog form > .field-label textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.appointment-review__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.35rem;
+}
+
+@media (max-width: 480px) {
+  .appointment-review__dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .appointment-review__dialog-actions button {
+    width: 100%;
+  }
+}
+
 .appointment-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2296,6 +2508,142 @@ main {
 .time-selection__heading small {
   color: #8a9b94;
   font-weight: 400;
+}
+
+.booking-provider-filter {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+  width: min(100%, 22rem);
+  margin: 0 0 1rem;
+}
+
+.booking-provider-filter__label {
+  color: #18312f;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.booking-provider-filter__trigger {
+  display: flex;
+  width: 100%;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid #ccd8d0;
+  border-radius: 5px;
+  padding: 0.5rem 0.8rem;
+  background: #fff;
+  color: #18312f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+}
+
+.booking-provider-filter__trigger:hover,
+.booking-provider-filter__trigger:focus-visible {
+  border-color: #557b69;
+  outline: 2px solid #d2e2d4;
+  outline-offset: 1px;
+}
+
+.booking-provider-filter__trigger:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.booking-provider-filter__selection {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.booking-provider-filter__selection strong,
+.booking-provider-filter__option strong {
+  overflow: hidden;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-provider-filter__detail {
+  color: #64736e;
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.booking-provider-filter__star,
+.admin-provider-rating__star {
+  color: #e2784d;
+}
+
+.booking-provider-filter__chevron {
+  flex: 0 0 auto;
+  color: #64736e;
+  font-size: 0.8rem;
+}
+
+.booking-provider-filter__options {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  left: 0;
+  display: grid;
+  max-height: min(18rem, 45vh);
+  overflow-y: auto;
+  border: 1px solid #ccd8d0;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(11, 3, 2, 0.12);
+}
+
+.booking-provider-filter__option {
+  display: grid;
+  min-height: 3.25rem;
+  gap: 0.15rem;
+  border: 0;
+  border-bottom: 1px solid #e5e9e5;
+  padding: 0.6rem 0.8rem;
+  background: #fff;
+  color: #18312f;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.booking-provider-filter__option:last-child {
+  border-bottom: 0;
+}
+
+.booking-provider-filter__option:hover,
+.booking-provider-filter__option:focus-visible,
+.booking-provider-filter__option[aria-selected="true"] {
+  outline: none;
+  background: #fff4ed;
+}
+
+.booking-provider-filter__option:focus-visible {
+  box-shadow: inset 0 0 0 2px #e2784d;
+}
+
+.admin-provider-rating {
+  color: #1e293b;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-provider-rating--empty {
+  color: #64736e;
+  font-size: 0.85rem;
+}
+
+.admin-provider-rating__star {
+  font-size: 0.95rem;
 }
 
 .time-grid {

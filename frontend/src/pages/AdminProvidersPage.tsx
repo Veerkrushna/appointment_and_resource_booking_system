@@ -24,6 +24,13 @@ const DAYS_OF_WEEK = [
   "Sunday",
 ];
 
+function formatProviderRating(rating: number) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(rating);
+}
+
 function AdminProvidersPage() {
   const { token } = useAuth();
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -35,19 +42,31 @@ function AdminProvidersPage() {
   const [showServicesDropdown, setShowServicesDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [selectedBlackoutDays, setSelectedBlackoutDays] = useState<string[]>([]);
+  const [selectedBlackoutDays, setSelectedBlackoutDays] = useState<string[]>(
+    [],
+  );
   const [showBlackoutDropdown, setShowBlackoutDropdown] = useState(false);
   const blackoutDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
-  const [providerServicesMap, setProviderServicesMap] = useState<Record<string, string[]>>({});
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(
+    null,
+  );
+  const [providerServicesMap, setProviderServicesMap] = useState<
+    Record<string, string[]>
+  >({});
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setShowServicesDropdown(false);
       }
-      if (blackoutDropdownRef.current && !blackoutDropdownRef.current.contains(event.target as Node)) {
+      if (
+        blackoutDropdownRef.current &&
+        !blackoutDropdownRef.current.contains(event.target as Node)
+      ) {
         setShowBlackoutDropdown(false);
       }
     }
@@ -85,7 +104,7 @@ function AdminProvidersPage() {
     try {
       const [providersData, servicesData] = await Promise.all([
         fetchProviders(token),
-        fetchServices()
+        fetchServices(),
       ]);
       setProviders(providersData);
       setAvailableServices(servicesData);
@@ -95,10 +114,13 @@ function AdminProvidersPage() {
         providersData.map(async (p) => {
           const pServices = await fetchProviderServices(p.id);
           const names = pServices
-            .map((ps: any) => servicesData.find((s) => s.id === ps.service_id)?.name)
+            .map(
+              (ps: any) =>
+                servicesData.find((s) => s.id === ps.service_id)?.name,
+            )
             .filter(Boolean) as string[];
           return { id: p.id, names };
-        })
+        }),
       );
       lookups.forEach((res) => {
         if (res.status === "fulfilled") {
@@ -134,11 +156,16 @@ function AdminProvidersPage() {
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) => {
     const { name, value, type } = e.target;
     if (type === "checkbox") {
-      setFormData((prev) => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
+      setFormData((prev) => ({
+        ...prev,
+        [name]: (e.target as HTMLInputElement).checked,
+      }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
@@ -146,7 +173,7 @@ function AdminProvidersPage() {
 
   const toggleBlackoutDay = (day: string) => {
     setSelectedBlackoutDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
   };
 
@@ -209,10 +236,11 @@ function AdminProvidersPage() {
       return;
     }
 
-    const timeFormatRegex = /^\s*(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s+to\s+(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s*$/;
+    const timeFormatRegex =
+      /^\s*(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s+to\s+(\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s*$/;
     if (!timeFormatRegex.test(formData.availability_time.trim())) {
       setFormError(
-        "Availability Time must be in format 'HH:MM am/pm to HH:MM am/pm' (e.g. 09:00 am to 05:00 pm)"
+        "Availability Time must be in format 'HH:MM am/pm to HH:MM am/pm' (e.g. 09:00 am to 05:00 pm)",
       );
       return;
     }
@@ -263,7 +291,11 @@ function AdminProvidersPage() {
         }
 
         await updateProvider(token, editingProviderId, updatePayload);
-        await updateProviderServices(token, editingProviderId, selectedServices);
+        await updateProviderServices(
+          token,
+          editingProviderId,
+          selectedServices,
+        );
       } else {
         const createPayload: ProviderCreate = {
           ...formData,
@@ -275,7 +307,11 @@ function AdminProvidersPage() {
 
         const createdProvider = await createProvider(token, createPayload);
         if (selectedServices.length > 0) {
-          await updateProviderServices(token, createdProvider.id, selectedServices);
+          await updateProviderServices(
+            token,
+            createdProvider.id,
+            selectedServices,
+          );
         }
       }
 
@@ -292,7 +328,9 @@ function AdminProvidersPage() {
     if (window.confirm("Are you sure to deactivate this account?")) {
       try {
         if (!token) return;
-        await updateProvider(token, provider.id, { availability_status: "inactive" });
+        await updateProvider(token, provider.id, {
+          availability_status: "inactive",
+        });
         loadData();
       } catch (err: any) {
         alert(err.message);
@@ -304,7 +342,9 @@ function AdminProvidersPage() {
     if (window.confirm("Are you sure to activate this account?")) {
       try {
         if (!token) return;
-        await updateProvider(token, provider.id, { availability_status: "available" });
+        await updateProvider(token, provider.id, {
+          availability_status: "available",
+        });
         loadData();
       } catch (err: any) {
         alert(err.message);
@@ -313,15 +353,15 @@ function AdminProvidersPage() {
   };
 
   const toggleService = (serviceId: string) => {
-    setSelectedServices(prev => 
-      prev.includes(serviceId) 
-        ? prev.filter(id => id !== serviceId)
-        : [...prev, serviceId]
+    setSelectedServices((prev) =>
+      prev.includes(serviceId)
+        ? prev.filter((id) => id !== serviceId)
+        : [...prev, serviceId],
     );
   };
 
   const selectedServiceNames = selectedServices
-    .map(id => availableServices.find(s => s.id === id)?.name)
+    .map((id) => availableServices.find((s) => s.id === id)?.name)
     .filter(Boolean)
     .join(", ");
 
@@ -352,16 +392,25 @@ function AdminProvidersPage() {
       </header>
 
       {showForm && (
-        <section className="admin-appointments-card" style={{ marginBottom: "2rem" }}>
+        <section
+          className="admin-appointments-card"
+          style={{ marginBottom: "2rem" }}
+        >
           <div className="admin-appointments-card__header">
             <h2>{editingProviderId ? "Edit Provider" : "Add New Provider"}</h2>
           </div>
           <div className="admin-appointments-card__content">
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <form
+              onSubmit={handleSubmit}
+              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+            >
               <div style={{ display: "flex", gap: "1rem" }}>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Name <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+                    Name{" "}
+                    <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                      *
+                    </span>
                   </label>
                   <input
                     required
@@ -373,7 +422,10 @@ function AdminProvidersPage() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Email <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+                    Email{" "}
+                    <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                      *
+                    </span>
                   </label>
                   <input
                     required
@@ -389,7 +441,10 @@ function AdminProvidersPage() {
               <div style={{ display: "flex", gap: "1rem" }}>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Phone <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+                    Phone{" "}
+                    <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                      *
+                    </span>
                   </label>
                   <input
                     required
@@ -401,7 +456,10 @@ function AdminProvidersPage() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Type <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+                    Type{" "}
+                    <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                      *
+                    </span>
                   </label>
                   <select
                     name="type"
@@ -417,23 +475,37 @@ function AdminProvidersPage() {
 
               <div style={{ position: "relative" }} ref={dropdownRef}>
                 <label>Services</label>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="services-dropdown-trigger"
                   onClick={() => setShowServicesDropdown(!showServicesDropdown)}
                 >
-                  {selectedServices.length > 0 
-                    ? <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90%" }}>{selectedServiceNames}</span>
-                    : "Select Services..."}
+                  {selectedServices.length > 0 ? (
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: "90%",
+                      }}
+                    >
+                      {selectedServiceNames}
+                    </span>
+                  ) : (
+                    "Select Services..."
+                  )}
                   <span style={{ fontSize: "0.8em" }}>▼</span>
                 </button>
                 {showServicesDropdown && (
                   <div className="services-dropdown-container">
                     <div className="services-checkbox-list">
-                      {availableServices.map(service => (
-                        <label key={service.id} className="service-checkbox-label">
-                          <input 
-                            type="checkbox" 
+                      {availableServices.map((service) => (
+                        <label
+                          key={service.id}
+                          className="service-checkbox-label"
+                        >
+                          <input
+                            type="checkbox"
                             checked={selectedServices.includes(service.id)}
                             onChange={() => toggleService(service.id)}
                           />
@@ -448,35 +520,66 @@ function AdminProvidersPage() {
               <div style={{ display: "flex", gap: "1rem" }}>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Availability Time <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+                    Availability Time{" "}
+                    <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                      *
+                    </span>
                   </label>
-                  <AntTimeRangePicker 
-                    value={formData.availability_time || ""} 
-                    onChange={(val) => setFormData((prev) => ({ ...prev, availability_time: val }))} 
+                  <AntTimeRangePicker
+                    value={formData.availability_time || ""}
+                    onChange={(val) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        availability_time: val,
+                      }))
+                    }
                   />
-                  <small style={{ color: "#64748b", fontSize: "0.75rem", display: "block", marginTop: "0.25rem" }}>
+                  <small
+                    style={{
+                      color: "#64748b",
+                      fontSize: "0.75rem",
+                      display: "block",
+                      marginTop: "0.25rem",
+                    }}
+                  >
                     Select start and end times with AM/PM
                   </small>
                 </div>
-                <div style={{ flex: 1, position: "relative" }} ref={blackoutDropdownRef}>
+                <div
+                  style={{ flex: 1, position: "relative" }}
+                  ref={blackoutDropdownRef}
+                >
                   <label>Blackout Days</label>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="services-dropdown-trigger"
-                    onClick={() => setShowBlackoutDropdown(!showBlackoutDropdown)}
+                    onClick={() =>
+                      setShowBlackoutDropdown(!showBlackoutDropdown)
+                    }
                   >
-                    {selectedBlackoutDays.length > 0 
-                      ? <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90%" }}>{selectedBlackoutDays.join(", ")}</span>
-                      : "Select Blackout Days..."}
+                    {selectedBlackoutDays.length > 0 ? (
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: "90%",
+                        }}
+                      >
+                        {selectedBlackoutDays.join(", ")}
+                      </span>
+                    ) : (
+                      "Select Blackout Days..."
+                    )}
                     <span style={{ fontSize: "0.8em" }}>▼</span>
                   </button>
                   {showBlackoutDropdown && (
                     <div className="services-dropdown-container">
                       <div className="services-checkbox-list">
-                        {DAYS_OF_WEEK.map(day => (
+                        {DAYS_OF_WEEK.map((day) => (
                           <label key={day} className="service-checkbox-label">
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
                               checked={selectedBlackoutDays.includes(day)}
                               onChange={() => toggleBlackoutDay(day)}
                             />
@@ -491,7 +594,9 @@ function AdminProvidersPage() {
 
               <div>
                 <label>Photo (.jpg, .jpeg)</label>
-                <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+                <div
+                  style={{ display: "flex", gap: "1rem", alignItems: "center" }}
+                >
                   <input
                     type="file"
                     accept=".jpg,.jpeg"
@@ -510,18 +615,32 @@ function AdminProvidersPage() {
                           throw new Error(errorData.detail || "Upload failed");
                         }
                         const data = await res.json();
-                        setFormData((prev) => ({ ...prev, photo: `http://localhost:8000${data.url}` }));
+                        setFormData((prev) => ({
+                          ...prev,
+                          photo: `http://localhost:8000${data.url}`,
+                        }));
                       } catch (err: any) {
                         setFormError(err.message);
                       }
                     }}
-                    style={{ flex: 1, padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+                    style={{
+                      flex: 1,
+                      padding: "0.5rem",
+                      border: "1px solid #ccc",
+                      borderRadius: "4px",
+                    }}
                   />
                   {formData.photo && (
-                    <img 
-                      src={formData.photo} 
-                      alt="Preview" 
-                      style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} 
+                    <img
+                      src={formData.photo}
+                      alt="Preview"
+                      style={{
+                        width: "40px",
+                        height: "40px",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        flexShrink: 0,
+                      }}
                     />
                   )}
                 </div>
@@ -529,24 +648,43 @@ function AdminProvidersPage() {
 
               <div>
                 <label>Bio</label>
-                <textarea name="bio" value={formData.bio || ""} onChange={handleInputChange} style={{ width: "100%", padding: "0.5rem", minHeight: "80px" }} />
+                <textarea
+                  name="bio"
+                  value={formData.bio || ""}
+                  onChange={handleInputChange}
+                  style={{
+                    width: "100%",
+                    padding: "0.5rem",
+                    minHeight: "80px",
+                  }}
+                />
               </div>
 
               <div>
                 <label>Specializations (comma separated)</label>
-                <input 
-                  name="specializations" 
-                  value={specializationsInput} 
-                  onChange={(e) => setSpecializationsInput(e.target.value)} 
-                  style={{ width: "100%", padding: "0.5rem" }} 
+                <input
+                  name="specializations"
+                  value={specializationsInput}
+                  onChange={(e) => setSpecializationsInput(e.target.value)}
+                  style={{ width: "100%", padding: "0.5rem" }}
                 />
               </div>
 
               <div style={{ display: "flex", gap: "1rem" }}>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Password {!editingProviderId && <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>}
-                    {editingProviderId && <small style={{ color: "#64748b", fontWeight: "normal" }}> (leave blank to keep current)</small>}
+                    Password{" "}
+                    {!editingProviderId && (
+                      <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                        *
+                      </span>
+                    )}
+                    {editingProviderId && (
+                      <small style={{ color: "#64748b", fontWeight: "normal" }}>
+                        {" "}
+                        (leave blank to keep current)
+                      </small>
+                    )}
                   </label>
                   <input
                     required={!editingProviderId}
@@ -559,7 +697,12 @@ function AdminProvidersPage() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <label>
-                    Confirm Password {!editingProviderId && <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>}
+                    Confirm Password{" "}
+                    {!editingProviderId && (
+                      <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                        *
+                      </span>
+                    )}
                   </label>
                   <input
                     required={!editingProviderId}
@@ -572,7 +715,14 @@ function AdminProvidersPage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginTop: "0.5rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "1.25rem",
+                  marginTop: "0.5rem",
+                }}
+              >
                 <button type="submit" className="orange-action-btn">
                   {editingProviderId ? "Update Provider" : "Save Provider"}
                 </button>
@@ -624,6 +774,7 @@ function AdminProvidersPage() {
                   <th>Provider</th>
                   <th>Contact</th>
                   <th>Type / Status</th>
+                  <th>Rating</th>
                   <th>Availability</th>
                   <th>Services</th>
                   <th>User Login</th>
@@ -634,7 +785,13 @@ function AdminProvidersPage() {
                 {providers.map((provider) => (
                   <tr key={provider.id}>
                     <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "1rem",
+                        }}
+                      >
                         {provider.photo && (
                           <img
                             src={provider.photo}
@@ -650,7 +807,13 @@ function AdminProvidersPage() {
                         <div>
                           <strong>{provider.name}</strong>
                           {provider.bio && (
-                            <p style={{ margin: 0, fontSize: "0.85rem", color: "gray" }}>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: "0.85rem",
+                                color: "gray",
+                              }}
+                            >
                               {provider.bio.substring(0, 50)}...
                             </p>
                           )}
@@ -664,7 +827,9 @@ function AdminProvidersPage() {
                       </div>
                     </td>
                     <td>
-                      <span style={{ textTransform: "capitalize" }}>{provider.type}</span>
+                      <span style={{ textTransform: "capitalize" }}>
+                        {provider.type}
+                      </span>
                       <br />
                       <span
                         style={{
@@ -677,6 +842,22 @@ function AdminProvidersPage() {
                       >
                         {provider.availability_status}
                       </span>
+                    </td>
+                    <td>
+                      {provider.type === "person" &&
+                      provider.average_rating != null &&
+                      (provider.rating_count ?? 0) > 0 ? (
+                        <span
+                          className="admin-provider-rating"
+                          aria-label={`${formatProviderRating(provider.average_rating)} from ${provider.rating_count} reviews`}
+                        >
+                          <span aria-hidden="true">★</span>{" "}
+                          {formatProviderRating(provider.average_rating)} (
+                          {provider.rating_count})
+                        </span>
+                      ) : (
+                        <span className="admin-provider-rating--empty">—</span>
+                      )}
                     </td>
                     <td>
                       {provider.availability_time ? (
@@ -698,22 +879,30 @@ function AdminProvidersPage() {
                           Not set
                         </span>
                       )}
-                      {provider.blackout_days && provider.blackout_days.length > 0 && (
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "#64748b",
-                            marginTop: "0.25rem",
-                          }}
-                        >
-                          <span style={{ fontWeight: 600 }}>Off:</span>{" "}
-                          {provider.blackout_days.join(", ")}
-                        </div>
-                      )}
+                      {provider.blackout_days &&
+                        provider.blackout_days.length > 0 && (
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#64748b",
+                              marginTop: "0.25rem",
+                            }}
+                          >
+                            <span style={{ fontWeight: 600 }}>Off:</span>{" "}
+                            {provider.blackout_days.join(", ")}
+                          </div>
+                        )}
                     </td>
                     <td>
-                      {providerServicesMap[provider.id] && providerServicesMap[provider.id].length > 0 ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                      {providerServicesMap[provider.id] &&
+                      providerServicesMap[provider.id].length > 0 ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "0.35rem",
+                          }}
+                        >
                           {providerServicesMap[provider.id].map((name) => (
                             <span
                               key={name}
@@ -732,18 +921,30 @@ function AdminProvidersPage() {
                           ))}
                         </div>
                       ) : (
-                        <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>None</span>
+                        <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
+                          None
+                        </span>
                       )}
                     </td>
                     <td>
                       {provider.user_id ? (
-                        <span style={{ color: "green", fontSize: "0.85rem" }}>Linked</span>
+                        <span style={{ color: "green", fontSize: "0.85rem" }}>
+                          Linked
+                        </span>
                       ) : (
-                        <span style={{ color: "gray", fontSize: "0.85rem" }}>No Login</span>
+                        <span style={{ color: "gray", fontSize: "0.85rem" }}>
+                          No Login
+                        </span>
                       )}
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          justifyContent: "center",
+                        }}
+                      >
                         <button
                           type="button"
                           className="admin-table-edit-btn"
@@ -755,7 +956,11 @@ function AdminProvidersPage() {
                           <button
                             type="button"
                             className="admin-table-edit-btn"
-                            style={{ color: "#dc2626", borderColor: "#fca5a5", backgroundColor: "#fee2e2" }}
+                            style={{
+                              color: "#dc2626",
+                              borderColor: "#fca5a5",
+                              backgroundColor: "#fee2e2",
+                            }}
                             onClick={() => handleDeactivate(provider)}
                           >
                             Deactivate
@@ -764,7 +969,11 @@ function AdminProvidersPage() {
                           <button
                             type="button"
                             className="admin-table-edit-btn"
-                            style={{ color: "#16a34a", borderColor: "#86efac", backgroundColor: "#dcfce7" }}
+                            style={{
+                              color: "#16a34a",
+                              borderColor: "#86efac",
+                              backgroundColor: "#dcfce7",
+                            }}
                             onClick={() => handleActivate(provider)}
                           >
                             Activate
@@ -784,4 +993,3 @@ function AdminProvidersPage() {
 }
 
 export default AdminProvidersPage;
-
