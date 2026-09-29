@@ -7,10 +7,11 @@ from app.api.routes.appointments import router as appointments_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.availability import router as availability_router
 from app.api.routes.customer import router as customer_router
+from app.api.routes.password_reset import router as password_reset_router
 from app.api.routes.providers import router as providers_router
+from app.api.routes.reviews import router as reviews_router
 from app.api.routes.services import router as services_router
 from app.api.routes.terms import router as terms_router
-from app.api.routes.password_reset import router as password_reset_router
 from app.api.routes.uploads import router as uploads_router
 from app.core.config import settings
 
@@ -26,6 +27,7 @@ app.include_router(providers_router)
 app.include_router(services_router)
 app.include_router(availability_router)
 app.include_router(appointments_router)
+app.include_router(reviews_router)
 app.include_router(admin_router)
 app.include_router(admin_users_router)
 app.include_router(auth_router)
