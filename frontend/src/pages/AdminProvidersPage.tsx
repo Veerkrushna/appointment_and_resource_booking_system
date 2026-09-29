@@ -55,6 +55,24 @@ function AdminProvidersPage() {
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [providerServicesMap, setProviderServicesMap] = useState<Record<string, string[]>>({});
 
+  const [sortCategory, setSortCategory] = useState<string>("");
+  const [sortOption, setSortOption] = useState<string>("");
+
+  const filteredProviders = useMemo(() => {
+    let result = providers;
+    if (sortCategory && sortOption) {
+      if (sortCategory === "Status") {
+        result = result.filter(p => p.availability_status === sortOption);
+      } else if (sortCategory === "Type") {
+        result = result.filter(p => p.type === sortOption);
+      } else if (sortCategory === "Services") {
+        const serviceName = availableServices.find(s => s.id === sortOption)?.name;
+        result = result.filter(p => providerServicesMap[p.id]?.includes(serviceName || ''));
+      }
+    }
+    return result;
+  }, [providers, sortCategory, sortOption, providerServicesMap, availableServices]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
