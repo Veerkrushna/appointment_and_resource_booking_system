@@ -456,5 +456,101 @@ def seed_database():
         db.close()
 
 
+def create_appointments(db, providers, services, users):
+    appointments = [
+        # Aarav Patel → Dr. Ananya Sharma
+        Appointment(
+            service_id=services[0].id,
+            provider_id=providers[0].id,
+            customer_id=users[4].id,
+            user_name=users[4].name,
+            user_email=users[4].email,
+            user_phone=users[4].phone,
+            appointment_start=datetime(2026, 9, 10, 10, 0, tzinfo=UTC),
+            appointment_end=datetime(2026, 9, 10, 10, 30, tzinfo=UTC),
+            duration_minutes=30,
+            notes="Initial consultation",
+            status=AppointmentStatus.COMPLETED,
+        ),
+        # Meera Shah → Dr. Priya Nair
+        Appointment(
+            service_id=services[1].id,
+            provider_id=providers[2].id,
+            customer_id=users[5].id,
+            user_name=users[5].name,
+            user_email=users[5].email,
+            user_phone=users[5].phone,
+            appointment_start=datetime(2026, 9, 11, 11, 0, tzinfo=UTC),
+            appointment_end=datetime(2026, 9, 11, 11, 20, tzinfo=UTC),
+            duration_minutes=20,
+            notes="Follow-up appointment",
+            status=AppointmentStatus.COMPLETED,
+        ),
+        # Rohan Deshmukh → Dr. Rahul Mehta
+        Appointment(
+            service_id=services[2].id,
+            provider_id=providers[1].id,
+            customer_id=users[6].id,
+            user_name=users[6].name,
+            user_email=users[6].email,
+            user_phone=users[6].phone,
+            appointment_start=datetime(2026, 9, 14, 10, 0, tzinfo=UTC),
+            appointment_end=datetime(2026, 9, 14, 10, 45, tzinfo=UTC),
+            duration_minutes=45,
+            notes="Specialist consultation",
+            status=AppointmentStatus.COMPLETED,
+        ),
+        # Kavya Joshi → Dr. Priya Nair
+        Appointment(
+            service_id=services[3].id,
+            provider_id=providers[2].id,
+            customer_id=users[7].id,
+            user_name=users[7].name,
+            user_email=users[7].email,
+            user_phone=users[7].phone,
+            appointment_start=datetime(2026, 9, 18, 15, 0, tzinfo=UTC),
+            appointment_end=datetime(2026, 9, 18, 16, 0, tzinfo=UTC),
+            duration_minutes=60,
+            notes="Therapy session",
+            status=AppointmentStatus.COMPLETED,
+        ),
+        # Aarav Patel → Dr. Rahul Mehta
+        Appointment(
+            service_id=services[0].id,
+            provider_id=providers[1].id,
+            customer_id=users[4].id,
+            user_name=users[4].name,
+            user_email=users[4].email,
+            user_phone=users[4].phone,
+            appointment_start=datetime(2026, 9, 20, 14, 0, tzinfo=UTC),
+            appointment_end=datetime(2026, 9, 20, 14, 30, tzinfo=UTC),
+            duration_minutes=30,
+            notes="General consultation",
+            status=AppointmentStatus.COMPLETED,
+        ),
+        # Meera Shah → Dr. Ananya Sharma
+        Appointment(
+            service_id=services[0].id,
+            provider_id=providers[0].id,
+            customer_id=users[5].id,
+            user_name=users[5].name,
+            user_email=users[5].email,
+            user_phone=users[5].phone,
+            appointment_start=datetime(2026, 9, 22, 9, 30, tzinfo=UTC),
+            appointment_end=datetime(2026, 9, 22, 10, 0, tzinfo=UTC),
+            duration_minutes=30,
+            notes="General consultation",
+            status=AppointmentStatus.COMPLETED,
+        ),
+    ]
+
+    db.add_all(appointments)
+    db.flush()
+
+    print(f"Created {len(appointments)} appointments.")
+
+    return appointments
+
+
 if __name__ == "__main__":
     seed_database()

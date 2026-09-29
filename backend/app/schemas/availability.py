@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 class AvailabilitySlot(BaseModel):
     provider_id: UUID
     provider_name: str
+    provider_average_rating: float | None = None
+    provider_rating_count: int = 0
     service_id: UUID
     date: date
     start: datetime

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import ProviderRatingSelect from "../components/ProviderRatingSelect";
 
 type Service = {
   id: string;
@@ -28,6 +29,8 @@ type AvailabilitySlot = {
   start: string;
   end: string;
   duration_minutes: number;
+  provider_average_rating?: number | null;
+  provider_rating_count?: number;
 };
 
 type AvailabilityResponse = {
@@ -38,9 +41,14 @@ type AvailabilityResponse = {
   total_pages: number;
 };
 
-type AppointmentResponse = {
+type ProviderOption = {
   id: string;
+  name: string;
+  averageRating: number | null;
+  ratingCount: number;
 };
+
+type ProviderType = "person" | "resource";
 
 type BookingDraft = {
   serviceId: string | null;
@@ -174,6 +182,44 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
+async function fetchAvailabilitySlots(
+  serviceId: string,
+  date: string,
+  providerId?: string,
+) {
+  const query = new URLSearchParams({
+    service_id: serviceId,
+    start_date: date,
+    end_date: date,
+  });
+  if (providerId) query.set("provider_id", providerId);
+
+  const response = await fetch(`/api/availability/slots?${query.toString()}`);
+  if (!response.ok) {
+    throw new Error("Unable to load available times.");
+  }
+
+  const data: AvailabilityResponse = await response.json();
+  return data.slots;
+}
+
+function getProviderOptions(slots: AvailabilitySlot[]): ProviderOption[] {
+  const providers = new Map<string, ProviderOption>();
+  for (const slot of slots) {
+    if (!providers.has(slot.provider_id)) {
+      providers.set(slot.provider_id, {
+        id: slot.provider_id,
+        name: slot.provider_name,
+        averageRating: slot.provider_average_rating ?? null,
+        ratingCount: slot.provider_rating_count ?? 0,
+      });
+    }
+  }
+  return [...providers.values()].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+}
+
 function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -244,6 +290,17 @@ function BookingPage() {
   const [service, setService] = useState<Service | null>(null);
   const [date, setDate] = useState(initialBookingState.date);
   const [availableSlots, setAvailableSlots] = useState<AvailabilitySlot[]>([]);
+  const [allAvailableSlots, setAllAvailableSlots] = useState<
+    AvailabilitySlot[]
+  >([]);
+  const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
+  const [providerTypes, setProviderTypes] = useState<
+    Record<string, ProviderType>
+  >({});
+  const [selectedProviderId, setSelectedProviderId] = useState(providerId);
+  const selectedProviderIdRef = useRef(providerId);
+  const selectedSlotRef = useRef(initialBookingState.selectedSlot);
+  const availabilityRequestId = useRef(0);
   const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(
     initialBookingState.selectedSlot,
   );
@@ -253,12 +310,14 @@ function BookingPage() {
   );
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const bookingSubmissionInFlight = useRef(false);
   const [details, setDetails] = useState<BookingDetails>(
     initialBookingState.details,
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [bookingOutcomeUnknown, setBookingOutcomeUnknown] = useState(false);
   const [step, setStep] = useState(initialBookingState.step);
 
   useEffect(() => {
@@ -303,79 +362,122 @@ function BookingPage() {
 
   useEffect(() => {
     let isCurrent = true;
+    fetch("/api/providers")
+      .then((response) => {
+        if (!response.ok) return [];
+        return response.json() as Promise<{ id: string; type: string }[]>;
+      })
+      .then((providers) => {
+        if (!isCurrent) return;
+        const types: Record<string, ProviderType> = {};
+        for (const provider of providers) {
+          const type = provider.type.toLowerCase();
+          if (type === "person" || type === "resource") {
+            types[provider.id] = type;
+          }
+        }
+        setProviderTypes(types);
+      })
+      .catch(() => {
+        // Provider types are supplemental; availability remains usable without them.
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    selectedSlotRef.current = selectedSlot;
+  }, [selectedSlot]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    const requestId = ++availabilityRequestId.current;
 
     if (!date || !serviceId) {
       return () => {
         isCurrent = false;
       };
     }
-
     const selectedServiceId = serviceId;
-    const selectedSlotIsCurrentContext = slotMatchesCurrentContext(
-      selectedSlot,
-      selectedServiceId,
-      providerId,
-      date,
-    );
+    const selectedDate = date;
 
     async function loadAvailability() {
       setAvailabilityLoading(true);
       setAvailabilityError(null);
       setAvailableSlots([]);
-
-      if (selectedSlot !== null && !selectedSlotIsCurrentContext) {
-        setSelectedSlot(null);
-      }
-
-      const query = new URLSearchParams({
-        service_id: selectedServiceId,
-        start_date: date,
-        end_date: date,
-      });
-      if (providerId) {
-        query.set("provider_id", providerId);
-      }
+      setAllAvailableSlots([]);
+      setProviderOptions([]);
+      let allSlotsLoaded = false;
 
       try {
-        const response = await fetch(
-          `/api/availability/slots?${query.toString()}`,
+        const allSlots = await fetchAvailabilitySlots(
+          selectedServiceId,
+          selectedDate,
         );
-        if (!response.ok) {
-          throw new Error("Unable to load available times.");
-        }
+        if (!isCurrent || requestId !== availabilityRequestId.current) return;
 
-        const data: AvailabilityResponse = await response.json();
-        if (isCurrent) {
-          setAvailableSlots(data.slots);
+        allSlotsLoaded = true;
+        setAllAvailableSlots(allSlots);
+        const options = getProviderOptions(allSlots);
+        setProviderOptions(options);
 
-          if (
-            selectedSlot !== null &&
-            selectedSlotIsCurrentContext &&
-            !data.slots.some(
-              (slot) =>
-                slot.service_id === selectedServiceId &&
-                slot.provider_id === selectedSlot.provider_id &&
-                slot.date === date &&
-                slot.start === selectedSlot.start,
-            )
-          ) {
-            setSelectedSlot(null);
-            setBookingError(
-              "The previously selected time is no longer available. Please choose another one.",
+        const requestedProviderId = selectedProviderIdRef.current;
+        let slots = allSlots;
+        if (requestedProviderId) {
+          if (options.some((provider) => provider.id === requestedProviderId)) {
+            slots = await fetchAvailabilitySlots(
+              selectedServiceId,
+              selectedDate,
+              requestedProviderId,
             );
-            setStep(1);
+          } else {
+            selectedProviderIdRef.current = "";
+            setSelectedProviderId("");
           }
         }
-      } catch (requestError) {
-        if (isCurrent) {
-          setAvailabilityError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Unable to load available times.",
+
+        if (!isCurrent || requestId !== availabilityRequestId.current) return;
+        setAvailableSlots(slots);
+
+        const currentSlot = selectedSlotRef.current;
+        const slotMatchesContext = slotMatchesCurrentContext(
+          currentSlot,
+          selectedServiceId,
+          requestedProviderId,
+          selectedDate,
+        );
+        if (
+          currentSlot &&
+          (!slotMatchesContext ||
+            !slots.some(
+              (slot) =>
+                slot.service_id === selectedServiceId &&
+                slot.provider_id === currentSlot.provider_id &&
+                slot.date === selectedDate &&
+                slot.start === currentSlot.start,
+            ))
+        ) {
+          selectedSlotRef.current = null;
+          setSelectedSlot(null);
+          setBookingError(
+            "The previously selected time is no longer available. Please choose another one.",
           );
+          setStep(1);
+        }
+      } catch {
+        if (isCurrent && requestId === availabilityRequestId.current) {
+          if (!allSlotsLoaded) {
+            selectedProviderIdRef.current = "";
+            setSelectedProviderId("");
+            setAllAvailableSlots([]);
+            setProviderOptions([]);
+          }
+          setAvailabilityError("Unable to load available times.");
         }
       } finally {
-        if (isCurrent) {
+        if (isCurrent && requestId === availabilityRequestId.current) {
           setAvailabilityLoading(false);
         }
       }
@@ -386,7 +488,45 @@ function BookingPage() {
     return () => {
       isCurrent = false;
     };
-  }, [date, providerId, selectedSlot, serviceId]);
+  }, [date, serviceId]);
+
+  function handleProviderChange(nextProviderId: string) {
+    selectedProviderIdRef.current = nextProviderId;
+    setSelectedProviderId(nextProviderId);
+    selectedSlotRef.current = null;
+    setSelectedSlot(null);
+    setBookingError(null);
+
+    const requestId = ++availabilityRequestId.current;
+    if (!nextProviderId) {
+      setAvailabilityError(null);
+      setAvailableSlots(allAvailableSlots);
+      setAvailabilityLoading(false);
+      return;
+    }
+
+    if (!date || !serviceId) return;
+
+    setAvailabilityLoading(true);
+    setAvailabilityError(null);
+    void fetchAvailabilitySlots(serviceId, date, nextProviderId)
+      .then((slots) => {
+        if (requestId === availabilityRequestId.current) {
+          setAvailableSlots(slots);
+        }
+      })
+      .catch(() => {
+        if (requestId === availabilityRequestId.current) {
+          setAvailableSlots([]);
+          setAvailabilityError("Unable to load available times.");
+        }
+      })
+      .finally(() => {
+        if (requestId === availabilityRequestId.current) {
+          setAvailabilityLoading(false);
+        }
+      });
+  }
 
   const steps = useMemo(
     () => ["Date & time", "Your details", "Confirmation"],
@@ -401,7 +541,7 @@ function BookingPage() {
 
     const draft: BookingDraft = {
       serviceId,
-      providerId: providerId || selectedSlot?.provider_id || null,
+      providerId: selectedProviderId || selectedSlot?.provider_id || null,
       step,
       date,
       selectedSlot,
@@ -413,7 +553,15 @@ function BookingPage() {
       BOOKING_DRAFT_STORAGE_KEY,
       JSON.stringify(draft),
     );
-  }, [bookingMode, date, details, providerId, selectedSlot, serviceId, step]);
+  }, [
+    bookingMode,
+    date,
+    details,
+    selectedProviderId,
+    selectedSlot,
+    serviceId,
+    step,
+  ]);
 
   function handleDetailsChange(field: keyof BookingDetails, value: string) {
     setDetails((current) => ({ ...current, [field]: value }));
@@ -455,7 +603,12 @@ function BookingPage() {
   }
 
   async function confirmBooking() {
-    if (!selectedSlot || !service) {
+    if (
+      !selectedSlot ||
+      !service ||
+      bookingSubmissionInFlight.current ||
+      isConfirmed
+    ) {
       return;
     }
 
@@ -471,8 +624,12 @@ function BookingPage() {
       return;
     }
 
+    bookingSubmissionInFlight.current = true;
     setIsSubmitting(true);
     setBookingError(null);
+    setBookingOutcomeUnknown(false);
+    let responseReceived = false;
+    let responseStatus = 0;
     try {
       const response = await fetch("/api/appointments", {
         method: "POST",
@@ -490,6 +647,8 @@ function BookingPage() {
           notes: details.notes || null,
         }),
       });
+      responseReceived = true;
+      responseStatus = response.status;
 
       if (!response.ok) {
         let message = "Unable to confirm this booking.";
@@ -504,25 +663,27 @@ function BookingPage() {
         throw new Error(message);
       }
 
-      const appointment: AppointmentResponse = await response.json();
-      if (appointment.id) {
-        window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
-        setIsConfirmed(true);
-        setAvailableSlots((current) =>
-          current.filter(
-            (slot) =>
-              slot.start !== selectedSlot.start ||
-              slot.provider_id !== selectedSlot.provider_id,
-          ),
-        );
-      }
+      window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+      setIsConfirmed(true);
+      setAvailableSlots((current) =>
+        current.filter(
+          (slot) =>
+            slot.start !== selectedSlot.start ||
+            slot.provider_id !== selectedSlot.provider_id,
+        ),
+      );
     } catch (requestError) {
+      const outcomeUnknown = !responseReceived || responseStatus >= 500;
+      setBookingOutcomeUnknown(outcomeUnknown);
       setBookingError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to confirm this booking.",
+        outcomeUnknown
+          ? "We couldn't confirm whether your booking was created. Check My Appointments before trying again."
+          : requestError instanceof Error
+            ? requestError.message
+            : "Unable to confirm this booking.",
       );
     } finally {
+      bookingSubmissionInFlight.current = false;
       setIsSubmitting(false);
     }
   }
@@ -591,6 +752,10 @@ function BookingPage() {
           </p>
           <dl>
             <div>
+              <dt>Provider</dt>
+              <dd>{selectedSlot?.provider_name || "Not selected"}</dd>
+            </div>
+            <div>
               <dt>Duration</dt>
               <dd>{service.duration_minutes} min</dd>
             </div>
@@ -642,6 +807,13 @@ function BookingPage() {
                     <span>Available times</span>
                     <small>{formatDate(date)}</small>
                   </div>
+                  <ProviderRatingSelect
+                    providers={providerOptions}
+                    providerTypes={providerTypes}
+                    selectedProviderId={selectedProviderId}
+                    disabled={availabilityLoading}
+                    onChange={handleProviderChange}
+                  />
                   {availabilityLoading && (
                     <p className="status-message">Loading available times...</p>
                   )}
@@ -657,7 +829,9 @@ function BookingPage() {
                     !availabilityError &&
                     availableSlots.length === 0 && (
                       <p className="status-message">
-                        No available times for this date.
+                        {selectedProviderId
+                          ? `No available appointments for ${providerOptions.find((provider) => provider.id === selectedProviderId)?.name ?? "this provider"} on this date.`
+                          : "No available times for this date."}
                       </p>
                     )}
                   {!availabilityLoading &&
@@ -836,6 +1010,10 @@ function BookingPage() {
                 </strong>
                 <span>{details.email}</span>
                 <span>
+                  Provider: {selectedSlot?.provider_name || "Not selected"}
+                </span>
+                <span>Service: {service.name}</span>
+                <span>
                   {formatDate(date)} at{" "}
                   {selectedSlot
                     ? formatTime(selectedSlot.start)
@@ -853,7 +1031,7 @@ function BookingPage() {
                   </button>
                   <button
                     className="primary-button"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || bookingOutcomeUnknown}
                     onClick={() => void confirmBooking()}
                     type="button"
                   >
@@ -861,6 +1039,11 @@ function BookingPage() {
                     <span aria-hidden="true">&#8594;</span>
                   </button>
                 </div>
+              )}
+              {bookingOutcomeUnknown && (
+                <Link className="service-book-link" to="/appointments">
+                  Check My Appointments
+                </Link>
               )}
               {bookingError && (
                 <p

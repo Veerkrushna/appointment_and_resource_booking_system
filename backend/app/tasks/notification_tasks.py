@@ -11,20 +11,39 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.services.notifications import deliver_notification
 
+logger = logging.getLogger(__name__)
+
+
+def _enqueue(task, appointment: Appointment, eta: datetime | None = None) -> None:
+    appointment_id = str(appointment.id)
+
+    def enqueue() -> None:
+        try:
+            if eta is None:
+                task.delay(appointment_id)
+            else:
+                task.apply_async(args=[appointment_id], eta=eta, retry=False)
+        except Exception:
+            logger.exception(
+                "Unable to enqueue notification for appointment %s", appointment_id
+            )
+
+    try:
+        Thread(target=enqueue, daemon=True).start()
+    except Exception:
+        logger.exception(
+            "Unable to start notification enqueue for appointment %s",
+            appointment_id,
+        )
+
+
+def enqueue_confirmation_notification(appointment: Appointment) -> None:
+    _enqueue(send_confirmation_notification, appointment)
+
 
 def _schedule(task, appointment: Appointment, eta: datetime) -> None:
     if eta > datetime.now(UTC):
-
-        def enqueue() -> None:
-            try:
-                task.apply_async(args=[str(appointment.id)], eta=eta, retry=False)
-            except Exception:
-                logging.getLogger(__name__).exception(
-                    "Unable to schedule notification for appointment %s",
-                    appointment.id,
-                )
-
-        Thread(target=enqueue, daemon=True).start()
+        _enqueue(task, appointment, eta)
 
 
 def schedule_appointment_notifications(appointment: Appointment) -> None:

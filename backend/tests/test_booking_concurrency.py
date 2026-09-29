@@ -137,3 +137,61 @@ def test_concurrent_bookings_allow_only_one_success(booking_records):
     )
     verification_db.close()
     assert appointment_count == 1
+
+
+def test_notification_enqueue_failure_keeps_committed_booking(
+    booking_records, monkeypatch
+):
+    provider_id, service_id = booking_records
+
+    def fail_notification_enqueue(*_args):
+        raise ConnectionError("notification broker unavailable")
+
+    def fail_reminder_schedule(_appointment):
+        raise RuntimeError("reminder scheduler unavailable")
+
+    class ImmediateThread:
+        def __init__(self, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(
+        "app.tasks.notification_tasks.send_confirmation_notification.delay",
+        fail_notification_enqueue,
+    )
+    monkeypatch.setattr("app.tasks.notification_tasks.Thread", ImmediateThread)
+    monkeypatch.setattr(
+        "app.services.booking.schedule_appointment_notifications",
+        fail_reminder_schedule,
+    )
+
+    days_until_monday = (7 - datetime.now(UTC).weekday()) % 7
+    if days_until_monday == 0:
+        days_until_monday = 7
+    appointment_start = datetime.combine(
+        datetime.now(UTC).date() + timedelta(days=days_until_monday),
+        time(10, 0),
+        tzinfo=UTC,
+    )
+    payload = AppointmentCreate(
+        service_id=service_id,
+        provider_id=provider_id,
+        user_name="Notification Failure Test",
+        user_email=f"notification-failure-{uuid4()}@example.com",
+        appointment_start=appointment_start,
+    )
+
+    db = SessionLocal()
+    appointment = create_appointment(db, payload)
+    appointment_id = appointment.id
+    db.close()
+
+    verification_db = SessionLocal()
+    persisted_appointment = verification_db.get(Appointment, appointment_id)
+    verification_db.close()
+
+    assert persisted_appointment is not None
+    assert persisted_appointment.provider_id == provider_id

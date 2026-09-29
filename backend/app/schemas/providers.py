@@ -55,6 +55,11 @@ class ProviderResponse(BaseModel):
     blackout_days: list[str] | None = Field(default_factory=list)
 
 
+class ProviderListResponse(ProviderResponse):
+    average_rating: float | None = None
+    rating_count: int = 0
+
+
 class AvailabilityWindow(BaseModel):
     day_of_week: int = Field(ge=0, le=6)
     start_time: time | None = None

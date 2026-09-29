@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, ForeignKey, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
         ProviderBreak,
     )
     from app.models.provider_service import ProviderService
+    from app.models.review import Review
     from app.models.user import User
 
 
@@ -101,6 +102,9 @@ class Provider(Base):
     )
 
     user: Mapped["User | None"] = relationship(back_populates="provider_profile")
+    reviews: Mapped[list["Review"]] = relationship(
+        back_populates="provider", cascade="all, delete", passive_deletes=True
+    )
 
     def __repr__(self) -> str:
         return (

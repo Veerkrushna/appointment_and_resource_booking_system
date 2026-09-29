@@ -23,6 +23,7 @@ from app.models.notification import Notification
 
 if TYPE_CHECKING:
     from app.models.providers import Provider
+    from app.models.review import Review
     from app.models.service import Service
     from app.models.user import User
 
@@ -110,4 +111,7 @@ class Appointment(Base):
     )
     notifications: Mapped[list["Notification"]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan"
+    )
+    review: Mapped["Review | None"] = relationship(
+        back_populates="appointment", cascade="all, delete-orphan", passive_deletes=True
     )
