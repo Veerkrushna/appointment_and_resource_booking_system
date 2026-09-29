@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -18,12 +19,14 @@ from app.schemas.appointment import (
     AppointmentUpdate,
 )
 from app.tasks.notification_tasks import (
+    enqueue_confirmation_notification,
     schedule_appointment_notifications,
     send_cancellation_notification,
-    send_confirmation_notification,
     send_confirmation_status_notification,
     send_reschedule_notification,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class BookingValidationError(ValueError):
@@ -162,9 +165,19 @@ def create_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
-    send_confirmation_notification.delay(str(appointment.id))
-    db.refresh(appointment)
-    schedule_appointment_notifications(appointment)
+    try:
+        enqueue_confirmation_notification(appointment)
+    except Exception:
+        logger.exception(
+            "Unable to enqueue confirmation notification for appointment %s",
+            appointment.id,
+        )
+    try:
+        schedule_appointment_notifications(appointment)
+    except Exception:
+        logger.exception(
+            "Unable to schedule notifications for appointment %s", appointment.id
+        )
     return appointment
 
 

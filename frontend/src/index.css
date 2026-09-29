@@ -2510,6 +2510,33 @@ main {
   font-weight: 400;
 }
 
+.booking-provider-filter {
+  width: min(100%, 22rem);
+  margin: 0 0 1rem;
+}
+
+.booking-provider-filter select {
+  width: 100%;
+  min-height: 2.9rem;
+  border: 1px solid #ccd8d0;
+  border-radius: 5px;
+  padding: 0.7rem 0.8rem;
+  background: #fff;
+  color: #18312f;
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.booking-provider-filter select:focus {
+  border-color: #557b69;
+  outline: 2px solid #d2e2d4;
+}
+
+.booking-provider-filter select:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .time-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
