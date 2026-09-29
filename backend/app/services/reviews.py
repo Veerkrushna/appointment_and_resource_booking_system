@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.providers import ProviderType
 from app.models.review import Review
 from app.models.user import User
 from app.schemas.review import ReviewCreate, ReviewUpdate
@@ -30,6 +31,10 @@ class AppointmentNotCompletedError(ReviewServiceError):
     pass
 
 
+class ProviderNotReviewableError(ReviewServiceError):
+    pass
+
+
 class ReviewAlreadyExistsError(ReviewServiceError):
     pass
 
@@ -43,6 +48,11 @@ def _raise_persistence_error(db: Session, error: SQLAlchemyError) -> None:
     raise ReviewPersistenceError from error
 
 
+def _ensure_reviewable_provider(appointment: Appointment) -> None:
+    if appointment.provider.type != ProviderType.PERSON:
+        raise ProviderNotReviewableError
+
+
 def create_review(db: Session, customer: User, payload: ReviewCreate) -> Review:
     try:
         appointment = db.get(Appointment, payload.appointment_id)
@@ -52,6 +62,7 @@ def create_review(db: Session, customer: User, payload: ReviewCreate) -> Review:
             raise ReviewPermissionError
         if appointment.status != AppointmentStatus.COMPLETED:
             raise AppointmentNotCompletedError
+        _ensure_reviewable_provider(appointment)
         if (
             db.scalar(select(Review.id).where(Review.appointment_id == appointment.id))
             is not None
@@ -93,6 +104,7 @@ def get_review_for_appointment(
             raise AppointmentNotFoundError
         if appointment.customer_id != customer.id:
             raise ReviewPermissionError
+        _ensure_reviewable_provider(appointment)
 
         review = db.scalar(
             select(Review).where(Review.appointment_id == appointment.id)
@@ -122,6 +134,7 @@ def update_review(
             or review.appointment.customer_id != customer.id
         ):
             raise ReviewPermissionError
+        _ensure_reviewable_provider(review.appointment)
 
         review.rating = payload.rating
         review.comment = payload.comment

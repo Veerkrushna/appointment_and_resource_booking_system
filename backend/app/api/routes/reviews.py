@@ -11,6 +11,7 @@ from app.schemas.review import ReviewCreate, ReviewResponse, ReviewUpdate
 from app.services.reviews import (
     AppointmentNotCompletedError,
     AppointmentNotFoundError,
+    ProviderNotReviewableError,
     ReviewAlreadyExistsError,
     ReviewNotFoundError,
     ReviewPermissionError,
@@ -36,6 +37,9 @@ def _raise_review_error(error: Exception) -> None:
     elif isinstance(error, AppointmentNotCompletedError):
         status_code = status.HTTP_400_BAD_REQUEST
         detail = "Only completed appointments can be reviewed"
+    elif isinstance(error, ProviderNotReviewableError):
+        status_code = status.HTTP_400_BAD_REQUEST
+        detail = "Only person providers can be reviewed"
     elif isinstance(error, ReviewAlreadyExistsError):
         status_code = status.HTTP_409_CONFLICT
         detail = "This appointment has already been reviewed"
@@ -61,6 +65,7 @@ def create_review_endpoint(
         ReviewAlreadyExistsError,
         ReviewPermissionError,
         ReviewPersistenceError,
+        ProviderNotReviewableError,
     ) as error:
         _raise_review_error(error)
 
@@ -75,6 +80,7 @@ def get_appointment_review_endpoint(
         return get_review_for_appointment(db, appointment_id, customer)
     except (
         AppointmentNotFoundError,
+        ProviderNotReviewableError,
         ReviewNotFoundError,
         ReviewPermissionError,
     ) as error:
@@ -93,6 +99,7 @@ def update_review_endpoint(
     try:
         return update_review(db, review_id, customer, payload)
     except (
+        ProviderNotReviewableError,
         ReviewNotFoundError,
         ReviewPermissionError,
         ReviewPersistenceError,
