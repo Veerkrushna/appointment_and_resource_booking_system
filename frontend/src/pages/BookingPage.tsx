@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import ProviderRatingSelect from "../components/ProviderRatingSelect";
 
 type Service = {
   id: string;
@@ -28,6 +29,8 @@ type AvailabilitySlot = {
   start: string;
   end: string;
   duration_minutes: number;
+  provider_average_rating?: number | null;
+  provider_rating_count?: number;
 };
 
 type AvailabilityResponse = {
@@ -41,7 +44,11 @@ type AvailabilityResponse = {
 type ProviderOption = {
   id: string;
   name: string;
+  averageRating: number | null;
+  ratingCount: number;
 };
+
+type ProviderType = "person" | "resource";
 
 type BookingDraft = {
   serviceId: string | null;
@@ -197,13 +204,20 @@ async function fetchAvailabilitySlots(
 }
 
 function getProviderOptions(slots: AvailabilitySlot[]): ProviderOption[] {
-  const providers = new Map<string, string>();
+  const providers = new Map<string, ProviderOption>();
   for (const slot of slots) {
-    providers.set(slot.provider_id, slot.provider_name);
+    if (!providers.has(slot.provider_id)) {
+      providers.set(slot.provider_id, {
+        id: slot.provider_id,
+        name: slot.provider_name,
+        averageRating: slot.provider_average_rating ?? null,
+        ratingCount: slot.provider_rating_count ?? 0,
+      });
+    }
   }
-  return [...providers]
-    .map(([id, name]) => ({ id, name }))
-    .sort((left, right) => left.name.localeCompare(right.name));
+  return [...providers.values()].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
 }
 
 function getToday() {
@@ -280,6 +294,9 @@ function BookingPage() {
     AvailabilitySlot[]
   >([]);
   const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
+  const [providerTypes, setProviderTypes] = useState<
+    Record<string, ProviderType>
+  >({});
   const [selectedProviderId, setSelectedProviderId] = useState(providerId);
   const selectedProviderIdRef = useRef(providerId);
   const selectedSlotRef = useRef(initialBookingState.selectedSlot);
@@ -342,6 +359,33 @@ function BookingPage() {
       isCurrent = false;
     };
   }, [serviceId]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    fetch("/api/providers")
+      .then((response) => {
+        if (!response.ok) return [];
+        return response.json() as Promise<{ id: string; type: string }[]>;
+      })
+      .then((providers) => {
+        if (!isCurrent) return;
+        const types: Record<string, ProviderType> = {};
+        for (const provider of providers) {
+          const type = provider.type.toLowerCase();
+          if (type === "person" || type === "resource") {
+            types[provider.id] = type;
+          }
+        }
+        setProviderTypes(types);
+      })
+      .catch(() => {
+        // Provider types are supplemental; availability remains usable without them.
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   useEffect(() => {
     selectedSlotRef.current = selectedSlot;
@@ -763,27 +807,13 @@ function BookingPage() {
                     <span>Available times</span>
                     <small>{formatDate(date)}</small>
                   </div>
-                  <label
-                    className="field-label booking-provider-filter"
-                    htmlFor="booking-provider-filter"
-                  >
-                    Provider
-                    <select
-                      id="booking-provider-filter"
-                      value={selectedProviderId}
-                      disabled={availabilityLoading}
-                      onChange={(event) =>
-                        handleProviderChange(event.target.value)
-                      }
-                    >
-                      <option value="">All providers</option>
-                      {providerOptions.map((provider) => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <ProviderRatingSelect
+                    providers={providerOptions}
+                    providerTypes={providerTypes}
+                    selectedProviderId={selectedProviderId}
+                    disabled={availabilityLoading}
+                    onChange={handleProviderChange}
+                  />
                   {availabilityLoading && (
                     <p className="status-message">Loading available times...</p>
                   )}
