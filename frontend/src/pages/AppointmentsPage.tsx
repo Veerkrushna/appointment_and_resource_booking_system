@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AppointmentReview from "../components/AppointmentReview";
 import RescheduleFlow from "../components/RescheduleFlow";
 import { useAuth } from "../auth/useAuth";
 import {
@@ -43,7 +44,7 @@ function formatStatusLabel(value: string) {
 }
 
 function AppointmentsPage() {
-  const { token } = useAuth();
+  const { customer, token } = useAuth();
   const [currentTime] = useState(() => Date.now());
   const [appointments, setAppointments] = useState<CustomerAppointment[]>([]);
   const [services, setServices] = useState<Record<string, string>>({});
@@ -241,6 +242,21 @@ function AppointmentsPage() {
                           <span>Note: {appointment.notes}</span>
                         </div>
                       )}
+                      {customer?.role.toLowerCase() === "customer" &&
+                        appointment.status.toLowerCase() === "completed" && (
+                          <AppointmentReview
+                            appointmentId={appointment.id}
+                            providerName={
+                              providers[appointment.provider_id] ||
+                              "Your provider"
+                            }
+                            serviceName={
+                              services[appointment.service_id] ||
+                              "Booked service"
+                            }
+                            token={token!}
+                          />
+                        )}
                       {rescheduling?.id === appointment.id && (
                         <RescheduleFlow
                           appointment={appointment}

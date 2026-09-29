@@ -19,6 +19,20 @@ export type CustomerAppointmentsResponse = {
 
 export type NamedRecord = { id: string; name: string };
 
+export type CustomerReview = {
+  id: string;
+  appointment_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerReviewInput = {
+  rating: number;
+  comment: string | null;
+};
+
 export const userTimeZone =
   Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
@@ -126,4 +140,105 @@ export async function updateCustomerProfile(
   const data: CustomerProfile = await response.json();
 
   return data;
+}
+
+function reviewErrorMessage(status: number, operation: "load" | "save") {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You are not allowed to access this review.";
+  if (status === 404) return "The appointment or review could not be found.";
+  if (status === 409) {
+    return "This appointment already has a review. Refresh your appointments.";
+  }
+  if (status === 422) {
+    return "Please check your rating and try submitting again.";
+  }
+  return operation === "load"
+    ? "Unable to load this review. Please try again."
+    : "Unable to submit your review. Please try again.";
+}
+
+async function requestCustomerReview(
+  token: string,
+  path: string,
+  operation: "load" | "save",
+  method = "GET",
+  payload?: object,
+): Promise<CustomerReview | null> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(payload ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
+    });
+  } catch {
+    throw new Error(
+      operation === "load"
+        ? "Unable to load this review. Please try again."
+        : "Unable to submit your review. Please try again.",
+    );
+  }
+
+  if (operation === "load" && response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(reviewErrorMessage(response.status, operation));
+  }
+
+  try {
+    return (await response.json()) as CustomerReview;
+  } catch {
+    throw new Error(
+      operation === "load"
+        ? "Unable to load this review. Please try again."
+        : "Unable to submit your review. Please try again.",
+    );
+  }
+}
+
+export async function fetchAppointmentReview(
+  token: string,
+  appointmentId: string,
+) {
+  return requestCustomerReview(
+    token,
+    `/api/reviews/appointment/${appointmentId}`,
+    "load",
+  );
+}
+
+export async function createAppointmentReview(
+  token: string,
+  appointmentId: string,
+  input: CustomerReviewInput,
+) {
+  const review = await requestCustomerReview(
+    token,
+    "/api/reviews",
+    "save",
+    "POST",
+    { appointment_id: appointmentId, ...input },
+  );
+  if (!review)
+    throw new Error("Unable to submit your review. Please try again.");
+  return review;
+}
+
+export async function updateAppointmentReview(
+  token: string,
+  reviewId: string,
+  input: CustomerReviewInput,
+) {
+  const review = await requestCustomerReview(
+    token,
+    `/api/reviews/${reviewId}`,
+    "save",
+    "PUT",
+    input,
+  );
+  if (!review)
+    throw new Error("Unable to submit your review. Please try again.");
+  return review;
 }

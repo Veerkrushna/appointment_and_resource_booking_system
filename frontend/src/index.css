@@ -1645,6 +1645,218 @@ main {
   font-size: 0.9rem;
 }
 
+.appointment-review {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.appointment-review__loading {
+  color: #64736e;
+  font-size: 0.78rem;
+}
+
+.appointment-review__load-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: #8d4c31;
+  font-size: 0.8rem;
+}
+
+.appointment-review__summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.appointment-review__summary-rating {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.appointment-review__summary-stars {
+  color: #c05d27;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.appointment-review__summary-stars > span {
+  color: #aeb8b1;
+}
+
+.appointment-review__summary-rating small {
+  color: #64736e;
+  font-size: 0.72rem;
+}
+
+.appointment-review__comment {
+  max-width: 34rem;
+  margin: 0;
+  color: #64736e;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.appointment-review__feedback {
+  margin: 0;
+  color: #557b69;
+  font-size: 0.8rem;
+}
+
+.appointment-review__feedback.is-error {
+  color: #8d4c31;
+}
+
+.appointment-review__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgba(11, 3, 2, 0.55);
+}
+
+.appointment-review__dialog {
+  width: min(100%, 31rem);
+  max-height: min(100%, 42rem);
+  overflow-y: auto;
+  padding: clamp(1.1rem, 4vw, 1.5rem);
+  border: 1px solid #dbe5dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #18312f;
+  box-shadow: 0 16px 40px rgba(11, 3, 2, 0.2);
+}
+
+.appointment-review__dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid #dbe5dc;
+}
+
+.appointment-review__dialog-header h2 {
+  margin: 0;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.2rem;
+}
+
+.appointment-review__close {
+  flex: 0 0 auto;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border: 0;
+  background: transparent;
+  color: #64736e;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.appointment-review__close:hover {
+  color: #c05d27;
+}
+
+.appointment-review__context {
+  display: grid;
+  gap: 0.2rem;
+  margin: 1rem 0 1.35rem;
+}
+
+.appointment-review__context strong {
+  color: #18312f;
+  font-size: 0.95rem;
+}
+
+.appointment-review__context span {
+  color: #64736e;
+  font-size: 0.82rem;
+}
+
+.appointment-review__rating-field {
+  min-width: 0;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border: 0;
+}
+
+.appointment-review__rating-field legend {
+  margin-bottom: 0.55rem;
+  color: #18312f;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.appointment-review__stars {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.appointment-review__star {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #aeb8b1;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.8rem;
+  line-height: 1;
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.appointment-review__star:hover,
+.appointment-review__star.is-selected {
+  color: #c05d27;
+}
+
+.appointment-review__star:hover {
+  transform: translateY(-1px);
+}
+
+.appointment-review__star:focus-visible,
+.appointment-review__close:focus-visible {
+  outline: 2px solid #c05d27;
+  outline-offset: 2px;
+}
+
+.appointment-review__dialog form > .field-label textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.appointment-review__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.35rem;
+}
+
+@media (max-width: 480px) {
+  .appointment-review__dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .appointment-review__dialog-actions button {
+    width: 100%;
+  }
+}
+
 .appointment-actions {
   display: flex;
   flex-wrap: wrap;
