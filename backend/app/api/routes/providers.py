@@ -48,6 +48,7 @@ from app.schemas.providers import (
     ProviderBreakResponse,
     ProviderBreakUpdate,
     ProviderCreate,
+    ProviderListResponse,
     ProviderResponse,
     ProviderUpdate,
     ScheduleResponse,
@@ -158,7 +159,12 @@ def blackout_item_response(item: ProviderBlackoutDate) -> BlackoutResponse:
     )
 
 
-@router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))])
+@router.post(
+    "",
+    response_model=ProviderResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))],
+)
 def create_provider(
     payload: ProviderCreate,
     db: Annotated[Session, Depends(get_db)],
@@ -166,13 +172,25 @@ def create_provider(
     return create_provider_record(db, payload)
 
 
-@router.get("", response_model=list[ProviderResponse])
+@router.get("", response_model=list[ProviderListResponse])
 def list_providers(
     db: Annotated[Session, Depends(get_db)],
     provider_type: Annotated[str | None, Query(alias="type")] = None,
     availability_status: str | None = None,
 ):
-    return list_provider_records(db, provider_type, availability_status)
+    return [
+        ProviderListResponse.model_validate(provider).model_copy(
+            update={
+                "average_rating": (
+                    float(average_rating) if average_rating is not None else None
+                ),
+                "rating_count": int(rating_count),
+            }
+        )
+        for provider, average_rating, rating_count in list_provider_records(
+            db, provider_type, availability_status
+        )
+    ]
 
 
 @router.get(
@@ -235,7 +253,11 @@ def update_services_for_provider(
         ) from error
 
 
-@router.put("/{provider_id}", response_model=ProviderResponse, dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))])
+@router.put(
+    "/{provider_id}",
+    response_model=ProviderResponse,
+    dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))],
+)
 def update_provider(
     provider_id: UUID,
     payload: ProviderUpdate,
@@ -382,7 +404,11 @@ def delete_break_for_provider(
     )
 
 
-@router.post("/{provider_id}/availability", response_model=ScheduleResponse, dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))])
+@router.post(
+    "/{provider_id}/availability",
+    response_model=ScheduleResponse,
+    dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))],
+)
 def set_provider_availability(
     provider_id: UUID,
     payload: AvailabilityRequest,
@@ -402,7 +428,11 @@ def get_weekly_schedule(
     return weekly_schedule_response(provider)
 
 
-@router.put("/{provider_id}/schedule/weekly", response_model=WeeklyScheduleResponse, dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))])
+@router.put(
+    "/{provider_id}/schedule/weekly",
+    response_model=WeeklyScheduleResponse,
+    dependencies=[Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN))],
+)
 def replace_weekly_schedule_endpoint(
     provider_id: UUID,
     payload: WeeklyScheduleRequest,

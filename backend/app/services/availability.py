@@ -3,9 +3,10 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.crud.provider_ratings import provider_rating_subquery
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.availability import (
     ProviderBlackoutDate,
@@ -81,6 +82,8 @@ def _provider_slots(
     breaks: list[ProviderBreak],
     slot_interval: timedelta,
     timezone: ZoneInfo,
+    provider_average_rating: float | None,
+    provider_rating_count: int,
 ) -> list[AvailabilitySlot]:
     windows = [
         availability
@@ -138,6 +141,8 @@ def _provider_slots(
         AvailabilitySlot(
             provider_id=provider.id,
             provider_name=provider.name,
+            provider_average_rating=provider_average_rating,
+            provider_rating_count=provider_rating_count,
             service_id=service.id,
             date=target_date,
             start=start,
@@ -189,12 +194,18 @@ def calculate_available_slots(
     slots: list[AvailabilitySlot] = []
 
     for service in services:
+        ratings = provider_rating_subquery()
         provider_query = (
-            select(Provider)
+            select(
+                Provider,
+                ratings.c.average_rating,
+                func.coalesce(ratings.c.rating_count, 0),
+            )
             .join(
                 ProviderService,
                 ProviderService.provider_id == Provider.id,
             )
+            .outerjoin(ratings, ratings.c.provider_id == Provider.id)
             .where(
                 ProviderService.service_id == service.id,
                 ProviderService.is_active.is_(True),
@@ -205,9 +216,9 @@ def calculate_available_slots(
         if provider_id is not None:
             provider_query = provider_query.where(Provider.id == provider_id)
 
-        providers = list(db.scalars(provider_query).unique().all())
+        provider_rows = list(db.execute(provider_query).unique().all())
 
-        for provider in providers:
+        for provider, provider_average_rating, provider_rating_count in provider_rows:
             try:
                 timezone = ZoneInfo(provider.timezone)
             except ZoneInfoNotFoundError:
@@ -282,6 +293,12 @@ def calculate_available_slots(
                         breaks,
                         timedelta(minutes=slot_interval_minutes),
                         timezone,
+                        (
+                            float(provider_average_rating)
+                            if provider_average_rating is not None
+                            else None
+                        ),
+                        int(provider_rating_count),
                     )
                 )
 

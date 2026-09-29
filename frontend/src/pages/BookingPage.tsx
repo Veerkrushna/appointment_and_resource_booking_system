@@ -979,7 +979,9 @@ function BookingPage() {
                   {details.name}
                 </strong>
                 <span>{details.email}</span>
-                <span>Provider: {selectedSlot?.provider_name || "Not selected"}</span>
+                <span>
+                  Provider: {selectedSlot?.provider_name || "Not selected"}
+                </span>
                 <span>Service: {service.name}</span>
                 <span>
                   {formatDate(date)} at{" "}
