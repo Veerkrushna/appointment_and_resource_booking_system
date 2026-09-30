@@ -255,21 +255,7 @@ function AppointmentsPage() {
                           <span>Note: {appointment.notes}</span>
                         </div>
                       )}
-                      {customer?.role.toLowerCase() === "customer" &&
-                        appointment.status.toLowerCase() === "completed" && (
-                          <AppointmentReview
-                            appointmentId={appointment.id}
-                            providerName={
-                              providers[appointment.provider_id] ||
-                              "Your provider"
-                            }
-                            serviceName={
-                              services[appointment.service_id] ||
-                              "Booked service"
-                            }
-                            token={token!}
-                          />
-                        )}
+
                       {rescheduling?.id === appointment.id && (
                         <RescheduleFlow
                           appointment={appointment}
@@ -290,6 +276,21 @@ function AppointmentsPage() {
                       )}
                     </div>
                     <div className="appointment-actions">
+                      {customer?.role.toLowerCase() === "customer" &&
+                        appointment.status.toLowerCase() === "completed" && (
+                          <AppointmentReview
+                            appointmentId={appointment.id}
+                            providerName={
+                              providers[appointment.provider_id] ||
+                              "Your provider"
+                            }
+                            serviceName={
+                              services[appointment.service_id] ||
+                              "Booked service"
+                            }
+                            token={token!}
+                          />
+                        )}
                       {canChange && (
                         <>
                           <button
