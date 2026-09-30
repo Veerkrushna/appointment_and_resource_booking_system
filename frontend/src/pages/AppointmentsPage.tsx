@@ -34,10 +34,10 @@ function formatTime(value: string) {
 
 function formatStatusLabel(value: string) {
   const labels: Record<string, string> = {
-    pending: "Pending",
     confirmed: "Confirmed",
     completed: "Completed",
     cancelled: "Cancelled",
+    in_progress: "In progress",
   };
 
   return labels[value] ?? value;
@@ -45,7 +45,7 @@ function formatStatusLabel(value: string) {
 
 function AppointmentsPage() {
   const { customer, token } = useAuth();
-  const [currentTime] = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [appointments, setAppointments] = useState<CustomerAppointment[]>([]);
   const [services, setServices] = useState<Record<string, string>>({});
   const [providers, setProviders] = useState<Record<string, string>>({});
@@ -111,17 +111,30 @@ function AppointmentsPage() {
     return () => window.clearTimeout(timer);
   }, [loadAppointments]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const canModify = useCallback(
+    (appointment: CustomerAppointment) => {
+      if (appointment.status !== "confirmed") return false;
+      return new Date(appointment.appointment_start).getTime() - 2 * 60 * 60 * 1000 > currentTime;
+    },
+    [currentTime]
+  );
+
   const groupedAppointments = useMemo(() => {
     return {
       upcoming: appointments.filter(
         (appointment) =>
-          ["pending", "confirmed"].includes(appointment.status) &&
+          ["confirmed", "in_progress"].includes(appointment.status) &&
           new Date(appointment.appointment_end).getTime() >= currentTime,
       ),
       past: appointments.filter(
         (appointment) =>
           appointment.status === "completed" ||
-          (["pending", "confirmed"].includes(appointment.status) &&
+          (["confirmed"].includes(appointment.status) &&
             new Date(appointment.appointment_end).getTime() < currentTime),
       ),
       cancelled: appointments.filter(
@@ -242,21 +255,7 @@ function AppointmentsPage() {
                           <span>Note: {appointment.notes}</span>
                         </div>
                       )}
-                      {customer?.role.toLowerCase() === "customer" &&
-                        appointment.status.toLowerCase() === "completed" && (
-                          <AppointmentReview
-                            appointmentId={appointment.id}
-                            providerName={
-                              providers[appointment.provider_id] ||
-                              "Your provider"
-                            }
-                            serviceName={
-                              services[appointment.service_id] ||
-                              "Booked service"
-                            }
-                            token={token!}
-                          />
-                        )}
+
                       {rescheduling?.id === appointment.id && (
                         <RescheduleFlow
                           appointment={appointment}
@@ -277,11 +276,28 @@ function AppointmentsPage() {
                       )}
                     </div>
                     <div className="appointment-actions">
+                      {customer?.role.toLowerCase() === "customer" &&
+                        appointment.status.toLowerCase() === "completed" && (
+                          <AppointmentReview
+                            appointmentId={appointment.id}
+                            providerName={
+                              providers[appointment.provider_id] ||
+                              "Your provider"
+                            }
+                            serviceName={
+                              services[appointment.service_id] ||
+                              "Booked service"
+                            }
+                            token={token!}
+                          />
+                        )}
                       {canChange && (
                         <>
                           <button
                             className="secondary-button"
                             type="button"
+                            disabled={!canModify(appointment)}
+                            title={!canModify(appointment) ? "Changes are not allowed within 2 hours of the booking." : undefined}
                             onClick={() => setRescheduling(appointment)}
                           >
                             Reschedule
@@ -289,6 +305,8 @@ function AppointmentsPage() {
                           <button
                             className="text-button"
                             type="button"
+                            disabled={!canModify(appointment)}
+                            title={!canModify(appointment) ? "Changes are not allowed within 2 hours of the booking." : undefined}
                             onClick={() =>
                               void cancelAppointment(appointment.id)
                             }

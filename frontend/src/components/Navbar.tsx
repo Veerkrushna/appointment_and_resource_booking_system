@@ -124,7 +124,7 @@ function Navbar() {
               ) : userRole === "admin" ? (
                 <>
                   <NavLink
-                    to="/admin"
+                    to="/admin/dashboard"
                     end
                     className={({ isActive }) => (isActive ? "active" : "")}
                     onClick={() => setIsMenuOpen(false)}

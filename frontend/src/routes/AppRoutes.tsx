@@ -77,7 +77,7 @@ function DashboardRedirect() {
   }
 
   if (userRole === "admin") {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   return <Navigate to="/" replace />;
@@ -93,7 +93,7 @@ function HomeRoute() {
   const userRole = customer?.role?.toLowerCase();
 
   if (userRole === "admin") {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   if (userRole === "provider") {
@@ -108,7 +108,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route
-          path="/admin"
+          path="/admin/dashboard"
           element={
             <AdminRoute>
               <AdminDashboardPage />

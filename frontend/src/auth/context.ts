@@ -7,6 +7,7 @@ type Customer = {
   phone: string | null;
   role: string;
   is_active: boolean;
+  provider_id?: string;
 };
 type AuthResponse = { access_token: string; user: Customer };
 type AuthContextValue = {

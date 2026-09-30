@@ -41,6 +41,28 @@ class CancellationValidationError(BookingValidationError):
     pass
 
 
+MODIFICATION_CUTOFF_HOURS = 2
+
+
+def get_booking_status(
+    appointment_start: datetime, duration_minutes: int, status: str, now_utc: datetime
+) -> str:
+    if status == AppointmentStatus.CANCELLED:
+        return "cancelled"
+
+    appointment_end = appointment_start + timedelta(minutes=duration_minutes)
+    if now_utc >= appointment_end:
+        return "completed"
+    if appointment_start <= now_utc < appointment_end:
+        return "in_progress"
+    return "confirmed"
+
+
+def can_modify_booking(appointment_start: datetime, now_utc: datetime) -> bool:
+    cutoff_time = appointment_start - timedelta(hours=MODIFICATION_CUTOFF_HOURS)
+    return now_utc < cutoff_time
+
+
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise BookingValidationError("appointment_start must include a timezone")
@@ -182,7 +204,7 @@ def create_appointment(
 
 
 def update_appointment(
-    db: Session, appointment: Appointment, payload: AppointmentUpdate
+    db: Session, appointment: Appointment, payload: AppointmentUpdate, user_role: UserRole | None = None
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
     rescheduled = "appointment_start" in changes
@@ -227,6 +249,7 @@ def cancel_appointment(
     db: Session,
     appointment_id,
     payload: AppointmentCancellationCreate | None = None,
+    user_role: UserRole | None = None,
 ) -> AppointmentCancellation:
     payload = payload or AppointmentCancellationCreate()
     appointment_snapshot = db.scalar(
@@ -247,16 +270,24 @@ def cancel_appointment(
         raise CancellationValidationError("Appointment not found")
     if appointment.status == AppointmentStatus.CANCELLED:
         raise CancellationValidationError("Appointment is already cancelled")
-    if appointment.status == AppointmentStatus.COMPLETED:
-        raise CancellationValidationError("Completed appointments cannot be cancelled")
-
-    cancellation_deadline = appointment.appointment_start - timedelta(
-        minutes=settings.cancellation_grace_period_minutes
+        
+    now_utc = datetime.now(UTC)
+    current_status = get_booking_status(
+        appointment.appointment_start,
+        appointment.duration_minutes,
+        appointment.status,
+        now_utc
     )
-    if datetime.now(UTC) >= cancellation_deadline:
-        raise CancellationValidationError(
-            "Appointments cannot be cancelled within the cancellation grace period"
-        )
+
+    if current_status in ("in_progress", "completed", "cancelled"):
+        raise CancellationValidationError(f"Cannot cancel appointment with status {current_status}")
+
+    from app.models.user import UserRole
+    if user_role == UserRole.CUSTOMER or user_role is None:
+        if not can_modify_booking(appointment.appointment_start, now_utc):
+            raise CancellationValidationError(
+                f"Bookings cannot be cancelled or rescheduled within {MODIFICATION_CUTOFF_HOURS} hours of the start time."
+            )
 
     appointment.status = AppointmentStatus.CANCELLED
     cancellation = AppointmentCancellation(
@@ -275,6 +306,7 @@ def reschedule_appointment(
     db: Session,
     appointment_id,
     payload: AppointmentRescheduleCreate,
+    user_role: UserRole | None = None,
 ) -> Appointment:
     appointment = db.scalar(
         select(Appointment).where(Appointment.id == appointment_id).with_for_update()
@@ -283,8 +315,28 @@ def reschedule_appointment(
         raise BookingValidationError("Appointment not found")
     if appointment.status == AppointmentStatus.CANCELLED:
         raise BookingValidationError("Appointment is already cancelled")
-    if appointment.status == AppointmentStatus.COMPLETED:
-        raise BookingValidationError("Completed appointments cannot be rescheduled")
+        
+    now_utc = datetime.now(UTC)
+    current_status = get_booking_status(
+        appointment.appointment_start,
+        appointment.duration_minutes,
+        appointment.status,
+        now_utc
+    )
+
+    if current_status in ("in_progress", "completed", "cancelled"):
+        raise BookingValidationError(f"Cannot reschedule appointment with status {current_status}")
+
+    from app.models.user import UserRole
+    if user_role == UserRole.CUSTOMER or user_role is None:
+        if not can_modify_booking(appointment.appointment_start, now_utc):
+            raise BookingValidationError(
+                f"Bookings cannot be cancelled or rescheduled within {MODIFICATION_CUTOFF_HOURS} hours of the start time."
+            )
+        if not can_modify_booking(payload.appointment_start, now_utc):
+            raise BookingValidationError(
+                f"New booking slot must be at least {MODIFICATION_CUTOFF_HOURS} hours from now."
+            )
 
     provider = db.scalar(
         select(Provider).where(Provider.id == appointment.provider_id).with_for_update()

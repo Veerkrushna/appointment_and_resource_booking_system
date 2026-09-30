@@ -221,7 +221,7 @@ def test_cancellation_enforces_grace_period(cancellation_records, monkeypatch):
         appointment_start=appointment_start,
         appointment_end=appointment_start + timedelta(minutes=30),
         duration_minutes=30,
-        status=AppointmentStatus.PENDING,
+        status=AppointmentStatus.CONFIRMED,
     )
     db.add(appointment)
     db.commit()

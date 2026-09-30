@@ -29,7 +29,7 @@ function formatTime(value: string) {
 
 function CustomerHomePage() {
   const { customer, token } = useAuth();
-  const [currentTime] = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [appointments, setAppointments] = useState<CustomerAppointment[]>([]);
   const [services, setServices] = useState<Record<string, string>>({});
   const [providers, setProviders] = useState<Record<string, string>>({});
@@ -81,11 +81,24 @@ function CustomerHomePage() {
     return () => window.clearTimeout(timer);
   }, [loadDashboard]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const canModify = useCallback(
+    (appointment: CustomerAppointment) => {
+      if (appointment.status !== "confirmed") return false;
+      return new Date(appointment.appointment_start).getTime() - 2 * 60 * 60 * 1000 > currentTime;
+    },
+    [currentTime]
+  );
+
   const upcoming = useMemo(
     () =>
       appointments.find(
         (appointment) =>
-          ["pending", "confirmed"].includes(appointment.status) &&
+          ["confirmed", "in_progress"].includes(appointment.status) &&
           new Date(appointment.appointment_end).getTime() >= currentTime,
       ),
     [appointments, currentTime],
@@ -219,7 +232,9 @@ function CustomerHomePage() {
             {upcoming ? (
               <div className="dashboard-appointment">
                 <div>
-                  <span className="appointment-status">{upcoming.status}</span>
+                  <span className={`appointment-status appointment-status--${upcoming.status}`}>
+                    {upcoming.status.replace("_", " ")}
+                  </span>
                   <h3>{serviceName(upcoming)}</h3>
                   <p>with {providerName(upcoming)}</p>
                 </div>
@@ -240,7 +255,8 @@ function CustomerHomePage() {
                   <button
                     className="secondary-button"
                     type="button"
-                    disabled={activeAction === upcoming.id}
+                    disabled={!canModify(upcoming) || activeAction === upcoming.id}
+                    title={!canModify(upcoming) ? "Changes are not allowed within 2 hours of the booking." : undefined}
                     onClick={() => setRescheduling(upcoming)}
                   >
                     Reschedule
@@ -248,7 +264,8 @@ function CustomerHomePage() {
                   <button
                     className="text-button"
                     type="button"
-                    disabled={activeAction === upcoming.id}
+                    disabled={!canModify(upcoming) || activeAction === upcoming.id}
+                    title={!canModify(upcoming) ? "Changes are not allowed within 2 hours of the booking." : undefined}
                     onClick={() => void cancelAppointment(upcoming.id)}
                   >
                     Cancel

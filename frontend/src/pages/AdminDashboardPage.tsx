@@ -221,7 +221,7 @@ function AdminDashboardPage() {
             <article className="dashboard-stat dashboard-stat--upcoming">
               <span>Upcoming appointments</span>
               <strong>{overview.upcoming_appointments}</strong>
-              <small>Confirmed and pending future appointments</small>
+              <small>Confirmed future appointments</small>
             </article>
 
             <article className="dashboard-stat dashboard-stat--completed">

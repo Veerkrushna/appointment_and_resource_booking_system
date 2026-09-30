@@ -165,7 +165,7 @@ def create_services(db):
     return services
 
 
-def create_providers(db):
+def create_providers(db, users):
     providers = [
         Provider(
             name="Dr. Ananya Sharma",
@@ -174,6 +174,7 @@ def create_providers(db):
             phone="+919876543210",
             timezone="Asia/Kolkata",
             availability_status=AvailabilityStatus.AVAILABLE,
+            user_id=users[1].id, # Dr. Ananya Sharma
         ),
         Provider(
             name="Dr. Rahul Mehta",
@@ -182,6 +183,7 @@ def create_providers(db):
             phone="+919876543211",
             timezone="Asia/Kolkata",
             availability_status=AvailabilityStatus.AVAILABLE,
+            user_id=users[2].id, # Dr. Rahul Mehta
         ),
         Provider(
             name="Dr. Priya Nair",
@@ -190,6 +192,7 @@ def create_providers(db):
             phone="+919876543212",
             timezone="Asia/Kolkata",
             availability_status=AvailabilityStatus.AVAILABLE,
+            user_id=users[3].id, # Dr. Priya Nair
         ),
         Provider(
             name="Consultation Room 1",
@@ -386,7 +389,7 @@ def create_appointments(db, providers, services, users):
             appointment_end=datetime(2026, 9, 17, 11, 20, tzinfo=UTC),
             duration_minutes=20,
             notes="Follow-up appointment",
-            status=AppointmentStatus.PENDING,
+            status=AppointmentStatus.CONFIRMED,
         ),
         Appointment(
             # Rohan Deshmukh → Dr. Rahul Mehta
@@ -436,7 +439,7 @@ def seed_database():
 
         users = create_users(db)
         services = create_services(db)
-        providers = create_providers(db)
+        providers = create_providers(db, users)
 
         create_provider_services(db, providers, services)
         create_availability(db, providers)

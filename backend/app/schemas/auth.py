@@ -28,6 +28,7 @@ class CustomerResponse(BaseModel):
     phone: str | None
     role: UserRole
     is_active: bool
+    provider_id: UUID | None = None
 
 
 class CustomerProfileUpdate(BaseModel):
