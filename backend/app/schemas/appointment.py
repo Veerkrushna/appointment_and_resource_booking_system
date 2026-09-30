@@ -79,6 +79,17 @@ class AppointmentResponse(BaseModel):
     @classmethod
     def from_appointment(cls, appointment, timezone: str) -> "AppointmentResponse":
         response = cls.model_validate(appointment)
+        
+        from app.services.booking import get_booking_status
+        from datetime import datetime, UTC
+        now_utc = datetime.now(UTC)
+        response.status = get_booking_status(
+            appointment.appointment_start,
+            appointment.duration_minutes,
+            appointment.status,
+            now_utc
+        )
+        
         response.appointment_start = to_local(response.appointment_start, timezone)
         response.appointment_end = to_local(response.appointment_end, timezone)
         return response

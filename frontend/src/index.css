@@ -1683,7 +1683,7 @@ main {
   line-height: 1.2;
 }
 
-.appointment-review__summary-stars > span {
+.appointment-review__summary-stars>span {
   color: #aeb8b1;
 }
 
@@ -1833,7 +1833,7 @@ main {
   outline-offset: 2px;
 }
 
-.appointment-review__dialog form > .field-label textarea {
+.appointment-review__dialog form>.field-label textarea {
   min-height: 7rem;
   resize: vertical;
 }
@@ -5946,4 +5946,21 @@ main {
 
 .ant-picker-btn-ok:hover {
   background: #cf6740;
+}
+
+.appointment-status--in_progress {
+  background-color: var(--color-blue-100);
+  color: var(--color-blue-900);
+  border-color: var(--color-blue-200);
+}
+
+.dashboard-status--in_progress {
+  background-color: var(--color-blue-100);
+  color: var(--color-blue-900);
+}
+
+.status-badge--in_progress {
+  background-color: var(--color-blue-100);
+  color: var(--color-blue-900);
+  border: 1px solid var(--color-blue-200);
 }

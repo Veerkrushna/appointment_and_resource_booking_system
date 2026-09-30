@@ -7,7 +7,7 @@ type RealAppointment = {
   service_id: string;
   service_name?: string;
   appointment_start: string;
-  status: "confirmed" | "cancelled" | "completed";
+  status: "confirmed" | "cancelled" | "completed" | "in_progress";
 };
 
 type Service = {
@@ -184,7 +184,7 @@ export default function ProviderDashboardPage() {
                   <td>{new Date(apt.appointment_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                   <td>
                     <span className={`dashboard-status dashboard-status--${apt.status}`}>
-                      {apt.status}
+                      {apt.status.replace("_", " ")}
                     </span>
                   </td>
                 </tr>

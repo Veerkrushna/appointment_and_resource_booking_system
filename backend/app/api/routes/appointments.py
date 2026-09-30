@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_optional_customer
+from app.core.security import get_optional_customer, get_optional_user
 from app.core.timezones import TimezoneValidationError, get_timezone
 from app.crud.appointments import get_appointments_list
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.customer import Customer
+from app.models.user import User
 from app.models.providers import Provider
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
@@ -171,10 +172,12 @@ def edit_appointment(
 def cancel_appointment_endpoint(
     appointment_id: UUID,
     db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_optional_user)],
     payload: AppointmentCancellationCreate | None = None,
 ):
     try:
-        cancel_appointment(db, appointment_id, payload)
+        user_role = user.role if user else None
+        cancel_appointment(db, appointment_id, payload, user_role=user_role)
     except CancellationValidationError as error:
         status_code = (
             status.HTTP_404_NOT_FOUND
@@ -193,9 +196,11 @@ def cancel_appointment_post_endpoint(
     appointment_id: UUID,
     payload: AppointmentCancellationCreate,
     db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_optional_user)],
 ):
     try:
-        return cancel_appointment(db, appointment_id, payload)
+        user_role = user.role if user else None
+        return cancel_appointment(db, appointment_id, payload, user_role=user_role)
     except BookingValidationError as error:
         status_code = (
             status.HTTP_404_NOT_FOUND
@@ -214,9 +219,11 @@ def reschedule_appointment_endpoint(
     appointment_id: UUID,
     payload: AppointmentRescheduleCreate,
     db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_optional_user)],
 ):
     try:
-        return reschedule_appointment(db, appointment_id, payload)
+        user_role = user.role if user else None
+        return reschedule_appointment(db, appointment_id, payload, user_role=user_role)
     except BookingConflictError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(error)
