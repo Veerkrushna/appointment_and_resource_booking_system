@@ -80,7 +80,7 @@ def review_api_records():
     resource_completed = add_appointment(
         resource, customer, AppointmentStatus.COMPLETED, 1
     )
-    person_pending = add_appointment(person, customer, AppointmentStatus.PENDING, 2)
+    person_pending = add_appointment(person, customer, AppointmentStatus.CONFIRMED, 2)
     another_customers_completed = add_appointment(
         person, other_customer, AppointmentStatus.COMPLETED, 3
     )

@@ -1530,7 +1530,6 @@ main {
   color: #991b1b;
 }
 
-.dashboard-status--pending,
 .dashboard-status--upcoming {
   background-color: #fde047;
   color: #854d0e;
@@ -4589,10 +4588,7 @@ main {
   color: #2c7052;
 }
 
-.admin-appointment-status--pending {
-  background: #f9ecd5;
-  color: #a26819;
-}
+
 
 .admin-appointment-status--cancelled {
   background: #f6dfdc;

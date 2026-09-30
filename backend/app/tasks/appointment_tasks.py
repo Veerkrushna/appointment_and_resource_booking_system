@@ -20,9 +20,7 @@ def complete_expired_appointments() -> int:
         now_utc = datetime.now(UTC)
         appointments = db.scalars(
             select(Appointment).where(
-                Appointment.status.in_(
-                    [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]
-                ),
+                Appointment.status.in_([AppointmentStatus.CONFIRMED]),
                 Appointment.appointment_end <= now_utc,
             )
         ).all()

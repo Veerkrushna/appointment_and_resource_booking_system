@@ -34,7 +34,6 @@ function formatTime(value: string) {
 
 function formatStatusLabel(value: string) {
   const labels: Record<string, string> = {
-    pending: "Pending",
     confirmed: "Confirmed",
     completed: "Completed",
     cancelled: "Cancelled",
@@ -115,13 +114,13 @@ function AppointmentsPage() {
     return {
       upcoming: appointments.filter(
         (appointment) =>
-          ["pending", "confirmed"].includes(appointment.status) &&
+          ["confirmed"].includes(appointment.status) &&
           new Date(appointment.appointment_end).getTime() >= currentTime,
       ),
       past: appointments.filter(
         (appointment) =>
           appointment.status === "completed" ||
-          (["pending", "confirmed"].includes(appointment.status) &&
+          (["confirmed"].includes(appointment.status) &&
             new Date(appointment.appointment_end).getTime() < currentTime),
       ),
       cancelled: appointments.filter(

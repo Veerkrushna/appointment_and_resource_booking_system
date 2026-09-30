@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_optional_customer
 from app.core.timezones import TimezoneValidationError, get_timezone
+from app.crud.appointments import get_appointments_list
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.customer import Customer
@@ -85,6 +86,7 @@ def list_appointments(
     end_date: date | None = None,
     search: str | None = None,
     provider_search: str | None = None,
+    page_size: int = Query(default=15, ge=1, le=100, description="Page size"),
 ):
     timezone = _validate_timezone(timezone)
 
@@ -95,55 +97,20 @@ def list_appointments(
                 detail="start_date must be before or equal to end_date",
             )
 
-    query = (
-        select(Appointment)
-        .join(Provider, Provider.id == Appointment.provider_id)
-        .order_by(Appointment.appointment_start)
+
+    appointments, total, total_pages = get_appointments_list(
+        db=db,
+        timezone=timezone,
+        page=page,
+        page_size=page_size,
+        provider_id=provider_id,
+        user_email=user_email,
+        appointment_status=appointment_status,
+        start_date=start_date,
+        end_date=end_date,
+        search=search,
+        provider_search=provider_search,
     )
-
-    if start_date is not None:
-        start_datetime = datetime.combine(
-            start_date,
-            time.min,
-            tzinfo=ZoneInfo(timezone),
-        ).astimezone(UTC)
-        query = query.where(Appointment.appointment_start >= start_datetime)
-
-    if end_date is not None:
-        end_datetime = datetime.combine(
-            end_date + timedelta(days=1),
-            time.min,
-            tzinfo=ZoneInfo(timezone),
-        ).astimezone(UTC)
-
-        query = query.where(Appointment.appointment_start < end_datetime)
-
-    if provider_id is not None:
-        query = query.where(Appointment.provider_id == provider_id)
-    if provider_search is not None:
-        provider_search_term = f"%{provider_search.strip()}%"
-        query = query.where(Provider.name.ilike(provider_search_term))
-    if user_email is not None:
-        query = query.where(Appointment.user_email == user_email)
-    if appointment_status is not None:
-        query = query.where(Appointment.status == appointment_status)
-    if search is not None:
-        search_term = f"%{search.strip()}%"
-        query = query.where(
-            or_(
-                Appointment.user_email.ilike(search_term),
-                Appointment.user_phone.ilike(search_term),
-            )
-        )
-    page_size = 15
-
-    total = db.scalar(select(func.count()).select_from(query.subquery()))
-
-    start_index = (page - 1) * page_size
-
-    appointments = db.scalars(query.offset(start_index).limit(page_size)).all()
-
-    total_pages = (total + page_size - 1) // page_size
 
     return AppointmentListResponse(
         appointments=[

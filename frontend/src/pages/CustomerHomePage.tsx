@@ -85,7 +85,7 @@ function CustomerHomePage() {
     () =>
       appointments.find(
         (appointment) =>
-          ["pending", "confirmed"].includes(appointment.status) &&
+          ["confirmed"].includes(appointment.status) &&
           new Date(appointment.appointment_end).getTime() >= currentTime,
       ),
     [appointments, currentTime],

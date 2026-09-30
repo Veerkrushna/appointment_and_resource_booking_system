@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 
 
 class AppointmentStatus(enum.StrEnum):
-    PENDING = "pending"
     CONFIRMED = "confirmed"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -83,7 +82,7 @@ class Appointment(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[AppointmentStatus] = mapped_column(
         SQLEnum(AppointmentStatus, name="appointment_status"),
-        default=AppointmentStatus.PENDING,
+        default=AppointmentStatus.CONFIRMED,
         nullable=False,
     )
     confirmation_token: Mapped[str | None] = mapped_column(

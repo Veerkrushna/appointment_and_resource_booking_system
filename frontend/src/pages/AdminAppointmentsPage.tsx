@@ -218,7 +218,6 @@ export default function AdminAppointmentsPage() {
               onChange={(event) => setStatus(event.target.value)}
             >
               <option value="">All statuses</option>
-              <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
