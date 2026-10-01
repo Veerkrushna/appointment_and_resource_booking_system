@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import type { Provider, ProviderCreate, ProviderUpdate } from "../../lib/providers";
+import type {
+  Provider,
+  ProviderCreate,
+  ProviderUpdate,
+} from "../../lib/providers";
 import AntTimeRangePicker from "../AntTimeRangePicker";
-import { updateProvider, updateProviderServices, createProvider } from "../../lib/providers";
+import {
+  updateProvider,
+  updateProviderServices,
+  createProvider,
+} from "../../lib/providers";
 
 const DAYS_OF_WEEK = [
   "Monday",
@@ -33,7 +41,9 @@ export default function ProviderForm({
   const [formData, setFormData] = useState<ProviderUpdate | ProviderCreate>({});
   const [specializationsInput, setSpecializationsInput] = useState<string>("");
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
-  const [selectedBlackoutDays, setSelectedBlackoutDays] = useState<string[]>([]);
+  const [selectedBlackoutDays, setSelectedBlackoutDays] = useState<string[]>(
+    [],
+  );
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -210,11 +220,7 @@ export default function ProviderForm({
         }
 
         await updateProvider(token, provider.id, updatePayload);
-        await updateProviderServices(
-          token,
-          provider.id,
-          selectedServices,
-        );
+        await updateProviderServices(token, provider.id, selectedServices);
       } else {
         const createPayload: ProviderCreate = {
           name: formData.name,
@@ -251,7 +257,10 @@ export default function ProviderForm({
     .join(", ");
 
   return (
-    <section className="admin-appointments-card" style={{ marginBottom: "2rem" }}>
+    <section
+      className="admin-appointments-card"
+      style={{ marginBottom: "2rem" }}
+    >
       <div className="admin-appointments-card__header">
         <h2>{provider ? "Edit Provider" : "Add New Provider"}</h2>
       </div>
@@ -262,7 +271,10 @@ export default function ProviderForm({
         >
           <div style={{ display: "flex", gap: "1rem" }}>
             <div style={{ flex: 1 }}>
-              <label>Name <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span></label>
+              <label>
+                Name{" "}
+                <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+              </label>
               <input
                 required
                 name="name"
@@ -272,7 +284,10 @@ export default function ProviderForm({
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label>Email <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span></label>
+              <label>
+                Email{" "}
+                <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+              </label>
               <input
                 required
                 type="email"
@@ -286,7 +301,10 @@ export default function ProviderForm({
 
           <div style={{ display: "flex", gap: "1rem" }}>
             <div style={{ flex: 1 }}>
-              <label>Phone <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span></label>
+              <label>
+                Phone{" "}
+                <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+              </label>
               <input
                 required
                 name="phone"
@@ -296,7 +314,10 @@ export default function ProviderForm({
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label>Type <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span></label>
+              <label>
+                Type{" "}
+                <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+              </label>
               <select
                 name="type"
                 value={formData.type || "person"}
@@ -352,7 +373,10 @@ export default function ProviderForm({
 
           <div style={{ display: "flex", gap: "1rem" }}>
             <div style={{ flex: 1 }}>
-              <label>Availability Time <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span></label>
+              <label>
+                Availability Time{" "}
+                <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>
+              </label>
               <AntTimeRangePicker
                 value={formData.availability_time || ""}
                 onChange={(val) =>
@@ -362,11 +386,21 @@ export default function ProviderForm({
                   }))
                 }
               />
-              <small style={{ color: "#64748b", fontSize: "0.75rem", display: "block", marginTop: "0.25rem" }}>
+              <small
+                style={{
+                  color: "#64748b",
+                  fontSize: "0.75rem",
+                  display: "block",
+                  marginTop: "0.25rem",
+                }}
+              >
                 Select start and end times with AM/PM
               </small>
             </div>
-            <div style={{ flex: 1, position: "relative" }} ref={blackoutDropdownRef}>
+            <div
+              style={{ flex: 1, position: "relative" }}
+              ref={blackoutDropdownRef}
+            >
               <label>Blackout Days</label>
               <button
                 type="button"
@@ -374,7 +408,14 @@ export default function ProviderForm({
                 onClick={() => setShowBlackoutDropdown(!showBlackoutDropdown)}
               >
                 {selectedBlackoutDays.length > 0 ? (
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90%" }}>
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      maxWidth: "90%",
+                    }}
+                  >
                     {selectedBlackoutDays.join(", ")}
                   </span>
                 ) : (
@@ -430,13 +471,24 @@ export default function ProviderForm({
                     setFormError(err.message);
                   }
                 }}
-                style={{ flex: 1, padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                }}
               />
               {formData.photo && (
                 <img
                   src={formData.photo}
                   alt="Preview"
-                  style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    flexShrink: 0,
+                  }}
                 />
               )}
             </div>
@@ -466,8 +518,17 @@ export default function ProviderForm({
             <div style={{ flex: 1 }}>
               <label>
                 Password{" "}
-                {!provider && <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>}
-                {provider && <small style={{ color: "#64748b", fontWeight: "normal" }}> (leave blank to keep current)</small>}
+                {!provider && (
+                  <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                    *
+                  </span>
+                )}
+                {provider && (
+                  <small style={{ color: "#64748b", fontWeight: "normal" }}>
+                    {" "}
+                    (leave blank to keep current)
+                  </small>
+                )}
               </label>
               <input
                 required={!provider}
@@ -481,7 +542,11 @@ export default function ProviderForm({
             <div style={{ flex: 1 }}>
               <label>
                 Confirm Password{" "}
-                {!provider && <span style={{ color: "#e2784d", fontWeight: "bold" }}>*</span>}
+                {!provider && (
+                  <span style={{ color: "#e2784d", fontWeight: "bold" }}>
+                    *
+                  </span>
+                )}
               </label>
               <input
                 required={!provider}
@@ -494,11 +559,23 @@ export default function ProviderForm({
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", marginTop: "0.5rem" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "1.25rem",
+              marginTop: "0.5rem",
+            }}
+          >
             <button type="submit" className="orange-action-btn">
               {provider ? "Update Provider" : "Save Provider"}
             </button>
-            <button type="button" className="orange-action-btn" style={{ backgroundColor: "#ccc", color: "#333" }} onClick={onCancel}>
+            <button
+              type="button"
+              className="orange-action-btn"
+              style={{ backgroundColor: "#ccc", color: "#333" }}
+              onClick={onCancel}
+            >
               Cancel
             </button>
             {formError && (

@@ -1,25 +1,22 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.security import (
-    create_access_token,
-    get_current_user,
-    hash_password,
-    verify_password,
-)
+from app.core.security import create_access_token, get_current_user
 from app.db.database import get_db
 from app.models.user import User
-from app.services.notifications import send_email
 from app.schemas.auth import (
     AuthResponse,
     CustomerLogin,
     CustomerProfileUpdate,
     CustomerRegister,
     CustomerResponse,
+)
+from app.services.auth_service import (
+    register_user,
+    authenticate_user,
+    update_user_profile,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -42,48 +39,17 @@ def _auth_response(user: User) -> AuthResponse:
     include_in_schema=False,
 )
 def register_customer(
-    payload: CustomerRegister, background_tasks: BackgroundTasks, db: Annotated[Session, Depends(get_db)]
+    payload: CustomerRegister,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
 ):
-    email = payload.email.lower()
-    if db.scalar(select(User).where(User.email == email)) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
-        )
-    user = User(
-        name=payload.name.strip(),
-        email=email,
-        phone=payload.phone,
-        photo=payload.photo,
-        password_hash=hash_password(payload.password),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    subject = f"Welcome to {settings.app_name}!"
-    body = (
-        f"Dear {user.name},\n"
-        f"Welcome to {settings.app_name}.\n"
-        "Your account has been created Successfully !\n"
-        "Avoid last moment rush by booking Appointments at anytime from anywhere !"
-    )
-    background_tasks.add_task(send_email, user.email, subject, body)
-
+    user = register_user(db, payload, background_tasks)
     return _auth_response(user)
 
 
 @router.post("/login", response_model=AuthResponse)
 def login_customer(payload: CustomerLogin, db: Annotated[Session, Depends(get_db)]):
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
-    if (
-        user is None
-        or not user.is_active
-        or not verify_password(payload.password, user.password_hash)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
-        )
+    user = authenticate_user(db, payload.email, payload.password)
     return _auth_response(user)
 
 
@@ -98,38 +64,5 @@ def update_current_user(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    email = payload.email.lower()
-
-    existing_user = db.scalar(
-        select(User).where(
-            User.email == email,
-            User.id != user.id,
-        )
-    )
-
-    if existing_user is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
-        )
-
-    user.name = payload.name.strip()
-    user.email = email
-    user.phone = payload.phone
-    
-    import os
-    if user.photo and payload.photo and user.photo != payload.photo:
-        if user.photo.startswith("/uploads/"):
-            old_file_path = user.photo.lstrip("/")
-            if os.path.exists(old_file_path):
-                try:
-                    os.remove(old_file_path)
-                except Exception:
-                    pass
-
-    user.photo = payload.photo
-
-    db.commit()
-    db.refresh(user)
-
-    return user
+    updated_user = update_user_profile(db, user, payload)
+    return updated_user

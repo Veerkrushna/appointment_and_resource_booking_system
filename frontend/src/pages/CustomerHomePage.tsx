@@ -89,9 +89,12 @@ function CustomerHomePage() {
   const canModify = useCallback(
     (appointment: CustomerAppointment) => {
       if (appointment.status !== "confirmed") return false;
-      return new Date(appointment.appointment_start).getTime() - 2 * 60 * 60 * 1000 > currentTime;
+      return (
+        new Date(appointment.appointment_start).getTime() - 2 * 60 * 60 * 1000 >
+        currentTime
+      );
     },
-    [currentTime]
+    [currentTime],
   );
 
   const upcoming = useMemo(
@@ -232,7 +235,9 @@ function CustomerHomePage() {
             {upcoming ? (
               <div className="dashboard-appointment">
                 <div>
-                  <span className={`appointment-status appointment-status--${upcoming.status}`}>
+                  <span
+                    className={`appointment-status appointment-status--${upcoming.status}`}
+                  >
                     {upcoming.status.replace("_", " ")}
                   </span>
                   <h3>{serviceName(upcoming)}</h3>
@@ -255,8 +260,14 @@ function CustomerHomePage() {
                   <button
                     className="secondary-button"
                     type="button"
-                    disabled={!canModify(upcoming) || activeAction === upcoming.id}
-                    title={!canModify(upcoming) ? "Changes are not allowed within 2 hours of the booking." : undefined}
+                    disabled={
+                      !canModify(upcoming) || activeAction === upcoming.id
+                    }
+                    title={
+                      !canModify(upcoming)
+                        ? "Changes are not allowed within 2 hours of the booking."
+                        : undefined
+                    }
                     onClick={() => setRescheduling(upcoming)}
                   >
                     Reschedule
@@ -264,8 +275,14 @@ function CustomerHomePage() {
                   <button
                     className="text-button"
                     type="button"
-                    disabled={!canModify(upcoming) || activeAction === upcoming.id}
-                    title={!canModify(upcoming) ? "Changes are not allowed within 2 hours of the booking." : undefined}
+                    disabled={
+                      !canModify(upcoming) || activeAction === upcoming.id
+                    }
+                    title={
+                      !canModify(upcoming)
+                        ? "Changes are not allowed within 2 hours of the booking."
+                        : undefined
+                    }
                     onClick={() => void cancelAppointment(upcoming.id)}
                   >
                     Cancel

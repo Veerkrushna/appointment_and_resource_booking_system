@@ -62,9 +62,7 @@ class AdminUserCreate(BaseModel):
 
     def model_post_init(self, __context: object) -> None:
         if self.role not in {UserRole.ADMIN, UserRole.PROVIDER}:
-            raise ValueError(
-                "Admin users can only create admin or provider accounts"
-            )
+            raise ValueError("Admin users can only create admin or provider accounts")
 
 
 class PasswordResetRequest(BaseModel):
@@ -83,4 +81,3 @@ class PasswordResetVerifyResponse(BaseModel):
 class PasswordResetConfirm(BaseModel):
     reset_token: str
     new_password: str = Field(min_length=8, max_length=128)
-

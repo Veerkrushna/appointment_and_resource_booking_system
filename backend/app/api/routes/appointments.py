@@ -98,7 +98,6 @@ def list_appointments(
                 detail="start_date must be before or equal to end_date",
             )
 
-
     appointments, total, total_pages = get_appointments_list(
         db=db,
         timezone=timezone,

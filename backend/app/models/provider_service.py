@@ -18,9 +18,7 @@ class ProviderService(Base):
 
     __tablename__ = "provider_services"
     __table_args__ = (
-        UniqueConstraint(
-            "provider_id", "service_id", name="uq_provider_service"
-        ),
+        UniqueConstraint("provider_id", "service_id", name="uq_provider_service"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

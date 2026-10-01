@@ -533,15 +533,21 @@ def weekly_schedule_response(provider: Provider) -> WeeklyScheduleResponse:
     days = [
         AvailabilityWindow(
             day_of_week=day_of_week,
-            start_time=stored_days[day_of_week].start_time
-            if day_of_week in stored_days
-            else None,
-            end_time=stored_days[day_of_week].end_time
-            if day_of_week in stored_days
-            else None,
-            is_working_day=stored_days[day_of_week].is_working_day
-            if day_of_week in stored_days
-            else False,
+            start_time=(
+                stored_days[day_of_week].start_time
+                if day_of_week in stored_days
+                else None
+            ),
+            end_time=(
+                stored_days[day_of_week].end_time
+                if day_of_week in stored_days
+                else None
+            ),
+            is_working_day=(
+                stored_days[day_of_week].is_working_day
+                if day_of_week in stored_days
+                else False
+            ),
         )
         for day_of_week in range(7)
     ]
