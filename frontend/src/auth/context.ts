@@ -5,6 +5,7 @@ type Customer = {
   name: string;
   email: string;
   phone: string | null;
+  photo?: string | null;
   role: string;
   is_active: boolean;
   provider_id?: string;
@@ -20,6 +21,7 @@ type AuthContextValue = {
     email: string,
     password: string,
     phone: string,
+    photo?: string,
   ) => Promise<void>;
   updateCustomer: (customer: Customer) => void;
   logout: () => void;

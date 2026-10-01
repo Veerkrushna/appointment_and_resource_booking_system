@@ -110,6 +110,7 @@ export type CustomerProfile = {
   name: string;
   email: string;
   phone: string | null;
+  photo?: string | null;
   role: string;
   is_active: boolean;
 };
@@ -120,6 +121,7 @@ export async function updateCustomerProfile(
     name: string;
     email: string;
     phone: string | null;
+    photo?: string | null;
   },
 ) {
   const response = await fetch("/api/auth/me", {
