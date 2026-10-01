@@ -13,6 +13,13 @@ async def upload_image(file: UploadFile = File(...)):
     if not (file.filename.endswith('.jpg') or file.filename.endswith('.jpeg')):
         raise HTTPException(status_code=400, detail="Only .jpg and .jpeg files are allowed.")
     
+    file.file.seek(0, os.SEEK_END)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    
+    if file_size > 1.5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must not exceed 1.5 MB.")
+    
     # Generate unique filename
     ext = os.path.splitext(file.filename)[1]
     filename = f"{uuid.uuid4()}{ext}"

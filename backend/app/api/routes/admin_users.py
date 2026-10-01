@@ -25,6 +25,7 @@ def create_admin_user(
         name=payload.name.strip(),
         email=email,
         phone=payload.phone,
+        photo=payload.photo,
         password_hash=hash_password(payload.password),
         role=payload.role,
         created_by=admin.id,

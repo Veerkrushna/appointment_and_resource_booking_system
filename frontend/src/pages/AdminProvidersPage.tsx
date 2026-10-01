@@ -34,6 +34,7 @@ function AdminProvidersPage() {
 
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
   const [providerServicesMap, setProviderServicesMap] = useState<Record<string, string[]>>({});
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
 
   const [sortCategory, setSortCategory] = useState<string>("");
   const [sortOption, setSortOption] = useState<string>("");
@@ -361,12 +362,11 @@ function AdminProvidersPage() {
             No providers found. Add a provider to get started.
           </p>
         ) : (
-          <div style={{ overflowX: "auto", width: "100%" }}>
+          <div style={{ width: "100%" }}>
             <table className="admin-table">
               <thead>
                 <tr>
                   <th>Provider</th>
-                  <th>Contact</th>
                   <th>Type / Status</th>
                   <th>Rating</th>
                   <th>Availability</th>
@@ -400,7 +400,23 @@ function AdminProvidersPage() {
                           />
                         )}
                         <div>
-                          <strong>{provider.name}</strong>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProvider(provider)}
+                            style={{
+                              backgroundColor: "#fff4ed",
+                              color: "#e2784d",
+                              border: "1px solid #fdba74",
+                              padding: "0.2rem 0.5rem",
+                              borderRadius: "4px",
+                              fontSize: "0.85rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              textAlign: "left"
+                            }}
+                          >
+                            {provider.name}
+                          </button>
                           {provider.bio && (
                             <p
                               style={{
@@ -413,12 +429,6 @@ function AdminProvidersPage() {
                             </p>
                           )}
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div>{provider.email}</div>
-                      <div style={{ color: "gray", fontSize: "0.85rem" }}>
-                        {provider.phone || "-"}
                       </div>
                     </td>
                     <td>
@@ -590,6 +600,34 @@ function AdminProvidersPage() {
           </div>
         )}
       </section>
+
+      {selectedProvider && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1000,
+          display: "flex", justifyContent: "center", alignItems: "center"
+        }} onClick={() => setSelectedProvider(null)}>
+          <div style={{
+            background: "white", padding: "2rem", borderRadius: "8px", minWidth: "300px", maxWidth: "90%",
+            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)"
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, color: "#18312f" }}>{selectedProvider.name}</h3>
+            <div style={{ margin: "1.5rem 0" }}>
+              <p style={{ margin: "0.5rem 0" }}><strong>Email:</strong> {selectedProvider.email}</p>
+              <p style={{ margin: "0.5rem 0" }}><strong>Phone:</strong> {selectedProvider.phone || "Not provided"}</p>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button 
+                className="admin-table-edit-btn"
+                onClick={() => setSelectedProvider(null)}
+                style={{ padding: "0.5rem 1rem" }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

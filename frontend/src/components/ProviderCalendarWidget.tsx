@@ -57,7 +57,7 @@ async function responseMessage(response: Response, fallback: string) {
   }
 }
 
-export default function ProviderCalendarPage() {
+export default function ProviderCalendarWidget() {
   const { customer, token } = useAuth();
   
   const [services, setServices] = useState<Record<string, string>>({});
@@ -132,19 +132,7 @@ export default function ProviderCalendarPage() {
   }
 
   return (
-    <section className="dashboard-page">
-      <header className="dashboard-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <p className="eyebrow">Schedule</p>
-          <h1>My Calendar</h1>
-          <p className="services-intro">Manage your appointments, available slots, and breaks.</p>
-        </div>
-        {!isLoading && !error && (
-          <p className="service-count">
-            <strong>{appointments.filter((appointment) => appointment.status !== "cancelled").length}</strong> active bookings
-          </p>
-        )}
-      </header>
+    <div style={{ marginTop: '2rem' }}>
 
       {error && <div className="status-message status-message--error" role="alert"><strong>We could not load your schedule.</strong><span>{error}</span></div>}
       {isLoading && <div className="status-message">Loading your calendar...</div>}
@@ -242,6 +230,6 @@ export default function ProviderCalendarPage() {
           </aside>
         </div>
       )}
-    </section>
+    </div>
   );
 }

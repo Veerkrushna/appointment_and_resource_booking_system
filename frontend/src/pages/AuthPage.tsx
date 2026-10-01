@@ -31,6 +31,7 @@ function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -46,6 +47,7 @@ function AuthPage() {
     setName("");
     setEmail("");
     setPhone("");
+    setPhotoFile(null);
     setPassword("");
     setConfirmPassword("");
     setValidationError(null);
@@ -60,7 +62,26 @@ function AuthPage() {
       if (!acceptedTerms) { setValidationError("Please agree to the Terms of Service and Privacy Policy."); return; }
     }
     setIsSubmitting(true);
-    try { if (mode === "login") await login(email, password); else await register(name, email, password, phone); navigate("/dashboard"); }
+    try { 
+      if (mode === "login") {
+        await login(email, password); 
+      } else {
+        let uploadedPhotoUrl = "";
+        if (photoFile) {
+          const formData = new FormData();
+          formData.append("file", photoFile);
+          const res = await fetch("/api/upload/image", { method: "POST", body: formData });
+          if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            throw new Error(data?.detail || "Photo upload failed.");
+          }
+          const data = await res.json();
+          uploadedPhotoUrl = data.url;
+        }
+        await register(name, email, password, phone, uploadedPhotoUrl);
+      }
+      navigate("/dashboard");
+    }
     catch (requestError) { setError(requestError instanceof Error ? requestError.message : "Unable to authenticate."); }
     finally { setIsSubmitting(false); }
   }
@@ -82,6 +103,21 @@ function AuthPage() {
             {isRegister && <label className="auth-field"><span>Full name</span><input autoComplete="off" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Alex Morgan" /></label>}
             <label className="auth-field"><span>Email address</span><input autoComplete="off" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
             {isRegister && <label className="auth-field"><span>Phone number <em>Optional</em></span><input autoComplete="off" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(555) 123-4567" /></label>}
+            {isRegister && <label className="auth-field"><span>Profile Photo (.jpg, .jpeg) <em>Optional</em></span><input type="file" accept=".jpg,.jpeg" onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                if (file.size > 1.5 * 1024 * 1024) {
+                  setValidationError("Photo size must not exceed 1.5 MB.");
+                  setPhotoFile(null);
+                  event.target.value = "";
+                  return;
+                }
+                setValidationError(null);
+                setPhotoFile(file);
+              } else {
+                setPhotoFile(null);
+              }
+            }} style={{ padding: '0.5rem 0' }} /></label>}
             <label className="auth-field"><span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>Password {!isRegister && <Link to="/forgot-password" style={{ fontSize: '0.8rem', color: '#e2784d', textDecoration: 'none' }}>Forgot password?</Link>}</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /><button className="password-toggle" type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}><Icon name={showPassword ? "eye-off" : "eye"} /></button></div>{isRegister && password && <div className="password-meter" aria-live="polite"><div className="password-meter__bars">{[1, 2, 3, 4].map((bar) => <i className={bar <= score ? `is-level-${score}` : ""} key={bar} />)}</div><span>{score < 2 ? "Needs more strength" : score < 4 ? "Good password" : "Strong password"}</span></div>}</label>
             {isRegister && <label className="auth-field"><span>Confirm password</span><div className="auth-input-wrap"><input autoComplete="new-password" required minLength={8} type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" /></div></label>}
             {isRegister && <label className="terms-check"><input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} /><span>I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></span></label>}

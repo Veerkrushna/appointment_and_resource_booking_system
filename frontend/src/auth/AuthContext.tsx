@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     phone: string,
+    photo?: string,
   ) {
     await authenticate(
       requestAuth("/api/auth/signup", {
@@ -71,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
         phone: phone || null,
+        photo: photo || null,
       }),
     );
   }

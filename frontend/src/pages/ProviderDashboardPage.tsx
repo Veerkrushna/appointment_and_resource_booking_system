@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../auth/useAuth";
+import ProviderCalendarWidget from "../components/ProviderCalendarWidget";
 
 type RealAppointment = {
   id: string;
@@ -199,6 +200,7 @@ export default function ProviderDashboardPage() {
           </table>
         </div>
       </section>
+      <ProviderCalendarWidget />
     </section>
   );
 }

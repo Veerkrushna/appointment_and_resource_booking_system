@@ -54,6 +54,7 @@ def register_customer(
         name=payload.name.strip(),
         email=email,
         phone=payload.phone,
+        photo=payload.photo,
         password_hash=hash_password(payload.password),
     )
     db.add(user)
@@ -115,6 +116,18 @@ def update_current_user(
     user.name = payload.name.strip()
     user.email = email
     user.phone = payload.phone
+    
+    import os
+    if user.photo and payload.photo and user.photo != payload.photo:
+        if user.photo.startswith("/uploads/"):
+            old_file_path = user.photo.lstrip("/")
+            if os.path.exists(old_file_path):
+                try:
+                    os.remove(old_file_path)
+                except Exception:
+                    pass
+
+    user.photo = payload.photo
 
     db.commit()
     db.refresh(user)
