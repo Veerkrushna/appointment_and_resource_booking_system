@@ -15,4 +15,3 @@ class ServiceProvidersUpdate(BaseModel):
         default_factory=list,
         description="Complete list of providers assigned to the service",
     )
-

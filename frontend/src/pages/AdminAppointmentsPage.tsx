@@ -5,22 +5,11 @@ import {
   type AdminAppointment,
   type AdminAppointmentListResponse,
 } from "../lib/adminAppointments";
-
-type NamedRecord = {
-  id: string;
-  name: string;
-};
-
-function formatAppointmentDate(dateString: string): string {
-  return new Date(dateString).toLocaleString([], {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-function getStatusClass(status: string): string {
-  return `admin-appointment-status admin-appointment-status--${status.toLowerCase()}`;
-}
+import AdminAppointmentsFilters, {
+  NamedRecord,
+} from "../features/admin/appointments/AdminAppointmentsFilters";
+import AdminAppointmentsTable from "../features/admin/appointments/AdminAppointmentsTable";
+import AdminAppointmentsPagination from "../features/admin/appointments/AdminAppointmentsPagination";
 
 export default function AdminAppointmentsPage() {
   const { token } = useAuth();
@@ -160,92 +149,22 @@ export default function AdminAppointmentsPage() {
       </header>
 
       <section className="admin-appointments-card">
-        <div className="admin-appointments-filters">
-          <div className="admin-appointments-filter">
-            <label htmlFor="appointment-search">Search customer</label>
-
-            <input
-              id="appointment-search"
-              type="search"
-              placeholder="Email or phone"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
-
-          <div className="admin-appointments-filter">
-            <label htmlFor="appointment-provider">Provider</label>
-
-            <select
-              id="appointment-provider"
-              value={providerId}
-              onChange={(event) => setProviderId(event.target.value)}
-            >
-              <option value="">All providers</option>
-
-              {providers.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="admin-appointments-filter">
-            <label htmlFor="appointment-service">Service</label>
-
-            <select
-              id="appointment-service"
-              value={serviceId}
-              onChange={(event) => setServiceId(event.target.value)}
-            >
-              <option value="">All services</option>
-
-              {services.map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="admin-appointments-filter">
-            <label htmlFor="appointment-status">Status</label>
-
-            <select
-              id="appointment-status"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              <option value="">All statuses</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-
-          <div className="admin-appointments-filter">
-            <label htmlFor="appointment-start-date">From</label>
-
-            <input
-              id="appointment-start-date"
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-            />
-          </div>
-
-          <div className="admin-appointments-filter">
-            <label htmlFor="appointment-end-date">To</label>
-
-            <input
-              id="appointment-end-date"
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-            />
-          </div>
-        </div>
+        <AdminAppointmentsFilters
+          search={search}
+          setSearch={setSearch}
+          providerId={providerId}
+          setProviderId={setProviderId}
+          serviceId={serviceId}
+          setServiceId={setServiceId}
+          status={status}
+          setStatus={setStatus}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          providers={providers}
+          services={services}
+        />
 
         <button
           type="button"
@@ -264,78 +183,17 @@ export default function AdminAppointmentsPage() {
         </button>
         <div className="admin-appointments-card__header">
           <h2>All appointments</h2>
-
           <span>{pagination?.total ?? 0} total appointments</span>
         </div>
 
-        {appointments.length === 0 ? (
-          <p>No appointments found.</p>
-        ) : (
-          <div className="admin-appointments-table-wrapper">
-            <table className="admin-appointments-table">
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Service</th>
-                  <th>Provider</th>
-                  <th>Appointment time</th>
-                  <th>Duration</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
+        <AdminAppointmentsTable appointments={appointments} />
 
-              <tbody>
-                {appointments.map((appointment) => (
-                  <tr key={appointment.id}>
-                    <td>
-                      <strong>{appointment.user_name}</strong>
-                      <span>{appointment.user_email}</span>
-                    </td>
-
-                    <td>{appointment.service_name}</td>
-
-                    <td>{appointment.provider_name}</td>
-
-                    <td>
-                      {formatAppointmentDate(appointment.appointment_start)}
-                    </td>
-
-                    <td>{appointment.duration_minutes} min</td>
-
-                    <td>
-                      <span className={getStatusClass(appointment.status)}>
-                        {appointment.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {pagination && pagination.total_pages > 1 && (
-          <div className="admin-appointments-pagination">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage((currentPage) => currentPage - 1)}
-            >
-              Previous
-            </button>
-
-            <span>
-              Page {pagination.page} of {pagination.total_pages}
-            </span>
-
-            <button
-              type="button"
-              disabled={page >= pagination.total_pages}
-              onClick={() => setPage((currentPage) => currentPage + 1)}
-            >
-              Next
-            </button>
-          </div>
+        {pagination && (
+          <AdminAppointmentsPagination
+            pagination={pagination}
+            page={page}
+            setPage={setPage}
+          />
         )}
       </section>
     </main>

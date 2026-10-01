@@ -7,10 +7,10 @@ interface AntTimeRangePickerProps {
 }
 
 const HOURS = Array.from({ length: 12 }, (_, i) =>
-  String(i + 1).padStart(2, "0")
+  String(i + 1).padStart(2, "0"),
 );
 const MINUTES = Array.from({ length: 12 }, (_, i) =>
-  String(i * 5).padStart(2, "0")
+  String(i * 5).padStart(2, "0"),
 );
 const PERIODS = ["AM", "PM"];
 
@@ -25,7 +25,7 @@ export default function AntTimeRangePicker({
   // Parse initial value if present
   const parseTimeRange = (str: string) => {
     const match = str.match(
-      /^\s*(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)\s+to\s+(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)\s*$/i
+      /^\s*(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)\s+to\s+(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)\s*$/i,
     );
     if (match) {
       return {
@@ -89,7 +89,7 @@ export default function AntTimeRangePicker({
     sp: string,
     eh: string,
     em: string,
-    ep: string
+    ep: string,
   ) => {
     const formatted = `${sh}:${sm} ${sp.toLowerCase()} to ${eh}:${em} ${ep.toLowerCase()}`;
     onChange(formatted);
@@ -126,7 +126,14 @@ export default function AntTimeRangePicker({
   };
 
   const handleApply = () => {
-    updateRange(startHour, startMinute, startPeriod, endHour, endMinute, endPeriod);
+    updateRange(
+      startHour,
+      startMinute,
+      startPeriod,
+      endHour,
+      endMinute,
+      endPeriod,
+    );
     setIsOpen(false);
   };
 
@@ -143,7 +150,9 @@ export default function AntTimeRangePicker({
         tabIndex={0}
       >
         <span className="ant-time-picker-value">
-          {value || <span className="ant-time-picker-placeholder">{placeholder}</span>}
+          {value || (
+            <span className="ant-time-picker-placeholder">{placeholder}</span>
+          )}
         </span>
         <span className="ant-time-picker-icon">🕒</span>
       </div>
@@ -163,7 +172,9 @@ export default function AntTimeRangePicker({
                         <li
                           key={h}
                           className={`ant-picker-time-panel-cell ${
-                            startHour === h ? "ant-picker-time-panel-cell-selected" : ""
+                            startHour === h
+                              ? "ant-picker-time-panel-cell-selected"
+                              : ""
                           }`}
                           onClick={() => handleStartHour(h)}
                         >
@@ -180,7 +191,9 @@ export default function AntTimeRangePicker({
                         <li
                           key={m}
                           className={`ant-picker-time-panel-cell ${
-                            startMinute === m ? "ant-picker-time-panel-cell-selected" : ""
+                            startMinute === m
+                              ? "ant-picker-time-panel-cell-selected"
+                              : ""
                           }`}
                           onClick={() => handleStartMinute(m)}
                         >
@@ -197,7 +210,9 @@ export default function AntTimeRangePicker({
                         <li
                           key={p}
                           className={`ant-picker-time-panel-cell ${
-                            startPeriod === p ? "ant-picker-time-panel-cell-selected" : ""
+                            startPeriod === p
+                              ? "ant-picker-time-panel-cell-selected"
+                              : ""
                           }`}
                           onClick={() => handleStartPeriod(p)}
                         >
@@ -224,7 +239,9 @@ export default function AntTimeRangePicker({
                         <li
                           key={h}
                           className={`ant-picker-time-panel-cell ${
-                            endHour === h ? "ant-picker-time-panel-cell-selected" : ""
+                            endHour === h
+                              ? "ant-picker-time-panel-cell-selected"
+                              : ""
                           }`}
                           onClick={() => handleEndHour(h)}
                         >
@@ -241,7 +258,9 @@ export default function AntTimeRangePicker({
                         <li
                           key={m}
                           className={`ant-picker-time-panel-cell ${
-                            endMinute === m ? "ant-picker-time-panel-cell-selected" : ""
+                            endMinute === m
+                              ? "ant-picker-time-panel-cell-selected"
+                              : ""
                           }`}
                           onClick={() => handleEndMinute(m)}
                         >
@@ -258,7 +277,9 @@ export default function AntTimeRangePicker({
                         <li
                           key={p}
                           className={`ant-picker-time-panel-cell ${
-                            endPeriod === p ? "ant-picker-time-panel-cell-selected" : ""
+                            endPeriod === p
+                              ? "ant-picker-time-panel-cell-selected"
+                              : ""
                           }`}
                           onClick={() => handleEndPeriod(p)}
                         >

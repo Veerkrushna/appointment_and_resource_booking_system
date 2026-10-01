@@ -19,15 +19,25 @@ function dateKey(date: Date) {
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function formatMonth(value: Date) {
-  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(value);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(value);
 }
 
 function formatSelectedDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date(`${value}T12:00:00`));
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
 }
 
 function getCalendarDays(month: Date) {
@@ -39,7 +49,8 @@ function getCalendarDays(month: Date) {
   const end = new Date(lastDay);
   end.setDate(lastDay.getDate() + (6 - lastDay.getDay()));
 
-  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const totalDays =
+    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
   return Array.from({ length: totalDays }, (_, index) => {
     const day = new Date(start);
@@ -59,7 +70,7 @@ async function responseMessage(response: Response, fallback: string) {
 
 export default function ProviderCalendarWidget() {
   const { customer, token } = useAuth();
-  
+
   const [services, setServices] = useState<Record<string, string>>({});
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [month, setMonth] = useState(() => new Date());
@@ -72,8 +83,14 @@ export default function ProviderCalendarWidget() {
     async function loadData() {
       if (!customer?.email) return;
       try {
-        const providersResponse = await fetch('/api/providers');
-        if (!providersResponse.ok) throw new Error(await responseMessage(providersResponse, "Unable to load providers."));
+        const providersResponse = await fetch("/api/providers");
+        if (!providersResponse.ok)
+          throw new Error(
+            await responseMessage(
+              providersResponse,
+              "Unable to load providers.",
+            ),
+          );
         const providers = await providersResponse.json();
         const provider = providers.find((p: any) => p.email === customer.email);
 
@@ -84,29 +101,44 @@ export default function ProviderCalendarWidget() {
           return;
         }
 
-        const [appointmentsResponse, servicesResponse, scheduleResponse] = await Promise.all([
-          fetch(`/api/appointments?provider_id=${provider.id}`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          }),
-          fetch("/api/services"),
-          fetch(`/api/providers/${provider.id}/schedule`)
-        ]);
-        
+        const [appointmentsResponse, servicesResponse, scheduleResponse] =
+          await Promise.all([
+            fetch(`/api/appointments?provider_id=${provider.id}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            }),
+            fetch("/api/services"),
+            fetch(`/api/providers/${provider.id}/schedule`),
+          ]);
+
         if (scheduleResponse.ok) {
           const schedule = await scheduleResponse.json();
           setScheduleData(schedule);
         }
-        
-        if (!appointmentsResponse.ok) throw new Error(await responseMessage(appointmentsResponse, "Unable to load bookings."));
+
+        if (!appointmentsResponse.ok)
+          throw new Error(
+            await responseMessage(
+              appointmentsResponse,
+              "Unable to load bookings.",
+            ),
+          );
         const appointmentsData = await appointmentsResponse.json();
         setAppointments(appointmentsData.appointments || []);
-        
+
         if (servicesResponse.ok) {
           const serviceData: Service[] = await servicesResponse.json();
-          setServices(Object.fromEntries(serviceData.map((service) => [service.id, service.name])));
+          setServices(
+            Object.fromEntries(
+              serviceData.map((service) => [service.id, service.name]),
+            ),
+          );
         }
       } catch (requestError) {
-        setError(requestError instanceof Error ? requestError.message : "Unable to load calendar data.");
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load calendar data.",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -124,51 +156,92 @@ export default function ProviderCalendarWidget() {
     });
     return grouped;
   }, [appointments]);
-  
+
   const selectedAppointments = appointmentsByDay[selectedDate] || [];
 
   function moveMonth(amount: number) {
-    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+    setMonth(
+      (current) =>
+        new Date(current.getFullYear(), current.getMonth() + amount, 1),
+    );
   }
 
   return (
-    <div style={{ marginTop: '2rem' }}>
-
-      {error && <div className="status-message status-message--error" role="alert"><strong>We could not load your schedule.</strong><span>{error}</span></div>}
-      {isLoading && <div className="status-message">Loading your calendar...</div>}
+    <div style={{ marginTop: "2rem" }}>
+      {error && (
+        <div className="status-message status-message--error" role="alert">
+          <strong>We could not load your schedule.</strong>
+          <span>{error}</span>
+        </div>
+      )}
+      {isLoading && (
+        <div className="status-message">Loading your calendar...</div>
+      )}
 
       {!isLoading && !error && (
         <div className="provider-calendar-layout">
           <div className="provider-calendar-panel">
             <div className="calendar-header">
-              <button className="calendar-nav" type="button" aria-label="Previous month" onClick={() => moveMonth(-1)}>&#8592;</button>
+              <button
+                className="calendar-nav"
+                type="button"
+                aria-label="Previous month"
+                onClick={() => moveMonth(-1)}
+              >
+                &#8592;
+              </button>
               <h2>{formatMonth(month)}</h2>
-              <button className="calendar-nav" type="button" aria-label="Next month" onClick={() => moveMonth(1)}>&#8594;</button>
+              <button
+                className="calendar-nav"
+                type="button"
+                aria-label="Next month"
+                onClick={() => moveMonth(1)}
+              >
+                &#8594;
+              </button>
             </div>
             <div className="calendar-weekdays" aria-hidden="true">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
             </div>
-            <div className="calendar-grid" role="grid" aria-label={`${formatMonth(month)} schedule`}>
+            <div
+              className="calendar-grid"
+              role="grid"
+              aria-label={`${formatMonth(month)} schedule`}
+            >
               {calendarDays.map((day) => {
                 const key = dateKey(day);
                 const dayAppointments = appointmentsByDay[key] || [];
                 const isCurrentMonth = day.getMonth() === month.getMonth();
                 const isSelected = key === selectedDate;
-                
+
                 let isDisabled = false;
                 if (scheduleData) {
-                  const pythonDayOfWeek = day.getDay() === 0 ? 6 : day.getDay() - 1;
-                  const availabilityWindow = scheduleData.availability?.find((w: any) => w.day_of_week === pythonDayOfWeek);
-                  if (availabilityWindow && !availabilityWindow.is_working_day) {
+                  const pythonDayOfWeek =
+                    day.getDay() === 0 ? 6 : day.getDay() - 1;
+                  const availabilityWindow = scheduleData.availability?.find(
+                    (w: any) => w.day_of_week === pythonDayOfWeek,
+                  );
+                  if (
+                    availabilityWindow &&
+                    !availabilityWindow.is_working_day
+                  ) {
                     isDisabled = true;
                   }
-                  
+
                   if (!isDisabled && scheduleData.blackout_dates) {
-                    const isBlackout = scheduleData.blackout_dates.some((blackout: any) => {
-                      const bStartKey = dateKey(new Date(blackout.blackout_start));
-                      const bEndKey = dateKey(new Date(blackout.blackout_end));
-                      return key >= bStartKey && key <= bEndKey;
-                    });
+                    const isBlackout = scheduleData.blackout_dates.some(
+                      (blackout: any) => {
+                        const bStartKey = dateKey(
+                          new Date(blackout.blackout_start),
+                        );
+                        const bEndKey = dateKey(
+                          new Date(blackout.blackout_end),
+                        );
+                        return key >= bStartKey && key <= bEndKey;
+                      },
+                    );
                     if (isBlackout) {
                       isDisabled = true;
                     }
@@ -176,22 +249,29 @@ export default function ProviderCalendarWidget() {
                 }
 
                 return (
-                  <button 
-                    className={`calendar-day${isCurrentMonth ? "" : " calendar-day--outside"}${isSelected ? " calendar-day--selected" : ""}`} 
-                    key={key} 
-                    type="button" 
-                    role="gridcell" 
-                    aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings`} 
+                  <button
+                    className={`calendar-day${isCurrentMonth ? "" : " calendar-day--outside"}${isSelected ? " calendar-day--selected" : ""}`}
+                    key={key}
+                    type="button"
+                    role="gridcell"
+                    aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings`}
                     onClick={() => {
                       if (!isDisabled) setSelectedDate(key);
                     }}
                     disabled={isDisabled}
                   >
                     <span>{day.getDate()}</span>
-                    {dayAppointments.length > 0 && <small className="calendar-day__count">{dayAppointments.length}</small>}
+                    {dayAppointments.length > 0 && (
+                      <small className="calendar-day__count">
+                        {dayAppointments.length}
+                      </small>
+                    )}
                     <div className="calendar-day__dots">
                       {dayAppointments.slice(0, 3).map((appointment) => (
-                        <i className={`calendar-dot calendar-dot--${appointment.status}`} key={appointment.id} />
+                        <i
+                          className={`calendar-dot calendar-dot--${appointment.status}`}
+                          key={appointment.id}
+                        />
                       ))}
                     </div>
                   </button>
@@ -206,13 +286,20 @@ export default function ProviderCalendarWidget() {
             {selectedAppointments.length > 0 ? (
               <div className="provider-agenda__list">
                 {selectedAppointments.map((appointment) => (
-                  <article className={`provider-booking provider-booking--${appointment.status}`} key={appointment.id}>
+                  <article
+                    className={`provider-booking provider-booking--${appointment.status}`}
+                    key={appointment.id}
+                  >
                     <div>
-                      <strong>{formatTime(appointment.appointment_start)}</strong>
+                      <strong>
+                        {formatTime(appointment.appointment_start)}
+                      </strong>
                       <span>{appointment.duration_minutes} min</span>
                     </div>
                     <section>
-                      <h3>{services[appointment.service_id] || "Booked service"}</h3>
+                      <h3>
+                        {services[appointment.service_id] || "Booked service"}
+                      </h3>
                       <p>{appointment.user_name}</p>
                       <small>{appointment.user_email}</small>
                     </section>

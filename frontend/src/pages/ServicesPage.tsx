@@ -67,7 +67,9 @@ function ServicesPage() {
   const categories = useMemo(
     () => [
       "All",
-      ...Array.from(new Set(services.map((service) => service.category))).sort(),
+      ...Array.from(
+        new Set(services.map((service) => service.category)),
+      ).sort(),
     ],
     [services],
   );
@@ -87,12 +89,14 @@ function ServicesPage() {
           <p className="eyebrow">Find your next appointment</p>
           <h1>Services</h1>
           <p className="services-intro">
-            Browse our active services and choose the right fit for your schedule.
+            Browse our active services and choose the right fit for your
+            schedule.
           </p>
         </div>
         {!isLoading && !error && (
           <p className="service-count">
-            <strong>{services.length}</strong> active {services.length === 1 ? "service" : "services"}
+            <strong>{services.length}</strong> active{" "}
+            {services.length === 1 ? "service" : "services"}
           </p>
         )}
       </div>
@@ -108,10 +112,17 @@ function ServicesPage() {
 
       {!isLoading && !error && services.length > 0 && (
         <>
-          <div className="category-filter" aria-label="Filter services by category">
+          <div
+            className="category-filter"
+            aria-label="Filter services by category"
+          >
             {categories.map((category) => (
               <button
-                className={selectedCategory === category ? "filter-button active" : "filter-button"}
+                className={
+                  selectedCategory === category
+                    ? "filter-button active"
+                    : "filter-button"
+                }
                 key={category}
                 onClick={() => setSelectedCategory(category)}
                 type="button"
@@ -127,17 +138,23 @@ function ServicesPage() {
                 <article className="service-card" key={service.id}>
                   <div className="service-card__topline">
                     <span className="service-category">{service.category}</span>
-                    <span className="service-arrow" aria-hidden="true">&#8599;</span>
+                    <span className="service-arrow" aria-hidden="true">
+                      &#8599;
+                    </span>
                   </div>
                   <h2>{service.name}</h2>
                   <p className="service-description">
-                    {service.description || "Details for this service are coming soon."}
+                    {service.description ||
+                      "Details for this service are coming soon."}
                   </p>
                   <div className="service-meta">
                     <span>{service.duration_minutes} min</span>
                     <span>{formatPrice(service.price)}</span>
                   </div>
-                  <Link className="service-book-link" to={`/book/${service.id}`}>
+                  <Link
+                    className="service-book-link"
+                    to={`/book/${service.id}`}
+                  >
                     Book this service <span aria-hidden="true">&#8594;</span>
                   </Link>
                 </article>
@@ -151,7 +168,9 @@ function ServicesPage() {
 
       {!isLoading && !error && services.length === 0 && (
         <div className="empty-services">
-          <span className="empty-services__mark" aria-hidden="true">+</span>
+          <span className="empty-services__mark" aria-hidden="true">
+            +
+          </span>
           <h2>No services available yet</h2>
           <p>Check back soon for new ways to book time with our team.</p>
         </div>

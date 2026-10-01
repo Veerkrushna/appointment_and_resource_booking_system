@@ -30,9 +30,7 @@ class ProviderAvailability(Base):
     day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
     start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
-    is_working_day: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False
-    )
+    is_working_day: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     provider: Mapped["Provider"] = relationship(back_populates="availability")
 

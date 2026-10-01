@@ -30,7 +30,9 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, encoded: str) -> bool:
     try:
         iterations, salt, expected = encoded.split("$", 2)
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), base64.urlsafe_b64decode(salt), int(iterations))
+        actual = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), base64.urlsafe_b64decode(salt), int(iterations)
+        )
         return hmac.compare_digest(base64.urlsafe_b64encode(actual).decode(), expected)
     except (ValueError, TypeError):
         return False
@@ -42,8 +44,14 @@ def create_access_token(user_id: UUID, role: UserRole) -> str:
         "role": role.value,
         "exp": int(time.time()) + settings.auth_token_expiry_seconds,
     }
-    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
-    signature = hmac.new(settings.auth_secret.encode(), encoded.encode(), hashlib.sha256).digest()
+    encoded = (
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
+        .decode()
+        .rstrip("=")
+    )
+    signature = hmac.new(
+        settings.auth_secret.encode(), encoded.encode(), hashlib.sha256
+    ).digest()
     return f"{_SCHEME}.{encoded}.{base64.urlsafe_b64encode(signature).decode().rstrip('=')}"
 
 
@@ -52,16 +60,23 @@ def _decode_token(token: str) -> tuple[UUID, UserRole]:
         scheme, encoded, signature = token.split(".", 2)
         if scheme != _SCHEME:
             raise ValueError
-        expected = hmac.new(settings.auth_secret.encode(), encoded.encode(), hashlib.sha256).digest()
+        expected = hmac.new(
+            settings.auth_secret.encode(), encoded.encode(), hashlib.sha256
+        ).digest()
         supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
         if not hmac.compare_digest(expected, supplied):
             raise ValueError
-        payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        payload = json.loads(
+            base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        )
         if int(payload["exp"]) <= int(time.time()):
             raise ValueError
         return UUID(payload["sub"]), UserRole(payload["role"])
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired credentials") from None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired credentials",
+        ) from None
 
 
 def get_current_user(
@@ -69,11 +84,16 @@ def get_current_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+        )
     user_id, token_role = _decode_token(credentials.credentials)
     user = db.get(User, user_id)
     if user is None or not user.is_active or user.role != token_role:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired credentials",
+        )
     return user
 
 
@@ -94,7 +114,9 @@ def require_role(*roles: UserRole | str) -> Callable:
 
     def dependency(user: Annotated[User, Depends(get_current_user)]) -> User:
         if user.role not in allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
         return user
 
     return dependency
@@ -102,7 +124,9 @@ def require_role(*roles: UserRole | str) -> Callable:
 
 def get_current_customer(user: Annotated[User, Depends(get_current_user)]) -> User:
     if user.role not in {UserRole.CUSTOMER, UserRole.PROVIDER}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Customer access required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Customer access required"
+        )
     return user
 
 
@@ -121,8 +145,14 @@ def create_reset_token(user_id: UUID) -> str:
         "purpose": "password_reset",
         "exp": int(time.time()) + 300,  # 5 minutes expiry
     }
-    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
-    signature = hmac.new(settings.auth_secret.encode(), encoded.encode(), hashlib.sha256).digest()
+    encoded = (
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
+        .decode()
+        .rstrip("=")
+    )
+    signature = hmac.new(
+        settings.auth_secret.encode(), encoded.encode(), hashlib.sha256
+    ).digest()
     return f"{_SCHEME}.{encoded}.{base64.urlsafe_b64encode(signature).decode().rstrip('=')}"
 
 
@@ -131,15 +161,22 @@ def verify_reset_token(token: str) -> UUID:
         scheme, encoded, signature = token.split(".", 2)
         if scheme != _SCHEME:
             raise ValueError
-        expected = hmac.new(settings.auth_secret.encode(), encoded.encode(), hashlib.sha256).digest()
+        expected = hmac.new(
+            settings.auth_secret.encode(), encoded.encode(), hashlib.sha256
+        ).digest()
         supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
         if not hmac.compare_digest(expected, supplied):
             raise ValueError
-        payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        payload = json.loads(
+            base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        )
         if int(payload["exp"]) <= int(time.time()):
             raise ValueError
         if payload.get("purpose") != "password_reset":
             raise ValueError
         return UUID(payload["sub"])
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired reset token") from None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired reset token",
+        ) from None

@@ -25,15 +25,25 @@ function dateKey(date: Date) {
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function formatMonth(value: Date) {
-  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(value);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(value);
 }
 
 function formatSelectedDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date(`${value}T12:00:00`));
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
 }
 
 function getCalendarDays(month: Date) {
@@ -45,7 +55,8 @@ function getCalendarDays(month: Date) {
   const end = new Date(lastDay);
   end.setDate(lastDay.getDate() + (6 - lastDay.getDay()));
 
-  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const totalDays =
+    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
   return Array.from({ length: totalDays }, (_, index) => {
     const day = new Date(start);
@@ -76,17 +87,34 @@ function ProvidersPage() {
   useEffect(() => {
     async function loadDirectory() {
       try {
-        const [providersResponse, servicesResponse] = await Promise.all([fetch("/api/providers"), fetch("/api/services")]);
-        if (!providersResponse.ok) throw new Error(await responseMessage(providersResponse, "Unable to load providers."));
+        const [providersResponse, servicesResponse] = await Promise.all([
+          fetch("/api/providers"),
+          fetch("/api/services"),
+        ]);
+        if (!providersResponse.ok)
+          throw new Error(
+            await responseMessage(
+              providersResponse,
+              "Unable to load providers.",
+            ),
+          );
         const providerData: Provider[] = await providersResponse.json();
         setProviders(providerData);
         setSelectedProviderId(providerData[0]?.id || "");
         if (servicesResponse.ok) {
           const serviceData: Service[] = await servicesResponse.json();
-          setServices(Object.fromEntries(serviceData.map((service) => [service.id, service.name])));
+          setServices(
+            Object.fromEntries(
+              serviceData.map((service) => [service.id, service.name]),
+            ),
+          );
         }
       } catch (requestError) {
-        setError(requestError instanceof Error ? requestError.message : "Unable to load providers.");
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load providers.",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -100,12 +128,25 @@ function ProvidersPage() {
     async function loadAppointments() {
       setError(null);
       try {
-        const response = await fetch(`/api/appointments?provider_id=${selectedProviderId}`);
-        if (!response.ok) throw new Error(await responseMessage(response, "Unable to load provider bookings."));
-        const appointmentsData: { appointments: Appointment[] } = await response.json();
+        const response = await fetch(
+          `/api/appointments?provider_id=${selectedProviderId}`,
+        );
+        if (!response.ok)
+          throw new Error(
+            await responseMessage(
+              response,
+              "Unable to load provider bookings.",
+            ),
+          );
+        const appointmentsData: { appointments: Appointment[] } =
+          await response.json();
         setAppointments(appointmentsData.appointments);
       } catch (requestError) {
-        setError(requestError instanceof Error ? requestError.message : "Unable to load provider bookings.");
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load provider bookings.",
+        );
       }
     }
 
@@ -122,10 +163,15 @@ function ProvidersPage() {
     return grouped;
   }, [appointments]);
   const selectedAppointments = appointmentsByDay[selectedDate] || [];
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
+  const selectedProvider = providers.find(
+    (provider) => provider.id === selectedProviderId,
+  );
 
   function moveMonth(amount: number) {
-    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+    setMonth(
+      (current) =>
+        new Date(current.getFullYear(), current.getMonth() + amount, 1),
+    );
   }
 
   return (
@@ -134,44 +180,170 @@ function ProvidersPage() {
         <div>
           <p className="eyebrow">Operations view</p>
           <h1>Provider schedule</h1>
-          <p className="services-intro">Review bookings by provider, spot busy days, and open the day agenda for the full appointment detail.</p>
+          <p className="services-intro">
+            Review bookings by provider, spot busy days, and open the day agenda
+            for the full appointment detail.
+          </p>
         </div>
-        {!isLoading && <p className="service-count"><strong>{appointments.filter((appointment) => appointment.status !== "cancelled").length}</strong> active bookings</p>}
+        {!isLoading && (
+          <p className="service-count">
+            <strong>
+              {
+                appointments.filter(
+                  (appointment) => appointment.status !== "cancelled",
+                ).length
+              }
+            </strong>{" "}
+            active bookings
+          </p>
+        )}
       </div>
 
-      {error && <div className="status-message status-message--error" role="alert"><strong>We could not load the schedule.</strong><span>{error}</span></div>}
+      {error && (
+        <div className="status-message status-message--error" role="alert">
+          <strong>We could not load the schedule.</strong>
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="provider-calendar-toolbar">
-        <label className="field-label" htmlFor="provider-select">Provider<span>Select a provider to view their bookings.</span></label>
-        <select id="provider-select" value={selectedProviderId} onChange={(event) => setSelectedProviderId(event.target.value)} disabled={isLoading}>
-          {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+        <label className="field-label" htmlFor="provider-select">
+          Provider<span>Select a provider to view their bookings.</span>
+        </label>
+        <select
+          id="provider-select"
+          value={selectedProviderId}
+          onChange={(event) => setSelectedProviderId(event.target.value)}
+          disabled={isLoading}
+        >
+          {providers.map((provider) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.name}
+            </option>
+          ))}
         </select>
-        {selectedProvider && <span className={`provider-availability provider-availability--${selectedProvider.availability_status}`}>{selectedProvider.availability_status.replace("_", " ")}</span>}
+        {selectedProvider && (
+          <span
+            className={`provider-availability provider-availability--${selectedProvider.availability_status}`}
+          >
+            {selectedProvider.availability_status.replace("_", " ")}
+          </span>
+        )}
       </div>
 
-      {!isLoading && !error && selectedProviderId && <div className="provider-calendar-layout">
-        <div className="provider-calendar-panel">
-          <div className="calendar-header"><button className="calendar-nav" type="button" aria-label="Previous month" onClick={() => moveMonth(-1)}>&#8592;</button><h2>{formatMonth(month)}</h2><button className="calendar-nav" type="button" aria-label="Next month" onClick={() => moveMonth(1)}>&#8594;</button></div>
-          <div className="calendar-weekdays" aria-hidden="true">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
-          <div className="calendar-grid" role="grid" aria-label={`${formatMonth(month)} provider schedule`}>
-            {calendarDays.map((day) => {
-              const key = dateKey(day);
-              const dayAppointments = appointmentsByDay[key] || [];
-              const isCurrentMonth = day.getMonth() === month.getMonth();
-              const isSelected = key === selectedDate;
-              return <button className={`calendar-day${isCurrentMonth ? "" : " calendar-day--outside"}${isSelected ? " calendar-day--selected" : ""}`} key={key} type="button" role="gridcell" aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings`} onClick={() => setSelectedDate(key)}><span>{day.getDate()}</span>{dayAppointments.length > 0 && <small className="calendar-day__count">{dayAppointments.length}</small>}<div className="calendar-day__dots">{dayAppointments.slice(0, 3).map((appointment) => <i className={`calendar-dot calendar-dot--${appointment.status}`} key={appointment.id} />)}</div></button>;
-            })}
+      {!isLoading && !error && selectedProviderId && (
+        <div className="provider-calendar-layout">
+          <div className="provider-calendar-panel">
+            <div className="calendar-header">
+              <button
+                className="calendar-nav"
+                type="button"
+                aria-label="Previous month"
+                onClick={() => moveMonth(-1)}
+              >
+                &#8592;
+              </button>
+              <h2>{formatMonth(month)}</h2>
+              <button
+                className="calendar-nav"
+                type="button"
+                aria-label="Next month"
+                onClick={() => moveMonth(1)}
+              >
+                &#8594;
+              </button>
+            </div>
+            <div className="calendar-weekdays" aria-hidden="true">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+            <div
+              className="calendar-grid"
+              role="grid"
+              aria-label={`${formatMonth(month)} provider schedule`}
+            >
+              {calendarDays.map((day) => {
+                const key = dateKey(day);
+                const dayAppointments = appointmentsByDay[key] || [];
+                const isCurrentMonth = day.getMonth() === month.getMonth();
+                const isSelected = key === selectedDate;
+                return (
+                  <button
+                    className={`calendar-day${isCurrentMonth ? "" : " calendar-day--outside"}${isSelected ? " calendar-day--selected" : ""}`}
+                    key={key}
+                    type="button"
+                    role="gridcell"
+                    aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings`}
+                    onClick={() => setSelectedDate(key)}
+                  >
+                    <span>{day.getDate()}</span>
+                    {dayAppointments.length > 0 && (
+                      <small className="calendar-day__count">
+                        {dayAppointments.length}
+                      </small>
+                    )}
+                    <div className="calendar-day__dots">
+                      {dayAppointments.slice(0, 3).map((appointment) => (
+                        <i
+                          className={`calendar-dot calendar-dot--${appointment.status}`}
+                          key={appointment.id}
+                        />
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          <aside className="provider-agenda">
+            <p className="panel-kicker">Day agenda</p>
+            <h2>{formatSelectedDate(selectedDate)}</h2>
+            {selectedAppointments.length > 0 ? (
+              <div className="provider-agenda__list">
+                {selectedAppointments.map((appointment) => (
+                  <article
+                    className={`provider-booking provider-booking--${appointment.status}`}
+                    key={appointment.id}
+                  >
+                    <div>
+                      <strong>
+                        {formatTime(appointment.appointment_start)}
+                      </strong>
+                      <span>{appointment.duration_minutes} min</span>
+                    </div>
+                    <section>
+                      <h3>
+                        {services[appointment.service_id] || "Booked service"}
+                      </h3>
+                      <p>{appointment.user_name}</p>
+                      <small>{appointment.user_email}</small>
+                    </section>
+                    <em>{appointment.status}</em>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="provider-agenda__empty">
+                <span aria-hidden="true">+</span>
+                <p>No bookings for this day.</p>
+                <small>Choose another date to inspect the schedule.</small>
+              </div>
+            )}
+          </aside>
         </div>
+      )}
 
-        <aside className="provider-agenda">
-          <p className="panel-kicker">Day agenda</p>
-          <h2>{formatSelectedDate(selectedDate)}</h2>
-          {selectedAppointments.length > 0 ? <div className="provider-agenda__list">{selectedAppointments.map((appointment) => <article className={`provider-booking provider-booking--${appointment.status}`} key={appointment.id}><div><strong>{formatTime(appointment.appointment_start)}</strong><span>{appointment.duration_minutes} min</span></div><section><h3>{services[appointment.service_id] || "Booked service"}</h3><p>{appointment.user_name}</p><small>{appointment.user_email}</small></section><em>{appointment.status}</em></article>)}</div> : <div className="provider-agenda__empty"><span aria-hidden="true">+</span><p>No bookings for this day.</p><small>Choose another date to inspect the schedule.</small></div>}
-        </aside>
-      </div>}
-
-      {!isLoading && !error && providers.length === 0 && <div className="empty-services"><span className="empty-services__mark" aria-hidden="true">+</span><h2>No providers available</h2><p>Add a provider to start viewing schedules.</p></div>}
+      {!isLoading && !error && providers.length === 0 && (
+        <div className="empty-services">
+          <span className="empty-services__mark" aria-hidden="true">
+            +
+          </span>
+          <h2>No providers available</h2>
+          <p>Add a provider to start viewing schedules.</p>
+        </div>
+      )}
     </section>
   );
 }

@@ -14,7 +14,9 @@ function Navbar() {
     phone: "",
   });
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
-  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(
+    null,
+  );
   const [profileError, setProfileError] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const { customer, token, logout, updateCustomer } = useAuth();
@@ -182,73 +184,158 @@ function Navbar() {
                     setProfilePhotoFile(null);
                     setProfilePhotoPreview(null);
                   }}
-                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.2rem 0.5rem" }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    padding: "0.2rem 0.5rem",
+                  }}
                 >
                   {customer?.photo ? (
-                    <img 
-                      src={customer.photo} 
-                      alt="Profile" 
-                      style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} 
+                    <img
+                      src={customer.photo}
+                      alt="Profile"
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                      }}
                     />
                   ) : (
-                    <div style={{
-                      width: "32px", height: "32px", borderRadius: "50%", 
-                      backgroundColor: "#e2784d", color: "white", 
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: "bold", fontSize: "1rem"
-                    }}>
-                      {customer?.name ? customer.name.charAt(0).toUpperCase() : "P"}
+                    <div
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        backgroundColor: "#e2784d",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: "bold",
+                        fontSize: "1rem",
+                      }}
+                    >
+                      {customer?.name
+                        ? customer.name.charAt(0).toUpperCase()
+                        : "P"}
                     </div>
                   )}
                 </button>
 
                 {isProfileOpen && (
                   <div className="profile-menu__panel">
-                    <div className="profile-menu__header" style={{ display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
-                      <div style={{ position: 'relative' }}>
+                    <div
+                      className="profile-menu__header"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "1rem",
+                        textAlign: "left",
+                      }}
+                    >
+                      <div style={{ position: "relative" }}>
                         {profilePhotoPreview || customer?.photo ? (
-                          <img 
-                            src={profilePhotoPreview || customer?.photo || ""} 
-                            alt="Profile" 
-                            style={{ width: "48px", height: "48px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} 
+                          <img
+                            src={profilePhotoPreview || customer?.photo || ""}
+                            alt="Profile"
+                            style={{
+                              width: "48px",
+                              height: "48px",
+                              borderRadius: "50%",
+                              objectFit: "cover",
+                              flexShrink: 0,
+                            }}
                           />
                         ) : (
-                          <div style={{
-                            width: "48px", height: "48px", borderRadius: "50%", 
-                            backgroundColor: "#e2784d", color: "white", flexShrink: 0,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontWeight: "bold", fontSize: "1.25rem"
-                          }}>
-                            {customer?.name ? customer.name.charAt(0).toUpperCase() : "P"}
+                          <div
+                            style={{
+                              width: "48px",
+                              height: "48px",
+                              borderRadius: "50%",
+                              backgroundColor: "#e2784d",
+                              color: "white",
+                              flexShrink: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: "bold",
+                              fontSize: "1.25rem",
+                            }}
+                          >
+                            {customer?.name
+                              ? customer.name.charAt(0).toUpperCase()
+                              : "P"}
                           </div>
                         )}
                         {isEditingProfile && (
-                          <label style={{
-                            position: 'absolute', bottom: -5, right: -5,
-                            width: 20, height: 20, borderRadius: '50%',
-                            backgroundColor: '#18312f', color: 'white',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', fontSize: '12px', border: '2px solid white'
-                          }}>
+                          <label
+                            style={{
+                              position: "absolute",
+                              bottom: -5,
+                              right: -5,
+                              width: 20,
+                              height: 20,
+                              borderRadius: "50%",
+                              backgroundColor: "#18312f",
+                              color: "white",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              cursor: "pointer",
+                              fontSize: "12px",
+                              border: "2px solid white",
+                            }}
+                          >
                             +
-                            <input type="file" accept=".jpg,.jpeg" style={{ display: 'none' }} onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (file.size > 1.5 * 1024 * 1024) {
-                                  setProfileError("Photo size must not exceed 1.5 MB.");
-                                  return;
+                            <input
+                              type="file"
+                              accept=".jpg,.jpeg"
+                              style={{ display: "none" }}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  if (file.size > 1.5 * 1024 * 1024) {
+                                    setProfileError(
+                                      "Photo size must not exceed 1.5 MB.",
+                                    );
+                                    return;
+                                  }
+                                  setProfileError("");
+                                  setProfilePhotoFile(file);
+                                  setProfilePhotoPreview(
+                                    URL.createObjectURL(file),
+                                  );
                                 }
-                                setProfileError("");
-                                setProfilePhotoFile(file);
-                                setProfilePhotoPreview(URL.createObjectURL(file));
-                              }
-                            }} />
+                              }}
+                            />
                           </label>
                         )}
                       </div>
                       <div style={{ overflow: "hidden" }}>
-                        <strong style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{customer?.name || "Your Profile"}</strong>
-                        <span style={{ display: "block", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", fontSize: "0.85rem", opacity: 0.8 }}>{customer?.email}</span>
+                        <strong
+                          style={{
+                            display: "block",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {customer?.name || "Your Profile"}
+                        </strong>
+                        <span
+                          style={{
+                            display: "block",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            fontSize: "0.85rem",
+                            opacity: 0.8,
+                          }}
+                        >
+                          {customer?.email}
+                        </span>
                       </div>
                     </div>
 
@@ -288,11 +375,21 @@ function Navbar() {
                           <p className="profile-menu__error">{profileError}</p>
                         )}
 
-                        <div className="profile-menu__actions" style={{ marginTop: '1rem' }}>
+                        <div
+                          className="profile-menu__actions"
+                          style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}
+                        >
                           <button
                             type="button"
                             className="profile-menu__cancel"
-                            style={{ flex: 1, margin: 0, padding: '0.75rem', borderRadius: '4px', fontSize: '1rem', border: '1px solid #ccc' }}
+                            style={{
+                              flex: 1,
+                              margin: 0,
+                              padding: "0.75rem",
+                              borderRadius: "4px",
+                              fontSize: "1rem",
+                              border: "1px solid #ccc",
+                            }}
                             onClick={() => {
                               setIsEditingProfile(false);
                               setProfileError("");
@@ -331,10 +428,17 @@ function Navbar() {
                                 if (profilePhotoFile) {
                                   const formData = new FormData();
                                   formData.append("file", profilePhotoFile);
-                                  const res = await fetch("/api/upload/image", { method: "POST", body: formData });
+                                  const res = await fetch("/api/upload/image", {
+                                    method: "POST",
+                                    body: formData,
+                                  });
                                   if (!res.ok) {
-                                    const data = await res.json().catch(() => null);
-                                    throw new Error(data?.detail || "Photo upload failed.");
+                                    const data = await res
+                                      .json()
+                                      .catch(() => null);
+                                    throw new Error(
+                                      data?.detail || "Photo upload failed.",
+                                    );
                                   }
                                   const data = await res.json();
                                   uploadedPhotoUrl = data.url;

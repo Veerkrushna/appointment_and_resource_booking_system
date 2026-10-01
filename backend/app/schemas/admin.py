@@ -16,8 +16,12 @@ class AdminAppointmentResponse(AppointmentResponse):
     service_name: str
 
     @classmethod
-    def from_records(cls, appointment, provider_name: str, service_name: str, timezone: str):
-        appointment_response = AppointmentResponse.from_appointment(appointment, timezone)
+    def from_records(
+        cls, appointment, provider_name: str, service_name: str, timezone: str
+    ):
+        appointment_response = AppointmentResponse.from_appointment(
+            appointment, timezone
+        )
         return cls(
             **appointment_response.model_dump(),
             provider_name=provider_name,

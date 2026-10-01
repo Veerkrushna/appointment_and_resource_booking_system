@@ -86,4 +86,8 @@ class User(Base):
     def provider_id(self) -> uuid.UUID | None:
         if not self.provider_profile:
             return None
-        return self.provider_profile[0].id if isinstance(self.provider_profile, list) else self.provider_profile.id
+        return (
+            self.provider_profile[0].id
+            if isinstance(self.provider_profile, list)
+            else self.provider_profile.id
+        )

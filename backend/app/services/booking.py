@@ -204,7 +204,10 @@ def create_appointment(
 
 
 def update_appointment(
-    db: Session, appointment: Appointment, payload: AppointmentUpdate, user_role: UserRole | None = None
+    db: Session,
+    appointment: Appointment,
+    payload: AppointmentUpdate,
+    user_role: UserRole | None = None,
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
     rescheduled = "appointment_start" in changes
@@ -270,19 +273,22 @@ def cancel_appointment(
         raise CancellationValidationError("Appointment not found")
     if appointment.status == AppointmentStatus.CANCELLED:
         raise CancellationValidationError("Appointment is already cancelled")
-        
+
     now_utc = datetime.now(UTC)
     current_status = get_booking_status(
         appointment.appointment_start,
         appointment.duration_minutes,
         appointment.status,
-        now_utc
+        now_utc,
     )
 
     if current_status in ("in_progress", "completed", "cancelled"):
-        raise CancellationValidationError(f"Cannot cancel appointment with status {current_status}")
+        raise CancellationValidationError(
+            f"Cannot cancel appointment with status {current_status}"
+        )
 
     from app.models.user import UserRole
+
     if user_role == UserRole.CUSTOMER or user_role is None:
         if not can_modify_booking(appointment.appointment_start, now_utc):
             raise CancellationValidationError(
@@ -315,19 +321,22 @@ def reschedule_appointment(
         raise BookingValidationError("Appointment not found")
     if appointment.status == AppointmentStatus.CANCELLED:
         raise BookingValidationError("Appointment is already cancelled")
-        
+
     now_utc = datetime.now(UTC)
     current_status = get_booking_status(
         appointment.appointment_start,
         appointment.duration_minutes,
         appointment.status,
-        now_utc
+        now_utc,
     )
 
     if current_status in ("in_progress", "completed", "cancelled"):
-        raise BookingValidationError(f"Cannot reschedule appointment with status {current_status}")
+        raise BookingValidationError(
+            f"Cannot reschedule appointment with status {current_status}"
+        )
 
     from app.models.user import UserRole
+
     if user_role == UserRole.CUSTOMER or user_role is None:
         if not can_modify_booking(appointment.appointment_start, now_utc):
             raise BookingValidationError(

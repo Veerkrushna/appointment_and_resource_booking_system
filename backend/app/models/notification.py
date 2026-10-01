@@ -61,6 +61,4 @@ class Notification(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    appointment: Mapped["Appointment"] = relationship(
-        back_populates="notifications"
-    )
+    appointment: Mapped["Appointment"] = relationship(back_populates="notifications")
