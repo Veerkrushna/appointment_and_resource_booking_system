@@ -244,9 +244,7 @@ def calculate_available_slots(
                 )
                 appointment_intervals = list(
                     db.execute(
-                        select(appointment_start, appointment_blocked_end)
-                        .join(Service, Service.id == Appointment.service_id)
-                        .where(
+                        select(appointment_start, appointment_blocked_end).where(
                             Appointment.provider_id == provider.id,
                             Appointment.status != AppointmentStatus.CANCELLED,
                             appointment_start < day_end,
