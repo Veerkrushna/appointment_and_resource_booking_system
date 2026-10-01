@@ -89,13 +89,7 @@ function Navbar() {
                   >
                     Dashboard
                   </NavLink>
-                  <NavLink
-                    to="/provider/calendar"
-                    className={({ isActive }) => (isActive ? "active" : "")}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Calendar
-                  </NavLink>
+
                   <NavLink
                     to="/provider/availability"
                     className={({ isActive }) => (isActive ? "active" : "")}
