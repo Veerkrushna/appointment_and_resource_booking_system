@@ -1607,6 +1607,64 @@ main {
   font-weight: 700;
 }
 
+.appointment-series-group__toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.3rem 0;
+  border: 0;
+  background: transparent;
+  color: #18312f;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.appointment-series-group__toggle:focus-visible {
+  outline: 2px solid #557b69;
+  outline-offset: 2px;
+}
+
+.appointment-series-group__summary {
+  color: #64736e;
+  font-size: 0.82rem;
+}
+
+.appointment-series-group__status,
+.appointment-series-group__count,
+.appointment-series-group__action {
+  color: #55706a;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.appointment-series-group__details {
+  color: #64736e;
+  font-size: 0.82rem;
+}
+
+.appointment-series-group__metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1.25rem;
+  margin: 0;
+}
+
+.appointment-series-group__metadata div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.appointment-series-group__metadata dt {
+  font-weight: 700;
+}
+
+.appointment-series-group__metadata dd {
+  margin: 0;
+}
+
 .appointment-series-group__occurrences {
   display: grid;
   gap: 0.65rem;

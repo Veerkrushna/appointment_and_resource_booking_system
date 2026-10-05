@@ -50,6 +50,22 @@ export type AppointmentSeriesResponse = {
   occurrences: AppointmentSeriesOccurrence[];
 };
 
+export type AppointmentSeriesDetail = {
+  series_id: string;
+  service_id: string;
+  provider_id: string;
+  frequency: "weekly" | "monthly";
+  interval: RecurrenceInterval;
+  start_date: string;
+  local_start_time: string;
+  provider_timezone: string;
+  end_mode: "count" | "end_date";
+  occurrence_count: number | null;
+  end_date: string | null;
+  status: "active" | "cancelled";
+  occurrences: AppointmentSeriesOccurrence[];
+};
+
 export class AppointmentSeriesApiError extends Error {
   readonly status: number | null;
   readonly conflicts: AppointmentSeriesConflict[];
@@ -151,4 +167,53 @@ export async function createAppointmentSeries(
   }
 
   return body as AppointmentSeriesResponse;
+}
+
+export async function fetchAppointmentSeries(
+  token: string,
+  seriesId: string,
+): Promise<AppointmentSeriesDetail> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/appointment-series/${encodeURIComponent(seriesId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch {
+    throw new Error("Unable to load recurring series. Please try again.");
+  }
+
+  if (!response.ok) {
+    let detail: unknown;
+    try {
+      const body: unknown = await response.json();
+      detail = isRecord(body) ? body.detail : undefined;
+    } catch {
+      detail = undefined;
+    }
+
+    if (response.status === 401) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    if (response.status === 403) {
+      throw new Error("Recurring series details are available to customers only.");
+    }
+    if (response.status === 404) {
+      throw new Error("This recurring series could not be found.");
+    }
+    if (response.status >= 500) {
+      throw new Error("Unable to load recurring series. Please try again.");
+    }
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : "Unable to load recurring series. Please try again.",
+    );
+  }
+
+  try {
+    return (await response.json()) as AppointmentSeriesDetail;
+  } catch {
+    throw new Error("Unable to read recurring series details. Please retry.");
+  }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppointmentReview from "../components/AppointmentReview";
 import RescheduleFlow from "../components/RescheduleFlow";
 import { useAuth } from "../auth/useAuth";
@@ -8,6 +8,10 @@ import {
   type CustomerAppointment,
   type NamedRecord,
 } from "../lib/customerAppointments";
+import {
+  fetchAppointmentSeries,
+  type AppointmentSeriesDetail,
+} from "../lib/appointmentSeries";
 type Tab = "upcoming" | "past" | "cancelled";
 
 const tabs: { id: Tab; label: string }[] = [
@@ -49,8 +53,31 @@ function formatStatusLabel(value: string) {
   return labels[value] ?? value;
 }
 
+function formatSeriesRule(series: AppointmentSeriesDetail) {
+  const unit = series.frequency === "monthly" ? "month" : "week";
+  const frequency =
+    series.interval === 1
+      ? series.frequency === "monthly"
+        ? "Monthly"
+        : "Weekly"
+      : `Every ${series.interval} ${unit}s`;
+  const ending =
+    series.end_mode === "count"
+      ? `After ${formatSeriesOccurrenceCount(series)}`
+      : series.end_date
+        ? `Through ${formatDate(series.end_date)}`
+        : "End date unavailable";
+
+  return `${frequency}; ${ending}`;
+}
+
+function formatSeriesOccurrenceCount(series: AppointmentSeriesDetail) {
+  const count = series.occurrence_count ?? series.occurrences.length;
+  return `${count} ${count === 1 ? "occurrence" : "occurrences"}`;
+}
+
 function AppointmentsPage() {
-  const { customer, token } = useAuth();
+  const { customer, token, isLoading: authIsLoading } = useAuth();
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [appointments, setAppointments] = useState<CustomerAppointment[]>([]);
   const [services, setServices] = useState<Record<string, string>>({});
@@ -63,6 +90,22 @@ function AppointmentsPage() {
   const [rescheduling, setRescheduling] = useState<CustomerAppointment | null>(
     null,
   );
+  const [expandedSeriesIds, setExpandedSeriesIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [seriesDetails, setSeriesDetails] = useState<
+    Record<string, AppointmentSeriesDetail>
+  >({});
+  const [seriesLoading, setSeriesLoading] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [seriesErrors, setSeriesErrors] = useState<Record<string, string>>({});
+  const seriesDetailCache = useRef(new Map<string, AppointmentSeriesDetail>());
+  const seriesRequests = useRef(new Map<string, Promise<void>>());
+  const canLoadSeriesDetails =
+    !authIsLoading &&
+    Boolean(token) &&
+    customer?.role.toLowerCase() === "customer";
 
   const loadAppointments = useCallback(async () => {
     setIsLoading(true);
@@ -203,6 +246,56 @@ function AppointmentsPage() {
 
     return groups;
   }, [visibleAppointments]);
+
+  function loadSeriesDetails(seriesId: string) {
+    if (!canLoadSeriesDetails || !token) return Promise.resolve();
+    if (seriesDetailCache.current.has(seriesId)) return Promise.resolve();
+
+    const inFlight = seriesRequests.current.get(seriesId);
+    if (inFlight) return inFlight;
+
+    setSeriesLoading((current) => ({ ...current, [seriesId]: true }));
+    setSeriesErrors((current) => {
+      const next = { ...current };
+      delete next[seriesId];
+      return next;
+    });
+
+    const request = fetchAppointmentSeries(token, seriesId)
+      .then((series) => {
+        seriesDetailCache.current.set(seriesId, series);
+        setSeriesDetails((current) => ({ ...current, [seriesId]: series }));
+      })
+      .catch((requestError) => {
+        setSeriesErrors((current) => ({
+          ...current,
+          [seriesId]:
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load recurring series. Please try again.",
+        }));
+      })
+      .finally(() => {
+        seriesRequests.current.delete(seriesId);
+        setSeriesLoading((current) => ({ ...current, [seriesId]: false }));
+      });
+
+    seriesRequests.current.set(seriesId, request);
+    return request;
+  }
+
+  function toggleSeries(seriesId: string) {
+    if (!canLoadSeriesDetails) return;
+
+    const willExpand = !expandedSeriesIds.has(seriesId);
+    setExpandedSeriesIds((current) => {
+      const next = new Set(current);
+      if (next.has(seriesId)) next.delete(seriesId);
+      else next.add(seriesId);
+      return next;
+    });
+    if (willExpand) void loadSeriesDetails(seriesId);
+  }
 
   function renderAppointmentCard(appointment: CustomerAppointment) {
     const isBusy = activeAction === appointment.id;
@@ -376,9 +469,116 @@ function AppointmentsPage() {
                     key={group.key}
                     aria-label="Recurring appointment series"
                   >
-                    <h2 className="appointment-series-group__heading">
-                      Recurring series
-                    </h2>
+                    {canLoadSeriesDetails ? (
+                      <button
+                        className="appointment-series-group__toggle"
+                        type="button"
+                        aria-expanded={expandedSeriesIds.has(group.seriesId)}
+                        aria-controls={`appointment-series-details-${group.seriesId}`}
+                        onClick={() => toggleSeries(group.seriesId!)}
+                      >
+                        <span className="appointment-series-badge">Recurring</span>
+                        <span className="appointment-series-group__summary">
+                          {seriesDetails[group.seriesId]
+                            ? formatSeriesRule(seriesDetails[group.seriesId])
+                            : "Recurring appointment"}
+                        </span>
+                        {seriesDetails[group.seriesId] && (
+                          <>
+                            <span className="appointment-series-group__status">
+                              {seriesDetails[group.seriesId].status === "active"
+                                ? "Active"
+                                : "Cancelled"}
+                            </span>
+                            <span className="appointment-series-group__count">
+                              {formatSeriesOccurrenceCount(
+                                seriesDetails[group.seriesId],
+                              )}
+                            </span>
+                          </>
+                        )}
+                        <span className="appointment-series-group__action">
+                          {expandedSeriesIds.has(group.seriesId)
+                            ? "Hide details"
+                            : "Show details"}
+                        </span>
+                      </button>
+                    ) : (
+                      <h2 className="appointment-series-group__heading">
+                        <span className="appointment-series-badge">Recurring</span>
+                        <span>Recurring appointment</span>
+                      </h2>
+                    )}
+                    {canLoadSeriesDetails && (
+                      <div
+                        className="appointment-series-group__details"
+                        id={`appointment-series-details-${group.seriesId}`}
+                        hidden={!expandedSeriesIds.has(group.seriesId)}
+                      >
+                        {expandedSeriesIds.has(group.seriesId) && (
+                          <>
+                            {seriesLoading[group.seriesId] && (
+                              <p className="status-message">
+                                Loading recurring series details...
+                              </p>
+                            )}
+                            {seriesErrors[group.seriesId] && (
+                              <div
+                                className="status-message status-message--error"
+                                role="alert"
+                              >
+                                <span>{seriesErrors[group.seriesId]}</span>
+                                <button
+                                  className="text-button"
+                                  type="button"
+                                  disabled={seriesLoading[group.seriesId]}
+                                  onClick={() =>
+                                    void loadSeriesDetails(group.seriesId!)
+                                  }
+                                >
+                                  Retry
+                                </button>
+                              </div>
+                            )}
+                            {seriesDetails[group.seriesId] && (
+                              <dl className="appointment-series-group__metadata">
+                                <div>
+                                  <dt>Service</dt>
+                                  <dd>
+                                    {services[
+                                      seriesDetails[group.seriesId].service_id
+                                    ] || "Booked service"}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Provider</dt>
+                                  <dd>
+                                    {providers[
+                                      seriesDetails[group.seriesId].provider_id
+                                    ] || "Your provider"}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Starts</dt>
+                                  <dd>
+                                    {seriesDetails[group.seriesId].start_date} at{" "}
+                                    {seriesDetails[
+                                      group.seriesId
+                                    ].local_start_time.slice(0, 5)}{" "}
+                                    (
+                                      {
+                                        seriesDetails[group.seriesId]
+                                          .provider_timezone
+                                      }
+                                    )
+                                  </dd>
+                                </div>
+                              </dl>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                     <div className="appointment-series-group__occurrences">
                       {group.appointments.map(renderAppointmentCard)}
                     </div>
