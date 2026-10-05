@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.admin import router as admin_router
 from app.api.routes.admin_users import router as admin_users_router
+from app.api.routes.appointment_series import router as appointment_series_router
 from app.api.routes.appointments import router as appointments_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.availability import router as availability_router
@@ -27,6 +28,7 @@ app.include_router(providers_router)
 app.include_router(services_router)
 app.include_router(availability_router)
 app.include_router(appointments_router)
+app.include_router(appointment_series_router)
 app.include_router(reviews_router)
 app.include_router(admin_router)
 app.include_router(admin_users_router)
