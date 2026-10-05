@@ -1645,6 +1645,12 @@ main {
   font-size: 0.82rem;
 }
 
+.appointment-series-cancel-error {
+  margin: 0;
+  color: #8d4c31;
+  font-size: 0.82rem;
+}
+
 .appointment-series-group__metadata {
   display: flex;
   flex-wrap: wrap;
