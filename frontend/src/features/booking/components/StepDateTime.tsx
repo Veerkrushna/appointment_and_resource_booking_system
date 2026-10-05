@@ -1,6 +1,16 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import ProviderRatingSelect from "../../../components/ProviderRatingSelect";
-import type { AvailabilitySlot, ProviderOption, ProviderType } from "../types";
+import RecurrenceOptions from "./RecurrenceOptions";
+import type {
+  AvailabilitySlot,
+  BookingKind,
+  ProviderOption,
+  ProviderType,
+  RecurrenceAccess,
+  RecurrenceOptionsValue,
+  RecurrenceValidation,
+} from "../types";
 import { formatDate, formatTime, getToday } from "../utils";
 
 type Props = {
@@ -18,6 +28,14 @@ type Props = {
   setAvailableSlots: (slots: AvailabilitySlot[]) => void;
   setAvailabilityError: (error: string | null) => void;
   setAvailabilityLoading: (loading: boolean) => void;
+  bookingKind: BookingKind;
+  setBookingKind: (kind: BookingKind) => void;
+  recurrence: RecurrenceOptionsValue;
+  setRecurrence: (value: RecurrenceOptionsValue) => void;
+  recurrenceValidation: RecurrenceValidation;
+  recurrenceAccess: RecurrenceAccess;
+  selectedProviderTimezone: string | null;
+  providerTimezonesLoaded: boolean;
   setStep: (step: number) => void;
 };
 
@@ -36,8 +54,24 @@ export default function StepDateTime({
   setAvailableSlots,
   setAvailabilityError,
   setAvailabilityLoading,
+  bookingKind,
+  setBookingKind,
+  recurrence,
+  setRecurrence,
+  recurrenceValidation,
+  recurrenceAccess,
+  selectedProviderTimezone,
+  providerTimezonesLoaded,
   setStep,
 }: Props) {
+  const canBookRecurring = recurrenceAccess === "customer";
+  const canContinue =
+    Boolean(date && selectedSlot) &&
+    (bookingKind === "ONE_TIME" ||
+      (canBookRecurring &&
+        recurrenceValidation.isValid &&
+        Boolean(selectedProviderTimezone)));
+
   return (
     <div>
       <p className="panel-kicker">Step 1 of 3</p>
@@ -121,9 +155,83 @@ export default function StepDateTime({
         </div>
       )}
 
+      <div
+        className="booking-mode-toggle"
+        role="radiogroup"
+        aria-label="Booking type"
+      >
+        <label
+          className={`booking-mode-option ${bookingKind === "ONE_TIME" ? "selected" : ""}`}
+        >
+          <input
+            checked={bookingKind === "ONE_TIME"}
+            name="booking-kind"
+            onChange={() => setBookingKind("ONE_TIME")}
+            type="radio"
+          />
+          <span className="booking-mode-copy">
+            <span className="booking-mode-title">One-time</span>
+          </span>
+        </label>
+        <label
+          className={`booking-mode-option ${bookingKind === "RECURRING" ? "selected" : ""}`}
+        >
+          <input
+            checked={bookingKind === "RECURRING"}
+            disabled={!canBookRecurring}
+            name="booking-kind"
+            onChange={() => setBookingKind("RECURRING")}
+            type="radio"
+          />
+          <span className="booking-mode-copy">
+            <span className="booking-mode-title">Recurring</span>
+          </span>
+        </label>
+      </div>
+
+      {recurrenceAccess === "loading" && (
+        <p className="status-message">
+          Checking your account for recurring booking...
+        </p>
+      )}
+      {recurrenceAccess === "guest" && (
+        <p className="status-message">
+          Sign in with a customer account to book recurring appointments.{" "}
+          <Link to="/login">Sign in</Link>
+        </p>
+      )}
+      {recurrenceAccess === "unavailable" && (
+        <p className="status-message">
+          Recurring booking is available to customers only.
+        </p>
+      )}
+
+      {bookingKind === "RECURRING" && (
+        <>
+          <RecurrenceOptions
+            value={recurrence}
+            onChange={setRecurrence}
+            startDate={selectedSlot?.date || date}
+          />
+          {selectedSlot && selectedProviderTimezone ? (
+            <p className="status-message">
+              Recurring times follow the provider timezone:{" "}
+              {selectedProviderTimezone}.
+            </p>
+          ) : selectedSlot && !providerTimezonesLoaded ? (
+            <p className="status-message">Loading provider timezone...</p>
+          ) : selectedSlot ? (
+            <p className="status-message status-message--error" role="alert">
+              The provider timezone is unavailable, so recurring booking cannot
+              continue.
+            </p>
+          ) : null}
+        </>
+      )}
+
       <button
         className="primary-button"
-        disabled={!date || !selectedSlot}
+        disabled={!canContinue}
         onClick={() => setStep(2)}
         type="button"
       >

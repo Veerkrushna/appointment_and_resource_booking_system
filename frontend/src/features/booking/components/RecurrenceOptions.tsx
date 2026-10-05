@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
-import type {
-  RecurrenceOptionsValue,
-  RecurrenceValidation,
-  RecurrenceValidationErrors,
-} from "../types";
+import { useMemo } from "react";
+import type { RecurrenceOptionsValue } from "../types";
+import { validateRecurrenceOptions } from "../utils";
 
 type Props = {
   value: RecurrenceOptionsValue;
   onChange: (value: RecurrenceOptionsValue) => void;
   startDate: string;
-  onValidationChange?: (validation: RecurrenceValidation) => void;
 };
 
 type FrequencyChoice = "weekly" | "biweekly" | "monthly";
@@ -19,59 +15,15 @@ function getFrequencyChoice(value: RecurrenceOptionsValue): FrequencyChoice {
   return value.interval === 2 ? "biweekly" : "weekly";
 }
 
-function validate(
-  value: RecurrenceOptionsValue,
-  startDate: string,
-): RecurrenceValidation {
-  const errors: RecurrenceValidationErrors = {};
-
-  if (
-    (value.frequency === "WEEKLY" &&
-      value.interval !== 1 &&
-      value.interval !== 2) ||
-    (value.frequency === "MONTHLY" && value.interval !== 1)
-  ) {
-    errors.frequency = "Choose a supported recurrence frequency.";
-  }
-
-  if (value.endMode === "COUNT") {
-    if (value.occurrenceCount == null) {
-      errors.occurrenceCount = "Enter the number of occurrences.";
-    } else if (!Number.isInteger(value.occurrenceCount)) {
-      errors.occurrenceCount = "Enter a whole number of occurrences.";
-    } else if (value.occurrenceCount < 1 || value.occurrenceCount > 52) {
-      errors.occurrenceCount = "Choose between 1 and 52 occurrences.";
-    }
-  } else if (!value.endDate) {
-    errors.endDate = "Choose an end date.";
-  } else if (!startDate) {
-    errors.endDate = "Choose a start date first.";
-  } else if (value.endDate < startDate) {
-    errors.endDate = "End date cannot be before the start date.";
-  }
-
-  return { isValid: Object.keys(errors).length === 0, errors };
-}
-
 export default function RecurrenceOptions({
   value,
   onChange,
   startDate,
-  onValidationChange,
 }: Props) {
   const validation = useMemo(
-    () => validate(value, startDate),
+    () => validateRecurrenceOptions(value, startDate),
     [value, startDate],
   );
-  const validationCallback = useRef(onValidationChange);
-
-  useEffect(() => {
-    validationCallback.current = onValidationChange;
-  }, [onValidationChange]);
-
-  useEffect(() => {
-    validationCallback.current?.(validation);
-  }, [validation]);
 
   function changeFrequency(choice: FrequencyChoice) {
     if (choice === "monthly") {

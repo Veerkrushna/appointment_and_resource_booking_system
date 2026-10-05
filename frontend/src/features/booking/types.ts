@@ -15,6 +15,8 @@ export type BookingDetails = {
   notes: string;
 };
 
+export type BookingKind = "ONE_TIME" | "RECURRING";
+export type RecurrenceAccess = "loading" | "customer" | "guest" | "unavailable";
 export type RecurrenceFrequency = "WEEKLY" | "MONTHLY";
 export type RecurrenceEndMode = "COUNT" | "END_DATE";
 export type RecurrenceInterval = 1 | 2;
@@ -71,6 +73,8 @@ export type BookingDraft = {
   step: number;
   date: string;
   selectedSlot: AvailabilitySlot | null;
+  bookingKind: BookingKind;
+  recurrence: RecurrenceOptionsValue;
   bookingMode: "self" | "other";
   details: BookingDetails;
 };
