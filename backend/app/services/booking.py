@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime, time, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
@@ -153,11 +154,11 @@ def _validate_slot(
     return start_utc, end_utc
 
 
-def create_appointment(
-    db: Session, payload: AppointmentCreate, customer: Customer | None = None
-) -> Appointment:
+def _lock_provider_and_get_service(
+    db: Session, provider_id: UUID, service_id: UUID
+) -> tuple[Provider, Service]:
     provider = db.scalar(
-        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
+        select(Provider).where(Provider.id == provider_id).with_for_update()
     )
     if provider is None:
         raise BookingValidationError("Provider not found")
@@ -168,7 +169,7 @@ def create_appointment(
         select(Service)
         .join(ProviderService, ProviderService.service_id == Service.id)
         .where(
-            Service.id == payload.service_id,
+            Service.id == service_id,
             Service.status == ServiceStatus.ACTIVE,
             ProviderService.provider_id == provider.id,
             ProviderService.is_active.is_(True),
@@ -176,6 +177,37 @@ def create_appointment(
     )
     if service is None:
         raise BookingValidationError("Active service is not offered by provider")
+    return provider, service
+
+
+def _build_appointment(
+    payload: AppointmentCreate,
+    customer: Customer | None,
+    service: Service,
+    start_utc: datetime,
+    end_utc: datetime,
+    *,
+    series_id: UUID | None = None,
+    occurrence_number: int | None = None,
+) -> Appointment:
+    return Appointment(
+        **payload.model_dump(exclude={"appointment_start"}),
+        customer_id=customer.id if customer is not None else None,
+        appointment_start=start_utc,
+        appointment_end=end_utc,
+        duration_minutes=service.duration_minutes,
+        buffer_time_minutes=service.buffer_time_minutes or 0,
+        series_id=series_id,
+        occurrence_number=occurrence_number,
+    )
+
+
+def create_appointment(
+    db: Session, payload: AppointmentCreate, customer: Customer | None = None
+) -> Appointment:
+    provider, service = _lock_provider_and_get_service(
+        db, payload.provider_id, payload.service_id
+    )
 
     start_utc, end_utc = _validate_slot(
         db,
@@ -185,13 +217,12 @@ def create_appointment(
         buffer_time_minutes=service.buffer_time_minutes or 0,
     )
 
-    appointment = Appointment(
-        **payload.model_dump(exclude={"appointment_start"}),
-        customer_id=customer.id if customer is not None else None,
-        appointment_start=start_utc,
-        appointment_end=end_utc,
-        duration_minutes=service.duration_minutes,
-        buffer_time_minutes=service.buffer_time_minutes or 0,
+    appointment = _build_appointment(
+        payload,
+        customer,
+        service,
+        start_utc,
+        end_utc,
     )
     db.add(appointment)
     db.commit()
