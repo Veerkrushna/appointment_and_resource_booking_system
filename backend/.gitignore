@@ -99,3 +99,9 @@ logs/
 
 # Celery Beat runtime state
 celerybeat-schedule
+
+
+# =========================
+# file storage
+# =========================
+uploads/*

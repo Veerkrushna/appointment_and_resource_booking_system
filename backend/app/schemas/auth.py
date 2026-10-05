@@ -10,6 +10,7 @@ class CustomerRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     phone: str | None = Field(default=None, max_length=30)
+    photo: str | None = Field(default=None, max_length=1000)
 
     model_config = ConfigDict(extra="ignore")
 
@@ -26,6 +27,7 @@ class CustomerResponse(BaseModel):
     name: str
     email: EmailStr
     phone: str | None
+    photo: str | None = None
     role: UserRole
     is_active: bool
     provider_id: UUID | None = None
@@ -35,6 +37,7 @@ class CustomerProfileUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     phone: str | None = Field(default=None, max_length=30)
+    photo: str | None = Field(default=None, max_length=1000)
 
     model_config = ConfigDict(extra="ignore")
 
@@ -55,12 +58,11 @@ class AdminUserCreate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     role: UserRole
     phone: str | None = Field(default=None, max_length=30)
+    photo: str | None = Field(default=None, max_length=1000)
 
     def model_post_init(self, __context: object) -> None:
         if self.role not in {UserRole.ADMIN, UserRole.PROVIDER}:
-            raise ValueError(
-                "Admin users can only create admin or provider accounts"
-            )
+            raise ValueError("Admin users can only create admin or provider accounts")
 
 
 class PasswordResetRequest(BaseModel):
@@ -79,4 +81,3 @@ class PasswordResetVerifyResponse(BaseModel):
 class PasswordResetConfirm(BaseModel):
     reset_token: str
     new_password: str = Field(min_length=8, max_length=128)
-

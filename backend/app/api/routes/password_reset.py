@@ -30,7 +30,9 @@ router = APIRouter(prefix="/api/password-reset", tags=["Password Reset"])
 
 @router.post("/request", status_code=status.HTTP_200_OK)
 def request_password_reset(
-    payload: PasswordResetRequest, background_tasks: BackgroundTasks, db: Annotated[Session, Depends(get_db)]
+    payload: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
 ):
     email = payload.email.lower()
     user = db.scalar(select(User).where(User.email == email))
@@ -54,16 +56,23 @@ def request_password_reset(
     # Rate limiting: max 3 requests per email per hour
     recent_requests = db.scalar(
         select(PasswordResetOtp)
-        .where(PasswordResetOtp.user_id == user.id, PasswordResetOtp.created_at >= one_hour_ago)
+        .where(
+            PasswordResetOtp.user_id == user.id,
+            PasswordResetOtp.created_at >= one_hour_ago,
+        )
         .with_only_columns(PasswordResetOtp.id)
         .correlate(PasswordResetOtp)
     )  # We just need count, but a query with count() is better
-    
+
     # Actually let's just count
-    recent_count = db.query(PasswordResetOtp).filter(
-        PasswordResetOtp.user_id == user.id,
-        PasswordResetOtp.created_at >= one_hour_ago
-    ).count()
+    recent_count = (
+        db.query(PasswordResetOtp)
+        .filter(
+            PasswordResetOtp.user_id == user.id,
+            PasswordResetOtp.created_at >= one_hour_ago,
+        )
+        .count()
+    )
 
     if recent_count >= 3:
         raise HTTPException(
@@ -76,8 +85,7 @@ def request_password_reset(
 
     # Invalidate existing unused OTPs
     db.query(PasswordResetOtp).filter(
-        PasswordResetOtp.user_id == user.id,
-        PasswordResetOtp.used == False
+        PasswordResetOtp.user_id == user.id, PasswordResetOtp.used == False
     ).update({"used": True})
 
     # Save new OTP
@@ -126,7 +134,7 @@ def verify_password_reset(
         .where(
             PasswordResetOtp.user_id == user.id,
             PasswordResetOtp.used == False,
-            PasswordResetOtp.expires_at > now
+            PasswordResetOtp.expires_at > now,
         )
         .order_by(PasswordResetOtp.created_at.desc())
         .limit(1)
@@ -165,7 +173,9 @@ def verify_password_reset(
 
 @router.post("/confirm")
 def confirm_password_reset(
-    payload: PasswordResetConfirm, background_tasks: BackgroundTasks, db: Annotated[Session, Depends(get_db)]
+    payload: PasswordResetConfirm,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
 ):
     try:
         user_id = verify_reset_token(payload.reset_token)

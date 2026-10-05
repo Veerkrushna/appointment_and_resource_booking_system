@@ -12,7 +12,7 @@ import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ProfilePage from "../pages/ProfilePage";
 import TermsPage from "../pages/TermsPage";
 import ProviderDashboardPage from "../pages/ProviderDashboardPage";
-import ProviderCalendarPage from "../pages/ProviderCalendarPage";
+
 import ProviderAvailabilityPage from "../pages/ProviderAvailabilityPage";
 import ProviderServicesPage from "../pages/ProviderServicesPage";
 import { useAuth } from "../auth/useAuth";
@@ -180,14 +180,7 @@ function AppRoutes() {
             </ProviderRoute>
           }
         />
-        <Route
-          path="/provider/calendar"
-          element={
-            <ProviderRoute>
-              <ProviderCalendarPage />
-            </ProviderRoute>
-          }
-        />
+
         <Route
           path="/provider/availability"
           element={

@@ -22,7 +22,11 @@ from app.schemas.admin import (
 )
 from app.schemas.providers import AvailabilityWindow, BlackoutResponse, BreakWindow
 
-router = APIRouter(prefix="/api/admin", tags=["Admin"], dependencies=[Depends(require_role(UserRole.ADMIN))])
+router = APIRouter(
+    prefix="/api/admin",
+    tags=["Admin"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
 
 
 def _admin_timezone(timezone: str):

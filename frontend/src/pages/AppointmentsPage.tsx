@@ -119,9 +119,12 @@ function AppointmentsPage() {
   const canModify = useCallback(
     (appointment: CustomerAppointment) => {
       if (appointment.status !== "confirmed") return false;
-      return new Date(appointment.appointment_start).getTime() - 2 * 60 * 60 * 1000 > currentTime;
+      return (
+        new Date(appointment.appointment_start).getTime() - 2 * 60 * 60 * 1000 >
+        currentTime
+      );
     },
-    [currentTime]
+    [currentTime],
   );
 
   const groupedAppointments = useMemo(() => {
@@ -297,7 +300,11 @@ function AppointmentsPage() {
                             className="secondary-button"
                             type="button"
                             disabled={!canModify(appointment)}
-                            title={!canModify(appointment) ? "Changes are not allowed within 2 hours of the booking." : undefined}
+                            title={
+                              !canModify(appointment)
+                                ? "Changes are not allowed within 2 hours of the booking."
+                                : undefined
+                            }
                             onClick={() => setRescheduling(appointment)}
                           >
                             Reschedule
@@ -306,7 +313,11 @@ function AppointmentsPage() {
                             className="text-button"
                             type="button"
                             disabled={!canModify(appointment)}
-                            title={!canModify(appointment) ? "Changes are not allowed within 2 hours of the booking." : undefined}
+                            title={
+                              !canModify(appointment)
+                                ? "Changes are not allowed within 2 hours of the booking."
+                                : undefined
+                            }
                             onClick={() =>
                               void cancelAppointment(appointment.id)
                             }

@@ -20,11 +20,15 @@ def create_admin_user(
 ):
     email = payload.email.lower()
     if db.scalar(select(User).where(User.email == email)) is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
     user = User(
         name=payload.name.strip(),
         email=email,
         phone=payload.phone,
+        photo=payload.photo,
         password_hash=hash_password(payload.password),
         role=payload.role,
         created_by=admin.id,

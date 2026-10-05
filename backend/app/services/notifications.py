@@ -98,8 +98,7 @@ def deliver_notification(
     elif notification.notification_type == NotificationType.CANCELLATION:
         subject = "Appointment cancelled"
         body = (
-            f"Hello {appointment.user_name},\n\n"
-            "Your appointment has been cancelled."
+            f"Hello {appointment.user_name},\n\n" "Your appointment has been cancelled."
         )
         sms_body = body
     elif notification.notification_type == NotificationType.RESCHEDULE:

@@ -54,6 +54,7 @@ class User(Base):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    photo: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), default=UserRole.CUSTOMER, nullable=False
     )
@@ -85,4 +86,8 @@ class User(Base):
     def provider_id(self) -> uuid.UUID | None:
         if not self.provider_profile:
             return None
-        return self.provider_profile[0].id if isinstance(self.provider_profile, list) else self.provider_profile.id
+        return (
+            self.provider_profile[0].id
+            if isinstance(self.provider_profile, list)
+            else self.provider_profile.id
+        )

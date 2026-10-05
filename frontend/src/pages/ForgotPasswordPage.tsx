@@ -16,21 +16,21 @@ function passwordScore(value: string) {
 function ForgotPasswordPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("request");
-  
+
   // Step 1 state
   const [email, setEmail] = useState("");
-  
+
   // Step 2 state
   const [pin, setPin] = useState<string[]>(Array(6).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [cooldown, setCooldown] = useState(0);
-  
+
   // Step 3 state
   const [resetToken, setResetToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Generic state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,11 +109,16 @@ function ForgotPasswordPage() {
       const res = await fetch("/api/password-reset/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reset_token: resetToken, new_password: password }),
+        body: JSON.stringify({
+          reset_token: resetToken,
+          new_password: password,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to reset password");
-      navigate("/login", { state: { message: "Password updated successfully. Please log in." } });
+      navigate("/login", {
+        state: { message: "Password updated successfully. Please log in." },
+      });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -138,7 +143,10 @@ function ForgotPasswordPage() {
 
   function handlePinPaste(e: ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    const pasted = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 6);
     if (pasted) {
       const newPin = [...pin];
       for (let i = 0; i < pasted.length; i++) {
@@ -155,8 +163,15 @@ function ForgotPasswordPage() {
   return (
     <main className="auth-page">
       <section className="auth-shell">
-        <div className="auth-form-side" style={{ margin: "0 auto", borderRight: "none" }}>
-          <div className="auth-brand" style={{ cursor: "pointer" }} onClick={() => navigate("/login")}>
+        <div
+          className="auth-form-side"
+          style={{ margin: "0 auto", borderRight: "none" }}
+        >
+          <div
+            className="auth-brand"
+            style={{ cursor: "pointer" }}
+            onClick={() => navigate("/login")}
+          >
             <span>← Back to login</span>
           </div>
           <div className="auth-form-content">
@@ -165,8 +180,20 @@ function ForgotPasswordPage() {
               <p>Follow the steps to regain access to your account.</p>
             </div>
 
-            {error && <p className="auth-error" role="alert">{error}</p>}
-            {message && <p className="auth-error" style={{ background: "#e6f4ea", color: "#1e8e3e" }} role="status">{message}</p>}
+            {error && (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            )}
+            {message && (
+              <p
+                className="auth-error"
+                style={{ background: "#e6f4ea", color: "#1e8e3e" }}
+                role="status"
+              >
+                {message}
+              </p>
+            )}
 
             {step === "request" && (
               <form className="auth-form" onSubmit={handleRequest} noValidate>
@@ -181,7 +208,11 @@ function ForgotPasswordPage() {
                     placeholder="you@example.com"
                   />
                 </label>
-                <button className="auth-submit" type="submit" disabled={isSubmitting}>
+                <button
+                  className="auth-submit"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? "Sending..." : "Send Reset Code"}
                 </button>
               </form>
@@ -191,7 +222,13 @@ function ForgotPasswordPage() {
               <form className="auth-form" onSubmit={handleVerify} noValidate>
                 <div className="auth-field">
                   <span>Enter 6-digit code sent to {email}</span>
-                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.5rem",
+                      marginTop: "0.5rem",
+                    }}
+                  >
                     {pin.map((digit, index) => (
                       <input
                         key={index}
@@ -203,15 +240,29 @@ function ForgotPasswordPage() {
                         pattern="\d*"
                         maxLength={1}
                         value={digit}
-                        onChange={(e) => handlePinChange(index, e.target.value.replace(/\D/g, ""))}
+                        onChange={(e) =>
+                          handlePinChange(
+                            index,
+                            e.target.value.replace(/\D/g, ""),
+                          )
+                        }
                         onKeyDown={(e) => handlePinKeyDown(index, e)}
                         onPaste={handlePinPaste}
-                        style={{ width: "3rem", height: "3rem", textAlign: "center", fontSize: "1.5rem" }}
+                        style={{
+                          width: "3rem",
+                          height: "3rem",
+                          textAlign: "center",
+                          fontSize: "1.5rem",
+                        }}
                       />
                     ))}
                   </div>
                 </div>
-                <button className="auth-submit" type="submit" disabled={isSubmitting}>
+                <button
+                  className="auth-submit"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? "Verifying..." : "Verify Code"}
                 </button>
                 <p className="auth-footer" style={{ marginTop: "1rem" }}>
@@ -253,15 +304,18 @@ function ForgotPasswordPage() {
                     <div className="password-meter" aria-live="polite">
                       <div className="password-meter__bars">
                         {[1, 2, 3, 4].map((bar) => (
-                          <i className={bar <= score ? `is-level-${score}` : ""} key={bar} />
+                          <i
+                            className={bar <= score ? `is-level-${score}` : ""}
+                            key={bar}
+                          />
                         ))}
                       </div>
                       <span>
                         {score < 2
                           ? "Needs more strength"
                           : score < 4
-                          ? "Good password"
-                          : "Strong password"}
+                            ? "Good password"
+                            : "Strong password"}
                       </span>
                     </div>
                   )}
@@ -280,7 +334,11 @@ function ForgotPasswordPage() {
                     />
                   </div>
                 </label>
-                <button className="auth-submit" type="submit" disabled={isSubmitting}>
+                <button
+                  className="auth-submit"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? "Updating..." : "Set New Password"}
                 </button>
               </form>
