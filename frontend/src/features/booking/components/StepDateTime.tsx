@@ -1,4 +1,3 @@
-import React from "react";
 import ProviderRatingSelect from "../../../components/ProviderRatingSelect";
 import type { AvailabilitySlot, ProviderOption, ProviderType } from "../types";
 import { formatDate, formatTime, getToday } from "../utils";

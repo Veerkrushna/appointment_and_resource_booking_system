@@ -1,4 +1,3 @@
-import React from "react";
 import type { Service, AvailabilitySlot } from "../types";
 import { formatDate, formatTime } from "../utils";
 

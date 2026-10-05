@@ -1,4 +1,4 @@
-import React, { FormEvent } from "react";
+import type { FormEvent } from "react";
 import type { BookingDetails } from "../types";
 
 type Props = {

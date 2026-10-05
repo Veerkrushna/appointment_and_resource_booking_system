@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../auth/useAuth";
 import {
   type Provider,
@@ -25,10 +25,6 @@ function AdminProvidersPage() {
 
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
 
-  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
-
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
     null,
   );
@@ -39,49 +35,60 @@ function AdminProvidersPage() {
     null,
   );
 
-  const [sortCategory, setSortCategory] = useState<string>("");
-  const [sortOption, setSortOption] = useState<string>("");
+  const [providerSearch, setProviderSearch] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
 
   const filteredProviders = useMemo(() => {
-    let result = providers;
-    if (sortCategory && sortOption) {
-      if (sortCategory === "Status") {
-        result = result.filter((p) => p.availability_status === sortOption);
-      } else if (sortCategory === "Type") {
-        result = result.filter((p) => p.type === sortOption);
-      } else if (sortCategory === "Services") {
-        const serviceName = availableServices.find(
-          (s) => s.id === sortOption,
-        )?.name;
-        result = result.filter((p) =>
-          providerServicesMap[p.id]?.includes(serviceName || ""),
+    const normalizedSearch = providerSearch.trim().toLowerCase();
+
+    return providers.filter((provider) => {
+      const specializationsText = (provider.specializations || []).join(" ");
+      const providerContent =
+        `${provider.name} ${provider.email} ${provider.phone ?? ""} ${provider.bio ?? ""} ${specializationsText}`.toLowerCase();
+
+      const matchesSearch =
+        !normalizedSearch || providerContent.includes(normalizedSearch);
+
+      const matchesType =
+        !selectedType ||
+        provider.type.toLowerCase() === selectedType.toLowerCase();
+
+      const matchesStatus =
+        !selectedStatus ||
+        provider.availability_status.toLowerCase() ===
+          selectedStatus.toLowerCase();
+
+      let matchesService = true;
+      if (selectedServiceId) {
+        const targetService = availableServices.find(
+          (s) => s.id === selectedServiceId,
+        );
+        const providerServiceNames = providerServicesMap[provider.id] || [];
+        matchesService = Boolean(
+          targetService && providerServiceNames.includes(targetService.name),
         );
       }
-    }
-    return result;
+
+      return matchesSearch && matchesType && matchesStatus && matchesService;
+    });
   }, [
     providers,
-    sortCategory,
-    sortOption,
-    providerServicesMap,
+    providerSearch,
+    selectedType,
+    selectedStatus,
+    selectedServiceId,
     availableServices,
+    providerServicesMap,
   ]);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        filterDropdownRef.current &&
-        !filterDropdownRef.current.contains(event.target as Node)
-      ) {
-        setFilterDropdownOpen(false);
-        setExpandedCategory(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
+  const clearProviderFilters = () => {
+    setProviderSearch("");
+    setSelectedType("");
+    setSelectedStatus("");
+    setSelectedServiceId("");
+  };
 
   const [showForm, setShowForm] = useState(false);
 
@@ -219,239 +226,79 @@ function AdminProvidersPage() {
           <div>
             <h2>Provider List</h2>
           </div>
-          <div style={{ position: "relative" }} ref={filterDropdownRef}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                fontSize: "0.85rem",
-              }}
-            >
-              <span
-                style={{
-                  fontWeight: 600,
-                  color: "#0c0b0bff",
-                  textTransform: "capitalize",
-                }}
-              >
-                Filter by
-              </span>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (sortCategory && sortOption && filterDropdownOpen) {
-                    setSortCategory("");
-                    setSortOption("");
-                    setFilterDropdownOpen(false);
-                    setExpandedCategory(null);
-                  } else {
-                    setFilterDropdownOpen(!filterDropdownOpen);
-                  }
-                }}
-                style={{
-                  padding: "0.35rem 0.5rem",
-                  border: "1px solid #dbe5dc",
-                  borderRadius: "6px",
-                  background: "#fff",
-                  color: "#18312f",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  minWidth: "160px",
-                  justifyContent: "space-between",
-                }}
-              >
-                {sortCategory && sortOption ? (
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    <span style={{ color: "#64748b" }}>{sortCategory}:</span>
-                    {sortCategory === "Services"
-                      ? availableServices.find((s) => s.id === sortOption)?.name
-                      : sortOption}
-                  </span>
-                ) : (
-                  "Select Filter..."
-                )}
-                <span style={{ fontSize: "0.8em" }}>
-                  {sortCategory && sortOption && filterDropdownOpen ? "✕" : "▼"}
-                </span>
-              </button>
-            </div>
-
-            {filterDropdownOpen && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  right: 0,
-                  marginTop: "0.25rem",
-                  background: "#fff",
-                  border: "1px solid #dbe5dc",
-                  borderRadius: "8px",
-                  boxShadow: "0 10px 25px rgba(24, 49, 47, 0.08)",
-                  width: "220px",
-                  zIndex: 50,
-                  maxHeight: "350px",
-                  overflowY: "auto",
-                }}
-              >
-                {["Status", "Type", "Services"].map((category) => (
-                  <div key={category}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedCategory(
-                          expandedCategory === category ? null : category,
-                        )
-                      }
-                      style={{
-                        width: "100%",
-                        padding: "0.75rem 1rem",
-                        textAlign: "left",
-                        background:
-                          expandedCategory === category
-                            ? "#fbfcf8"
-                            : "transparent",
-                        border: "none",
-                        borderBottom: "1px solid #f4f7f2",
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        color:
-                          expandedCategory === category ? "#e2784d" : "#18312f",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        fontSize: "0.85rem",
-                      }}
-                    >
-                      {category}
-                      <span
-                        style={{
-                          fontSize: "0.7em",
-                          transform:
-                            expandedCategory === category
-                              ? "rotate(180deg)"
-                              : "none",
-                          transition: "transform 0.2s ease",
-                          color: "#8a9b94",
-                        }}
-                      >
-                        ▼
-                      </span>
-                    </button>
-
-                    {expandedCategory === category && (
-                      <div
-                        style={{
-                          background: "#fafbfc",
-                          padding: "0.25rem 0",
-                          borderBottom: "1px solid #eee",
-                        }}
-                      >
-                        {category === "Status" &&
-                          ["available", "inactive", "On_leave"].map((opt) => (
-                            <div
-                              key={opt}
-                              onClick={() => {
-                                setSortCategory("Status");
-                                setSortOption(opt);
-                                setFilterDropdownOpen(false);
-                                setExpandedCategory(null);
-                              }}
-                              style={{
-                                padding: "0.5rem 1.5rem",
-                                cursor: "pointer",
-                                fontSize: "0.85rem",
-                                color:
-                                  sortCategory === "Status" &&
-                                  sortOption === opt
-                                    ? "#e2784d"
-                                    : "#64736e",
-                                background:
-                                  sortCategory === "Status" &&
-                                  sortOption === opt
-                                    ? "#fff4ed"
-                                    : "transparent",
-                              }}
-                            >
-                              {opt === "On_leave" ? "On Leave" : opt}
-                            </div>
-                          ))}
-
-                        {category === "Type" &&
-                          ["person", "resource"].map((opt) => (
-                            <div
-                              key={opt}
-                              onClick={() => {
-                                setSortCategory("Type");
-                                setSortOption(opt);
-                                setFilterDropdownOpen(false);
-                                setExpandedCategory(null);
-                              }}
-                              style={{
-                                padding: "0.5rem 1.5rem",
-                                cursor: "pointer",
-                                fontSize: "0.85rem",
-                                textTransform: "capitalize",
-                                color:
-                                  sortCategory === "Type" && sortOption === opt
-                                    ? "#e2784d"
-                                    : "#64736e",
-                                background:
-                                  sortCategory === "Type" && sortOption === opt
-                                    ? "#fff4ed"
-                                    : "transparent",
-                              }}
-                            >
-                              {opt}
-                            </div>
-                          ))}
-
-                        {category === "Services" &&
-                          availableServices.map((s) => (
-                            <div
-                              key={s.id}
-                              onClick={() => {
-                                setSortCategory("Services");
-                                setSortOption(s.id);
-                                setFilterDropdownOpen(false);
-                                setExpandedCategory(null);
-                              }}
-                              style={{
-                                padding: "0.5rem 1.5rem",
-                                cursor: "pointer",
-                                fontSize: "0.85rem",
-                                color:
-                                  sortCategory === "Services" &&
-                                  sortOption === s.id
-                                    ? "#e2784d"
-                                    : "#64736e",
-                                background:
-                                  sortCategory === "Services" &&
-                                  sortOption === s.id
-                                    ? "#fff4ed"
-                                    : "transparent",
-                              }}
-                            >
-                              {s.name}
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
+
+        {!loading && (
+          <div className="admin-services-filters">
+            <label className="admin-services-filter-field admin-services-filter-field--search">
+              <span className="admin-services-filter-label">Search</span>
+              <input
+                type="search"
+                placeholder="Search providers by name, email, bio..."
+                value={providerSearch}
+                onChange={(event) => setProviderSearch(event.target.value)}
+                aria-label="Search providers"
+              />
+            </label>
+
+            <label className="admin-services-filter-field">
+              <span className="admin-services-filter-label">Type</span>
+              <select
+                value={selectedType}
+                onChange={(event) => setSelectedType(event.target.value)}
+                aria-label="Filter providers by type"
+              >
+                <option value="">All Types</option>
+                <option value="person">Person</option>
+                <option value="resource">Resource</option>
+              </select>
+            </label>
+
+            <label className="admin-services-filter-field">
+              <span className="admin-services-filter-label">Status</span>
+              <select
+                value={selectedStatus}
+                onChange={(event) => setSelectedStatus(event.target.value)}
+                aria-label="Filter providers by status"
+              >
+                <option value="">All Statuses</option>
+                <option value="available">Available</option>
+                <option value="on_leave">On Leave</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+
+            <label className="admin-services-filter-field">
+              <span className="admin-services-filter-label">Service</span>
+              <select
+                value={selectedServiceId}
+                onChange={(event) => setSelectedServiceId(event.target.value)}
+                aria-label="Filter providers by service"
+              >
+                <option value="">All Services</option>
+                {availableServices.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              className="admin-secondary-button admin-services-clear-filters"
+              onClick={clearProviderFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
+
+        {!loading && (
+          <p className="admin-services-result-count">
+            Showing {filteredProviders.length} of {providers.length} providers
+          </p>
+        )}
 
         {loading ? (
           <p style={{ padding: "1.5rem" }}>Loading providers...</p>
@@ -462,7 +309,7 @@ function AdminProvidersPage() {
             No providers found. Add a provider to get started.
           </p>
         ) : (
-          <div style={{ width: "100%" }}>
+          <div className="admin-table-wrapper">
             <table className="admin-table">
               <thead>
                 <tr>
@@ -704,7 +551,18 @@ function AdminProvidersPage() {
                         color: "#64748b",
                       }}
                     >
-                      No providers match the selected criteria.
+                      <div className="admin-services-filter-empty">
+                        <p className="admin-services-message">
+                          No providers match the selected filters.
+                        </p>
+                        <button
+                          type="button"
+                          className="admin-secondary-button"
+                          onClick={clearProviderFilters}
+                        >
+                          Reset Filters
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}

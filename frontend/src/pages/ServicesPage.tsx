@@ -16,9 +16,9 @@ function formatPrice(price: Service["price"]) {
     return "Price on request";
   }
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
   }).format(Number(price));
 }
 

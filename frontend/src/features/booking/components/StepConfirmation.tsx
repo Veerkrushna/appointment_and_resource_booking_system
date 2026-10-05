@@ -1,4 +1,3 @@
-import React from "react";
 import { Link } from "react-router-dom";
 import type { BookingDetails, Service, AvailabilitySlot } from "../types";
 import { formatDate, formatTime } from "../utils";

@@ -50,13 +50,8 @@ export default function ProviderServicesPage() {
           <p className="eyebrow">Offerings</p>
           <h1>My Services</h1>
           <p className="services-intro">
-            Manage the services you offer to customers.
+            Manage the services you offer to customers.<br /> Call your Admin if you want to add or close a service.
           </p>
-        </div>
-        <div>
-          <button className="btn-accent btn-accent--full">
-            + Add New Service
-          </button>
         </div>
       </header>
 
