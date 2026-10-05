@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import {
+import type {
   Service,
   BookingDetails,
   AvailabilitySlot,

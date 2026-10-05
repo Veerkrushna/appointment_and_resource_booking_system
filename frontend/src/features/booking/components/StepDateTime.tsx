@@ -1,6 +1,6 @@
 import React from "react";
 import ProviderRatingSelect from "../../../components/ProviderRatingSelect";
-import { AvailabilitySlot, ProviderOption, ProviderType } from "../types";
+import type { AvailabilitySlot, ProviderOption, ProviderType } from "../types";
 import { formatDate, formatTime, getToday } from "../utils";
 
 type Props = {

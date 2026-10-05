@@ -1,5 +1,5 @@
 import React, { FormEvent } from "react";
-import { BookingDetails } from "../types";
+import type { BookingDetails } from "../types";
 
 type Props = {
   hasAuthenticatedCustomer: boolean;

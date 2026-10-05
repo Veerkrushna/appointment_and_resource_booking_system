@@ -1,5 +1,5 @@
 import React from "react";
-import { Service, AvailabilitySlot } from "../types";
+import type { Service, AvailabilitySlot } from "../types";
 import { formatDate, formatTime } from "../utils";
 
 type Props = {
