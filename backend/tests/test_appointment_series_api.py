@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, event, func, select
 from sqlalchemy.exc import OperationalError
 
 from app.core.security import create_access_token
@@ -23,6 +23,7 @@ from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
 from app.models.user import User, UserRole
+from app.services.appointment_series import get_appointment_series
 
 client = TestClient(app)
 
@@ -888,3 +889,184 @@ def test_series_cancellation_includes_appointment_starting_now(
 
     assert response.status_code == 200
     assert str(at_now_id) in response.json()["cancelled_appointment_ids"]
+
+
+def test_customer_can_retrieve_owned_active_series_with_ordered_occurrences(
+    series_records,
+):
+    db = SessionLocal()
+    series = AppointmentSeries(
+        customer_id=series_records["customer_id"],
+        provider_id=series_records["provider_id"],
+        service_id=series_records["service_id"],
+        frequency=AppointmentSeriesFrequency.WEEKLY,
+        interval=1,
+        start_date=date.today() + timedelta(days=14),
+        local_start_time=time(10),
+        timezone="UTC",
+        end_mode=AppointmentSeriesEndMode.COUNT,
+        occurrence_count=5,
+        status=AppointmentSeriesStatus.ACTIVE,
+    )
+    db.add(series)
+    db.flush()
+    expected_ids = {}
+    start_base = datetime.now(UTC)
+    for occurrence_number in (5, 2, 4, 1, 3):
+        appointment = Appointment(
+            series_id=series.id,
+            occurrence_number=occurrence_number,
+            service_id=series_records["service_id"],
+            provider_id=series_records["provider_id"],
+            customer_id=series_records["customer_id"],
+            user_name="Recurring Customer",
+            user_email=f"retrieval-{uuid4()}@example.com",
+            appointment_start=start_base + timedelta(days=occurrence_number),
+            appointment_end=start_base + timedelta(days=occurrence_number, minutes=30),
+            duration_minutes=30,
+            buffer_time_minutes=10,
+            status=AppointmentStatus.CONFIRMED,
+        )
+        db.add(appointment)
+        expected_ids[occurrence_number] = appointment
+    db.flush()
+    expected_ids = {
+        occurrence_number: str(appointment.id)
+        for occurrence_number, appointment in expected_ids.items()
+    }
+    db.commit()
+    series_id = series.id
+    db.close()
+
+    response = client.get(
+        f"/api/appointment-series/{series_id}",
+        headers=_headers(series_records),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["series_id"] == str(series_id)
+    assert result["service_id"] == str(series_records["service_id"])
+    assert result["provider_id"] == str(series_records["provider_id"])
+    assert result["frequency"] == "weekly"
+    assert result["interval"] == 1
+    assert result["provider_timezone"] == "UTC"
+    assert result["end_mode"] == "count"
+    assert result["occurrence_count"] == 5
+    assert result["end_date"] is None
+    assert result["status"] == "active"
+    assert len(result["occurrences"]) == 5
+    assert [item["occurrence_number"] for item in result["occurrences"]] == [
+        1,
+        2,
+        3,
+        4,
+        5,
+    ]
+    assert {
+        item["occurrence_number"]: item["id"] for item in result["occurrences"]
+    } == expected_ids
+    assert all(
+        item["appointment_start"].endswith("Z") for item in result["occurrences"]
+    )
+    assert all(item["appointment_end"].endswith("Z") for item in result["occurrences"])
+
+
+def test_customer_can_retrieve_owned_cancelled_series(series_records):
+    created = _create_cancellation_series(
+        series_records, series_status=AppointmentSeriesStatus.CANCELLED
+    )
+
+    response = client.get(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["status"] == "cancelled"
+    assert len(result["occurrences"]) == 5
+
+
+def test_customer_receives_404_for_missing_or_other_customer_series(series_records):
+    created = _create_cancellation_series(series_records)
+
+    missing = client.get(
+        f"/api/appointment-series/{uuid4()}", headers=_headers(series_records)
+    )
+    other_customer = client.get(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records, role="other_customer"),
+    )
+
+    assert missing.status_code == 404
+    assert other_customer.status_code == 404
+
+
+def test_provider_cannot_retrieve_appointment_series(series_records):
+    created = _create_cancellation_series(series_records)
+
+    response = client.get(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records, role="provider"),
+    )
+
+    assert response.status_code == 403
+
+
+def test_invalid_series_id_path_returns_422(series_records):
+    response = client.get(
+        "/api/appointment-series/not-a-uuid", headers=_headers(series_records)
+    )
+
+    assert response.status_code == 422
+
+
+def test_series_retrieval_database_failure_returns_sanitized_error(series_records):
+    db = SessionLocal()
+
+    def fail_scalar(*_args, **_kwargs):
+        raise OperationalError("select", {}, RuntimeError("private database detail"))
+
+    db.scalar = fail_scalar
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = client.get(
+            f"/api/appointment-series/{uuid4()}", headers=_headers(series_records)
+        )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        db.close()
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Unable to retrieve appointment series"
+    assert "private database detail" not in response.text
+
+
+def test_series_retrieval_loads_occurrences_without_n_plus_one(series_records):
+    created = _create_cancellation_series(series_records)
+    db = SessionLocal()
+    customer = db.get(User, series_records["customer_id"])
+    statements = []
+    connection = db.get_bind()
+
+    def record_statement(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(connection, "before_cursor_execute", record_statement)
+    try:
+        series, appointments = get_appointment_series(
+            db, created["series_id"], customer
+        )
+    finally:
+        event.remove(connection, "before_cursor_execute", record_statement)
+        db.close()
+
+    assert series.id == created["series_id"]
+    assert len(appointments) == 5
+    assert len(statements) == 2

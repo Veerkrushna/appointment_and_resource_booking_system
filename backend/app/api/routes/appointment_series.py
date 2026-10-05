@@ -11,6 +11,7 @@ from app.models.user import User, UserRole
 from app.schemas.appointment_series import (
     AppointmentSeriesCancellationResponse,
     AppointmentSeriesCreate,
+    AppointmentSeriesDetailResponse,
     AppointmentSeriesOccurrenceResponse,
     AppointmentSeriesResponse,
 )
@@ -21,6 +22,7 @@ from app.services.appointment_series import (
     RecurringBookingConflictError,
     cancel_appointment_series,
     create_appointment_series,
+    get_appointment_series,
 )
 from app.services.booking import BookingValidationError
 from app.services.recurrence import RecurrenceValidationError
@@ -28,6 +30,46 @@ from app.services.recurrence import RecurrenceValidationError
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/appointment-series", tags=["Appointment Series"])
+
+
+@router.get("/{series_id}", response_model=AppointmentSeriesDetailResponse)
+def get_appointment_series_endpoint(
+    series_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    customer: Annotated[User, Depends(require_role(UserRole.CUSTOMER))],
+):
+    try:
+        series, appointments = get_appointment_series(db, series_id, customer)
+    except AppointmentSeriesNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment series not found",
+        ) from error
+    except AppointmentSeriesPersistenceError as error:
+        logger.exception("Unable to retrieve appointment series")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to retrieve appointment series",
+        ) from error
+
+    return AppointmentSeriesDetailResponse(
+        series_id=series.id,
+        service_id=series.service_id,
+        provider_id=series.provider_id,
+        frequency=series.frequency,
+        interval=series.interval,
+        start_date=series.start_date,
+        local_start_time=series.local_start_time,
+        provider_timezone=series.timezone,
+        end_mode=series.end_mode,
+        occurrence_count=series.occurrence_count,
+        end_date=series.end_date,
+        status=series.status,
+        occurrences=[
+            AppointmentSeriesOccurrenceResponse.model_validate(appointment)
+            for appointment in appointments
+        ],
+    )
 
 
 @router.post(

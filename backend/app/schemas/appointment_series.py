@@ -125,3 +125,19 @@ class AppointmentSeriesResponse(BaseModel):
     end_date: date | None
     status: AppointmentSeriesStatus
     occurrences: list[AppointmentSeriesOccurrenceResponse]
+
+
+class AppointmentSeriesDetailResponse(BaseModel):
+    series_id: UUID
+    service_id: UUID
+    provider_id: UUID
+    frequency: AppointmentSeriesFrequency
+    interval: int
+    start_date: date
+    local_start_time: time
+    provider_timezone: str
+    end_mode: AppointmentSeriesEndMode
+    occurrence_count: int | None
+    end_date: date | None
+    status: AppointmentSeriesStatus
+    occurrences: list[AppointmentSeriesOccurrenceResponse]

@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.appointment_series import AppointmentSeries, AppointmentSeriesStatus
@@ -297,3 +297,30 @@ def cancel_appointment_series(
             )
 
     return series, cancelled_ids
+
+
+def get_appointment_series(
+    db: Session, series_id: UUID, customer: Customer
+) -> tuple[AppointmentSeries, list[Appointment]]:
+    try:
+        series = db.scalar(
+            select(AppointmentSeries)
+            .options(selectinload(AppointmentSeries.appointments))
+            .where(
+                AppointmentSeries.id == series_id,
+                AppointmentSeries.customer_id == customer.id,
+            )
+        )
+        if series is None:
+            raise AppointmentSeriesNotFoundError
+        appointments = sorted(
+            series.appointments,
+            key=lambda appointment: appointment.occurrence_number or 0,
+        )
+        return series, appointments
+    except AppointmentSeriesNotFoundError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as error:
+        db.rollback()
+        raise AppointmentSeriesPersistenceError from error
