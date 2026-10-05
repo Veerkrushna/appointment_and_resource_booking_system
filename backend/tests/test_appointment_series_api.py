@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, time, timedelta
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -10,7 +12,12 @@ from app.core.security import create_access_token
 from app.db.database import SessionLocal, get_db
 from app.main import app
 from app.models.appointment import Appointment, AppointmentStatus
-from app.models.appointment_series import AppointmentSeries
+from app.models.appointment_series import (
+    AppointmentSeries,
+    AppointmentSeriesEndMode,
+    AppointmentSeriesFrequency,
+    AppointmentSeriesStatus,
+)
 from app.models.availability import ProviderAvailability
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
@@ -30,11 +37,21 @@ def series_records(monkeypatch):
         "app.services.appointment_series.schedule_appointment_notifications",
         lambda _appointment: None,
     )
+    monkeypatch.setattr(
+        "app.services.appointment_series.send_cancellation_notification.delay",
+        lambda _appointment_id: None,
+    )
 
     db = SessionLocal()
     customer = User(
         name="Series Customer",
         email=f"series-customer-{uuid4()}@example.com",
+        password_hash="not-used",
+        role=UserRole.CUSTOMER,
+    )
+    other_customer = User(
+        name="Other Series Customer",
+        email=f"other-series-customer-{uuid4()}@example.com",
         password_hash="not-used",
         role=UserRole.CUSTOMER,
     )
@@ -60,7 +77,7 @@ def series_records(monkeypatch):
         buffer_time_minutes=10,
         status=ServiceStatus.ACTIVE,
     )
-    db.add_all([customer, provider_user, provider, service])
+    db.add_all([customer, other_customer, provider_user, provider, service])
     db.flush()
     db.add(
         ProviderService(
@@ -83,11 +100,13 @@ def series_records(monkeypatch):
     records = {
         "customer_id": customer.id,
         "customer_role": customer.role,
+        "other_customer_id": other_customer.id,
+        "other_customer_role": other_customer.role,
         "provider_user_id": provider_user.id,
         "provider_user_role": provider_user.role,
         "provider_id": provider.id,
         "service_id": service.id,
-        "user_ids": [customer.id, provider_user.id],
+        "user_ids": [customer.id, other_customer.id, provider_user.id],
     }
     db.close()
 
@@ -124,6 +143,9 @@ def _headers(records, role="customer"):
     if role == "provider":
         user_id = records["provider_user_id"]
         user_role = records["provider_user_role"]
+    elif role == "other_customer":
+        user_id = records["other_customer_id"]
+        user_role = records["other_customer_role"]
     else:
         user_id = records["customer_id"]
         user_role = records["customer_role"]
@@ -161,6 +183,67 @@ def _count_records(model, provider_id):
             .select_from(model)
             .where(model.provider_id == provider_id)
         )
+
+
+def _create_cancellation_series(
+    records,
+    series_status=AppointmentSeriesStatus.ACTIVE,
+    now_utc: datetime | None = None,
+):
+    db = SessionLocal()
+    series = AppointmentSeries(
+        customer_id=records["customer_id"],
+        provider_id=records["provider_id"],
+        service_id=records["service_id"],
+        frequency=AppointmentSeriesFrequency.WEEKLY,
+        interval=1,
+        start_date=date.today() + timedelta(days=14),
+        local_start_time=time(10),
+        timezone="UTC",
+        end_mode=AppointmentSeriesEndMode.COUNT,
+        occurrence_count=5,
+        status=series_status,
+    )
+    db.add(series)
+    db.flush()
+    now_utc = now_utc or datetime.now(UTC)
+    appointment_specs = [
+        (1, 3, AppointmentStatus.CONFIRMED),
+        # This appointment has been individually rescheduled from its recurrence date.
+        (2, 17, AppointmentStatus.CONFIRMED),
+        (3, -2, AppointmentStatus.COMPLETED),
+        (4, 22, AppointmentStatus.CANCELLED),
+        (5, 25, AppointmentStatus.COMPLETED),
+    ]
+    appointments = [
+        Appointment(
+            series_id=series.id,
+            occurrence_number=occurrence_number,
+            service_id=records["service_id"],
+            provider_id=records["provider_id"],
+            customer_id=records["customer_id"],
+            user_name="Recurring Customer",
+            user_email=f"series-cancel-{uuid4()}@example.com",
+            appointment_start=now_utc + timedelta(days=day_offset),
+            appointment_end=now_utc + timedelta(days=day_offset, minutes=30),
+            duration_minutes=30,
+            buffer_time_minutes=10,
+            status=appointment_status,
+        )
+        for occurrence_number, day_offset, appointment_status in appointment_specs
+    ]
+    db.add_all(appointments)
+    db.commit()
+    result = {
+        "series_id": series.id,
+        "appointment_ids": [appointment.id for appointment in appointments],
+        "future_active_ids": [appointments[0].id, appointments[1].id],
+        "past_completed_id": appointments[2].id,
+        "already_cancelled_id": appointments[3].id,
+        "future_completed_id": appointments[4].id,
+    }
+    db.close()
+    return result
 
 
 def test_authenticated_customer_creates_atomic_series(series_records, monkeypatch):
@@ -572,3 +655,236 @@ def test_database_failure_rolls_back_without_leaking_or_notifying(
     assert notifications == []
     assert _count_records(AppointmentSeries, series_records["provider_id"]) == 0
     assert _count_records(Appointment, series_records["provider_id"]) == 0
+
+
+def test_cancel_series_cancels_future_active_and_preserves_other_appointments(
+    series_records,
+):
+    created = _create_cancellation_series(series_records)
+
+    response = client.delete(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records),
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["series_id"] == str(created["series_id"])
+    assert result["status"] == "cancelled"
+    assert result["appointments_cancelled"] == 2
+    assert set(result["cancelled_appointment_ids"]) == {
+        str(appointment_id) for appointment_id in created["future_active_ids"]
+    }
+
+    with SessionLocal() as db:
+        series = db.get(AppointmentSeries, created["series_id"])
+        appointments = {
+            appointment.id: appointment
+            for appointment in db.scalars(
+                select(Appointment).where(Appointment.series_id == created["series_id"])
+            )
+        }
+        assert series.status == AppointmentSeriesStatus.CANCELLED
+        assert all(
+            appointments[appointment_id].status == AppointmentStatus.CANCELLED
+            for appointment_id in created["future_active_ids"]
+        )
+        assert (
+            appointments[created["past_completed_id"]].status
+            == AppointmentStatus.COMPLETED
+        )
+        assert (
+            appointments[created["already_cancelled_id"]].status
+            == AppointmentStatus.CANCELLED
+        )
+        assert (
+            appointments[created["future_completed_id"]].status
+            == AppointmentStatus.COMPLETED
+        )
+
+
+def test_cancel_series_requires_ownership_and_customer_role(series_records):
+    created = _create_cancellation_series(series_records)
+
+    other_customer = client.delete(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records, role="other_customer"),
+    )
+    provider = client.delete(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records, role="provider"),
+    )
+
+    assert other_customer.status_code == 404
+    assert provider.status_code == 403
+    with SessionLocal() as db:
+        assert (
+            db.get(AppointmentSeries, created["series_id"]).status
+            == AppointmentSeriesStatus.ACTIVE
+        )
+
+
+def test_cancel_missing_series_returns_404(series_records):
+    response = client.delete(
+        f"/api/appointment-series/{uuid4()}", headers=_headers(series_records)
+    )
+
+    assert response.status_code == 404
+
+
+def test_cancel_already_cancelled_series_returns_409(series_records):
+    created = _create_cancellation_series(
+        series_records, series_status=AppointmentSeriesStatus.CANCELLED
+    )
+
+    response = client.delete(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records),
+    )
+
+    assert response.status_code == 409
+    with SessionLocal() as db:
+        assert all(
+            appointment.status == AppointmentStatus.CONFIRMED
+            for appointment in db.scalars(
+                select(Appointment).where(
+                    Appointment.id.in_(created["future_active_ids"])
+                )
+            )
+        )
+
+
+def test_cancel_series_database_failure_rolls_back_all_statuses(
+    series_records, monkeypatch
+):
+    created = _create_cancellation_series(series_records)
+    notifications = []
+    monkeypatch.setattr(
+        "app.services.appointment_series.send_cancellation_notification.delay",
+        lambda appointment_id: notifications.append(appointment_id),
+    )
+    db = SessionLocal()
+
+    def fail_commit():
+        raise OperationalError("commit", {}, RuntimeError("private database detail"))
+
+    db.commit = fail_commit
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = client.delete(
+            f"/api/appointment-series/{created['series_id']}",
+            headers=_headers(series_records),
+        )
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        db.close()
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Unable to cancel appointment series"
+    assert "private database detail" not in response.text
+    assert notifications == []
+    with SessionLocal() as verify_db:
+        assert (
+            verify_db.get(AppointmentSeries, created["series_id"]).status
+            == AppointmentSeriesStatus.ACTIVE
+        )
+        assert all(
+            appointment.status == AppointmentStatus.CONFIRMED
+            for appointment in verify_db.scalars(
+                select(Appointment).where(
+                    Appointment.id.in_(created["future_active_ids"])
+                )
+            )
+        )
+
+
+def test_cancel_notifications_are_dispatched_only_after_commit(
+    series_records, monkeypatch
+):
+    created = _create_cancellation_series(series_records)
+    notified_ids = []
+
+    def notify_after_commit(appointment_id):
+        with SessionLocal() as verify_db:
+            series = verify_db.get(AppointmentSeries, created["series_id"])
+            appointment = verify_db.get(Appointment, appointment_id)
+            assert series.status == AppointmentSeriesStatus.CANCELLED
+            assert appointment.status == AppointmentStatus.CANCELLED
+        notified_ids.append(appointment_id)
+
+    monkeypatch.setattr(
+        "app.services.appointment_series.send_cancellation_notification.delay",
+        notify_after_commit,
+    )
+    response = client.delete(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records),
+    )
+
+    assert response.status_code == 200
+    assert set(notified_ids) == {
+        str(appointment_id) for appointment_id in created["future_active_ids"]
+    }
+
+
+def test_concurrent_series_cancellation_has_one_success(series_records):
+    created = _create_cancellation_series(series_records)
+    barrier = Barrier(2)
+
+    def cancel_series():
+        barrier.wait(timeout=10)
+        with TestClient(app) as concurrent_client:
+            return concurrent_client.delete(
+                f"/api/appointment-series/{created['series_id']}",
+                headers=_headers(series_records),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _index: cancel_series(), range(2)))
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    with SessionLocal() as db:
+        assert (
+            db.get(AppointmentSeries, created["series_id"]).status
+            == AppointmentSeriesStatus.CANCELLED
+        )
+        assert all(
+            appointment.status == AppointmentStatus.CANCELLED
+            for appointment in db.scalars(
+                select(Appointment).where(
+                    Appointment.id.in_(created["future_active_ids"])
+                )
+            )
+        )
+
+
+def test_series_cancellation_includes_appointment_starting_now(
+    series_records, monkeypatch
+):
+    exact_now = datetime.now(UTC)
+    created = _create_cancellation_series(series_records, now_utc=exact_now)
+    db = SessionLocal()
+    at_now = db.get(Appointment, created["future_active_ids"][0])
+    at_now.appointment_start = exact_now
+    at_now.appointment_end = exact_now + timedelta(minutes=30)
+    db.commit()
+    at_now_id = at_now.id
+    db.close()
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return exact_now
+
+    monkeypatch.setattr("app.services.appointment_series.datetime", FrozenDateTime)
+    response = client.delete(
+        f"/api/appointment-series/{created['series_id']}",
+        headers=_headers(series_records),
+    )
+
+    assert response.status_code == 200
+    assert str(at_now_id) in response.json()["cancelled_appointment_ids"]

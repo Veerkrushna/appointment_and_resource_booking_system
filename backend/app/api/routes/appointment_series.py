@@ -1,5 +1,6 @@
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -8,13 +9,17 @@ from app.core.security import require_role
 from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.schemas.appointment_series import (
+    AppointmentSeriesCancellationResponse,
     AppointmentSeriesCreate,
     AppointmentSeriesOccurrenceResponse,
     AppointmentSeriesResponse,
 )
 from app.services.appointment_series import (
+    AppointmentSeriesCancellationConflictError,
+    AppointmentSeriesNotFoundError,
     AppointmentSeriesPersistenceError,
     RecurringBookingConflictError,
+    cancel_appointment_series,
     create_appointment_series,
 )
 from app.services.booking import BookingValidationError
@@ -77,4 +82,37 @@ def create_appointment_series_endpoint(
             AppointmentSeriesOccurrenceResponse.model_validate(appointment)
             for appointment in appointments
         ],
+    )
+
+
+@router.delete("/{series_id}", response_model=AppointmentSeriesCancellationResponse)
+def cancel_appointment_series_endpoint(
+    series_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    customer: Annotated[User, Depends(require_role(UserRole.CUSTOMER))],
+):
+    try:
+        series, cancelled_ids = cancel_appointment_series(db, series_id, customer)
+    except AppointmentSeriesNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment series not found",
+        ) from error
+    except AppointmentSeriesCancellationConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Appointment series is already cancelled",
+        ) from error
+    except AppointmentSeriesPersistenceError as error:
+        logger.exception("Unable to cancel appointment series")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to cancel appointment series",
+        ) from error
+
+    return AppointmentSeriesCancellationResponse(
+        series_id=series.id,
+        status=series.status,
+        appointments_cancelled=len(cancelled_ids),
+        cancelled_appointment_ids=cancelled_ids,
     )

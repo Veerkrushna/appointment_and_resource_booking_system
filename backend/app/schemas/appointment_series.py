@@ -102,6 +102,13 @@ class AppointmentSeriesOccurrenceResponse(BaseModel):
         return value.astimezone(UTC)
 
 
+class AppointmentSeriesCancellationResponse(BaseModel):
+    series_id: UUID
+    status: AppointmentSeriesStatus
+    appointments_cancelled: int
+    cancelled_appointment_ids: list[UUID]
+
+
 class AppointmentSeriesResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

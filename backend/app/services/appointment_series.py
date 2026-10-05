@@ -1,13 +1,15 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.models.appointment import Appointment
-from app.models.appointment_series import AppointmentSeries
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment_series import AppointmentSeries, AppointmentSeriesStatus
 from app.models.customer import Customer
 from app.schemas.appointment import AppointmentCreate
 from app.schemas.appointment_series import AppointmentSeriesCreate
@@ -24,6 +26,7 @@ from app.services.recurrence import (
     RecurrenceValidationError,
     generate_occurrence_starts,
 )
+from app.tasks.notification_tasks import send_cancellation_notification
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,14 @@ class RecurringBookingConflictError(BookingConflictError):
 
 
 class AppointmentSeriesPersistenceError(Exception):
+    pass
+
+
+class AppointmentSeriesNotFoundError(Exception):
+    pass
+
+
+class AppointmentSeriesCancellationConflictError(Exception):
     pass
 
 
@@ -232,3 +243,57 @@ def create_appointment_series(
 
     _enqueue_notifications(appointments)
     return series, appointments
+
+
+def cancel_appointment_series(
+    db: Session, series_id: UUID, customer: Customer
+) -> tuple[AppointmentSeries, list[UUID]]:
+    try:
+        series = db.scalar(
+            select(AppointmentSeries)
+            .where(AppointmentSeries.id == series_id)
+            .with_for_update()
+        )
+        if series is None or series.customer_id != customer.id:
+            raise AppointmentSeriesNotFoundError
+        if series.status == AppointmentSeriesStatus.CANCELLED:
+            raise AppointmentSeriesCancellationConflictError
+
+        now_utc = datetime.now(UTC)
+        appointments = db.scalars(
+            select(Appointment)
+            .where(
+                Appointment.series_id == series.id,
+                Appointment.appointment_start >= now_utc,
+                Appointment.status == AppointmentStatus.CONFIRMED,
+            )
+            .order_by(Appointment.id)
+            .with_for_update()
+        ).all()
+        cancelled_ids = [appointment.id for appointment in appointments]
+
+        series.status = AppointmentSeriesStatus.CANCELLED
+        for appointment in appointments:
+            appointment.status = AppointmentStatus.CANCELLED
+
+        db.commit()
+    except (AppointmentSeriesNotFoundError, AppointmentSeriesCancellationConflictError):
+        db.rollback()
+        raise
+    except SQLAlchemyError as error:
+        db.rollback()
+        raise AppointmentSeriesPersistenceError from error
+    except Exception:
+        db.rollback()
+        raise
+
+    for appointment_id in cancelled_ids:
+        try:
+            send_cancellation_notification.delay(str(appointment_id))
+        except Exception:
+            logger.exception(
+                "Unable to enqueue cancellation notification for appointment %s",
+                appointment_id,
+            )
+
+    return series, cancelled_ids
