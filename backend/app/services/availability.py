@@ -16,6 +16,7 @@ from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
 from app.schemas.availability import AvailabilitySlot
+from app.services.appointment_intervals import appointment_blocked_interval
 
 Interval = tuple[datetime, datetime]
 
@@ -77,7 +78,7 @@ def _provider_slots(
     provider: Provider,
     service: Service,
     target_date: date,
-    appointments: list[Appointment],
+    appointment_intervals: list[Interval],
     blackouts: list[ProviderBlackoutDate],
     breaks: list[ProviderBreak],
     slot_interval: timedelta,
@@ -120,16 +121,10 @@ def _provider_slots(
         if overlap is not None:
             blocked.append(overlap)
 
-    service_buffer = timedelta(minutes=service.buffer_time_minutes or 0)
-    for appointment in appointments:
-        blocked.append(
-            (
-                appointment.appointment_start,
-                appointment.appointment_end + service_buffer,
-            )
-        )
+    blocked.extend(appointment_intervals)
 
     free_intervals = subtract_intervals(working_intervals, blocked)
+    service_buffer = timedelta(minutes=service.buffer_time_minutes or 0)
     starts = generate_slot_starts(
         free_intervals,
         timedelta(minutes=service.duration_minutes),
@@ -244,15 +239,22 @@ def calculate_available_slots(
                 # -------------------------------------------------
                 # Existing appointments
                 # -------------------------------------------------
-                appointments = list(
-                    db.scalars(
-                        select(Appointment).where(
+                appointment_start, appointment_blocked_end = (
+                    appointment_blocked_interval()
+                )
+                appointment_intervals = list(
+                    db.execute(
+                        select(appointment_start, appointment_blocked_end)
+                        .join(Service, Service.id == Appointment.service_id)
+                        .where(
                             Appointment.provider_id == provider.id,
                             Appointment.status != AppointmentStatus.CANCELLED,
-                            Appointment.appointment_start < day_end,
-                            Appointment.appointment_end > day_start,
+                            appointment_start < day_end,
+                            appointment_blocked_end > day_start,
                         )
-                    ).all()
+                    )
+                    .tuples()
+                    .all()
                 )
 
                 # -------------------------------------------------
@@ -288,7 +290,7 @@ def calculate_available_slots(
                         provider,
                         service,
                         target_date,
-                        appointments,
+                        appointment_intervals,
                         blackouts,
                         breaks,
                         timedelta(minutes=slot_interval_minutes),

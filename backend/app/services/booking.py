@@ -5,19 +5,20 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.appointment_cancellation import AppointmentCancellation
 from app.models.customer import Customer
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
+from app.models.user import UserRole
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
     AppointmentCreate,
     AppointmentRescheduleCreate,
     AppointmentUpdate,
 )
+from app.services.appointment_intervals import appointment_blocked_interval
 from app.tasks.notification_tasks import (
     enqueue_confirmation_notification,
     schedule_appointment_notifications,
@@ -82,6 +83,7 @@ def _validate_slot(
     duration_minutes: int,
     provider: Provider,
     exclude_appointment_id=None,
+    service_buffer_minutes: int | None = None,
 ) -> tuple[datetime, datetime]:
     try:
         zone = ZoneInfo(provider.timezone)
@@ -93,9 +95,10 @@ def _validate_slot(
         raise BookingValidationError("Appointments cannot be booked in the past")
 
     end_utc = start_utc + timedelta(minutes=duration_minutes)
+    blocked_end_utc = end_utc + timedelta(minutes=service_buffer_minutes or 0)
     local_start = start_utc.astimezone(zone)
-    local_end = end_utc.astimezone(zone)
-    if local_start.date() != local_end.date():
+    local_blocked_end = blocked_end_utc.astimezone(zone)
+    if local_start.date() != local_blocked_end.date():
         raise BookingValidationError("Appointment must fit within one working day")
 
     working_window = next(
@@ -115,7 +118,7 @@ def _validate_slot(
     working_start, working_end = _local_interval(
         local_start.date(), working_window.start_time, working_window.end_time, zone
     )
-    if start_utc < working_start or end_utc > working_end:
+    if start_utc < working_start or blocked_end_utc > working_end:
         raise BookingValidationError("Appointment is outside working hours")
 
     for break_window in provider.breaks:
@@ -124,20 +127,25 @@ def _validate_slot(
         break_start, break_end = _local_interval(
             local_start.date(), break_window.start_time, break_window.end_time, zone
         )
-        if start_utc < break_end and end_utc > break_start:
+        if start_utc < break_end and blocked_end_utc > break_start:
             raise BookingValidationError("Appointment overlaps a provider break")
 
     for blackout in provider.blackout_dates:
         blackout_start = _utc(blackout.blackout_start)
         blackout_end = _utc(blackout.blackout_end)
-        if start_utc < blackout_end and end_utc > blackout_start:
+        if start_utc < blackout_end and blocked_end_utc > blackout_start:
             raise BookingValidationError("Appointment overlaps a provider blackout")
 
-    overlapping_query = select(Appointment.id).where(
-        Appointment.provider_id == provider.id,
-        Appointment.status != AppointmentStatus.CANCELLED,
-        Appointment.appointment_start < end_utc,
-        Appointment.appointment_end > start_utc,
+    existing_start, existing_blocked_end = appointment_blocked_interval()
+    overlapping_query = (
+        select(Appointment.id)
+        .join(Service, Service.id == Appointment.service_id)
+        .where(
+            Appointment.provider_id == provider.id,
+            Appointment.status != AppointmentStatus.CANCELLED,
+            existing_start < blocked_end_utc,
+            existing_blocked_end > start_utc,
+        )
     )
     if exclude_appointment_id is not None:
         overlapping_query = overlapping_query.where(
@@ -174,7 +182,11 @@ def create_appointment(
         raise BookingValidationError("Active service is not offered by provider")
 
     start_utc, end_utc = _validate_slot(
-        db, payload.appointment_start, service.duration_minutes, provider
+        db,
+        payload.appointment_start,
+        service.duration_minutes,
+        provider,
+        service_buffer_minutes=service.buffer_time_minutes,
     )
 
     appointment = Appointment(
@@ -231,6 +243,7 @@ def update_appointment(
             appointment.duration_minutes,
             provider,
             appointment.id,
+            appointment.service.buffer_time_minutes,
         )
         appointment.appointment_start = start_utc
         appointment.appointment_end = end_utc
@@ -360,7 +373,8 @@ def reschedule_appointment(
         payload.appointment_start,
         appointment.duration_minutes,
         provider,
-        appointment.id,
+        exclude_appointment_id=appointment.id,
+        service_buffer_minutes=appointment.service.buffer_time_minutes,
     )
     appointment.appointment_start = start_utc
     appointment.appointment_end = end_utc
