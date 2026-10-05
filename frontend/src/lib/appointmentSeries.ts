@@ -66,6 +66,13 @@ export type AppointmentSeriesDetail = {
   occurrences: AppointmentSeriesOccurrence[];
 };
 
+export type AppointmentSeriesCancellationResponse = {
+  series_id: string;
+  status: "cancelled";
+  appointments_cancelled: number;
+  cancelled_appointment_ids: string[];
+};
+
 export class AppointmentSeriesApiError extends Error {
   readonly status: number | null;
   readonly conflicts: AppointmentSeriesConflict[];
@@ -79,6 +86,16 @@ export class AppointmentSeriesApiError extends Error {
     this.name = "AppointmentSeriesApiError";
     this.status = status;
     this.conflicts = conflicts;
+  }
+}
+
+export class AppointmentSeriesCancellationError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "AppointmentSeriesCancellationError";
+    this.status = status;
   }
 }
 
@@ -215,5 +232,51 @@ export async function fetchAppointmentSeries(
     return (await response.json()) as AppointmentSeriesDetail;
   } catch {
     throw new Error("Unable to read recurring series details. Please retry.");
+  }
+}
+
+export async function cancelAppointmentSeries(
+  token: string,
+  seriesId: string,
+): Promise<AppointmentSeriesCancellationResponse> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/appointment-series/${encodeURIComponent(seriesId)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+  } catch {
+    throw new AppointmentSeriesCancellationError(
+      "Unable to cancel this series. Please try again.",
+      null,
+    );
+  }
+
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      401: "Your session has expired. Please sign in again.",
+      403: "You are not allowed to cancel this series.",
+      404: "This recurring series could not be found.",
+      409: "This recurring series has already been cancelled.",
+    };
+    throw new AppointmentSeriesCancellationError(
+      response.status >= 500
+        ? "Unable to cancel this series. Please try again."
+        : (messages[response.status] ??
+            "Unable to cancel this series. Please try again."),
+      response.status,
+    );
+  }
+
+  try {
+    return (await response.json()) as AppointmentSeriesCancellationResponse;
+  } catch {
+    throw new AppointmentSeriesCancellationError(
+      "Unable to read the series cancellation response. Please refresh your appointments.",
+      null,
+    );
   }
 }

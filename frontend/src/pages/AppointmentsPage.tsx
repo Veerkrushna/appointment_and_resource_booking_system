@@ -9,6 +9,8 @@ import {
   type NamedRecord,
 } from "../lib/customerAppointments";
 import {
+  cancelAppointmentSeries,
+  AppointmentSeriesCancellationError,
   fetchAppointmentSeries,
   type AppointmentSeriesDetail,
 } from "../lib/appointmentSeries";
@@ -100,12 +102,23 @@ function AppointmentsPage() {
     {},
   );
   const [seriesErrors, setSeriesErrors] = useState<Record<string, string>>({});
+  const [seriesCancellationLoading, setSeriesCancellationLoading] = useState<
+    Record<string, boolean>
+  >({});
+  const [seriesCancellationErrors, setSeriesCancellationErrors] = useState<
+    Record<string, string>
+  >({});
   const seriesDetailCache = useRef(new Map<string, AppointmentSeriesDetail>());
   const seriesRequests = useRef(new Map<string, Promise<void>>());
+  const seriesCancellationRequests = useRef(new Map<string, Promise<void>>());
   const canLoadSeriesDetails =
     !authIsLoading &&
     Boolean(token) &&
     customer?.role.toLowerCase() === "customer";
+  const canCancelSeries =
+    !authIsLoading &&
+    Boolean(token) &&
+    customer?.role?.toLowerCase() === "customer";
 
   const loadAppointments = useCallback(async () => {
     setIsLoading(true);
@@ -212,6 +225,83 @@ function AppointmentsPage() {
     } finally {
       setActiveAction(null);
     }
+  }
+
+  function markSeriesCancelled(seriesId: string) {
+    const cachedSeries = seriesDetailCache.current.get(seriesId);
+    if (!cachedSeries) return;
+
+    const cancelledSeries = { ...cachedSeries, status: "cancelled" as const };
+    seriesDetailCache.current.set(seriesId, cancelledSeries);
+    setSeriesDetails((current) => ({
+      ...current,
+      [seriesId]: cancelledSeries,
+    }));
+  }
+
+  function cancelSeries(seriesId: string) {
+    if (
+      !canCancelSeries ||
+      !token ||
+      seriesCancellationRequests.current.has(seriesId)
+    ) {
+      return Promise.resolve();
+    }
+    if (
+      !window.confirm(
+        "Cancel this entire series? Future confirmed appointments will be cancelled.",
+      )
+    ) {
+      return Promise.resolve();
+    }
+
+    setSeriesCancellationLoading((current) => ({
+      ...current,
+      [seriesId]: true,
+    }));
+    setSeriesCancellationErrors((current) => {
+      const next = { ...current };
+      delete next[seriesId];
+      return next;
+    });
+
+    const request = cancelAppointmentSeries(token, seriesId)
+      .then((result) => {
+        const cancelledIds = new Set(result.cancelled_appointment_ids);
+        setAppointments((current) =>
+          current.map((appointment) =>
+            cancelledIds.has(appointment.id)
+              ? { ...appointment, status: "cancelled" }
+              : appointment,
+          ),
+        );
+        markSeriesCancelled(seriesId);
+      })
+      .catch((requestError: unknown) => {
+        if (
+          requestError instanceof AppointmentSeriesCancellationError &&
+          requestError.status === 409
+        ) {
+          markSeriesCancelled(seriesId);
+        }
+        setSeriesCancellationErrors((current) => ({
+          ...current,
+          [seriesId]:
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to cancel this series. Please try again.",
+        }));
+      })
+      .finally(() => {
+        seriesCancellationRequests.current.delete(seriesId);
+        setSeriesCancellationLoading((current) => ({
+          ...current,
+          [seriesId]: false,
+        }));
+      });
+
+    seriesCancellationRequests.current.set(seriesId, request);
+    return request;
   }
 
   const visibleAppointments = groupedAppointments[selectedTab];
@@ -574,6 +664,33 @@ function AppointmentsPage() {
                                   </dd>
                                 </div>
                               </dl>
+                            )}
+                            {canCancelSeries &&
+                              seriesDetails[group.seriesId] &&
+                              seriesDetails[group.seriesId].status !==
+                                "cancelled" && (
+                                <button
+                                  className="text-button"
+                                  type="button"
+                                  disabled={
+                                    seriesCancellationLoading[group.seriesId]
+                                  }
+                                  onClick={() =>
+                                    void cancelSeries(group.seriesId!)
+                                  }
+                                >
+                                  {seriesCancellationLoading[group.seriesId]
+                                    ? "Cancelling series..."
+                                    : "Cancel Series"}
+                                </button>
+                              )}
+                            {seriesCancellationErrors[group.seriesId] && (
+                              <p
+                                className="appointment-series-cancel-error"
+                                role="alert"
+                              >
+                                {seriesCancellationErrors[group.seriesId]}
+                              </p>
                             )}
                           </>
                         )}
