@@ -16,6 +16,12 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
+type AppointmentDisplayGroup = {
+  key: string;
+  seriesId: string | null;
+  appointments: CustomerAppointment[];
+};
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -167,6 +173,142 @@ function AppointmentsPage() {
 
   const visibleAppointments = groupedAppointments[selectedTab];
 
+  const visibleAppointmentGroups = useMemo(() => {
+    const groups: AppointmentDisplayGroup[] = [];
+    const recurringGroups = new Map<string, AppointmentDisplayGroup>();
+
+    for (const appointment of visibleAppointments) {
+      if (!appointment.series_id) {
+        groups.push({
+          key: appointment.id,
+          seriesId: null,
+          appointments: [appointment],
+        });
+        continue;
+      }
+
+      const existingGroup = recurringGroups.get(appointment.series_id);
+      if (existingGroup) {
+        existingGroup.appointments.push(appointment);
+      } else {
+        const group = {
+          key: `series-${appointment.series_id}`,
+          seriesId: appointment.series_id,
+          appointments: [appointment],
+        };
+        recurringGroups.set(appointment.series_id, group);
+        groups.push(group);
+      }
+    }
+
+    return groups;
+  }, [visibleAppointments]);
+
+  function renderAppointmentCard(appointment: CustomerAppointment) {
+    const isBusy = activeAction === appointment.id;
+    const canChange = selectedTab === "upcoming" && !isBusy;
+    const isRecurring = Boolean(appointment.series_id);
+
+    return (
+      <article className="appointment-card" key={appointment.id}>
+        <div className="appointment-card__date">
+          <span>{formatDate(appointment.appointment_start)}</span>
+          <strong>{formatTime(appointment.appointment_start)}</strong>
+          <small>{appointment.duration_minutes} min</small>
+        </div>
+        <div className="appointment-card__details">
+          <div
+            className={`appointment-card__topline${isRecurring ? " appointment-card__topline--recurring" : ""}`}
+          >
+            <span
+              className={`appointment-status appointment-status--${appointment.status}`}
+            >
+              {formatStatusLabel(appointment.status)}
+            </span>
+            {isRecurring && (
+              <span className="appointment-series-badge">Recurring</span>
+            )}
+            {isRecurring &&
+              typeof appointment.occurrence_number === "number" && (
+                <span className="appointment-series-occurrence">
+                  Occurrence {appointment.occurrence_number}
+                </span>
+              )}
+          </div>
+          <h2>{services[appointment.service_id] || "Booked service"}</h2>
+          <p>with {providers[appointment.provider_id] || "your provider"}</p>
+
+          {appointment.notes && (
+            <div className="appointment-detail">
+              <span>Note: {appointment.notes}</span>
+            </div>
+          )}
+
+          {rescheduling?.id === appointment.id && (
+            <RescheduleFlow
+              appointment={appointment}
+              serviceName={services[appointment.service_id] || "Booked service"}
+              providerName={
+                providers[appointment.provider_id] || "Your provider"
+              }
+              token={token!}
+              onCancel={() => setRescheduling(null)}
+              onComplete={async () => {
+                setRescheduling(null);
+                await loadAppointments();
+              }}
+            />
+          )}
+        </div>
+        <div className="appointment-actions">
+          {customer?.role.toLowerCase() === "customer" &&
+            appointment.status.toLowerCase() === "completed" && (
+              <AppointmentReview
+                appointmentId={appointment.id}
+                providerName={
+                  providers[appointment.provider_id] || "Your provider"
+                }
+                serviceName={
+                  services[appointment.service_id] || "Booked service"
+                }
+                token={token!}
+              />
+            )}
+          {canChange && (
+            <>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!canModify(appointment)}
+                title={
+                  !canModify(appointment)
+                    ? "Changes are not allowed within 2 hours of the booking."
+                    : undefined
+                }
+                onClick={() => setRescheduling(appointment)}
+              >
+                Reschedule
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={!canModify(appointment)}
+                title={
+                  !canModify(appointment)
+                    ? "Changes are not allowed within 2 hours of the booking."
+                    : undefined
+                }
+                onClick={() => void cancelAppointment(appointment.id)}
+              >
+                Cancel appointment
+              </button>
+            </>
+          )}
+        </div>
+      </article>
+    );
+  }
+
   return (
     <section className="appointments-page">
       <div className="services-heading appointments-heading">
@@ -223,113 +365,26 @@ function AppointmentsPage() {
             ))}
           </div>
 
-          {visibleAppointments.length > 0 ? (
+          {visibleAppointmentGroups.length > 0 ? (
             <div className="appointment-list">
-              {visibleAppointments.map((appointment) => {
-                const isBusy = activeAction === appointment.id;
-                const canChange = selectedTab === "upcoming" && !isBusy;
-                return (
-                  <article className="appointment-card" key={appointment.id}>
-                    <div className="appointment-card__date">
-                      <span>{formatDate(appointment.appointment_start)}</span>
-                      <strong>
-                        {formatTime(appointment.appointment_start)}
-                      </strong>
-                      <small>{appointment.duration_minutes} min</small>
+              {visibleAppointmentGroups.map((group) =>
+                group.seriesId === null ? (
+                  renderAppointmentCard(group.appointments[0])
+                ) : (
+                  <section
+                    className="appointment-series-group"
+                    key={group.key}
+                    aria-label="Recurring appointment series"
+                  >
+                    <h2 className="appointment-series-group__heading">
+                      Recurring series
+                    </h2>
+                    <div className="appointment-series-group__occurrences">
+                      {group.appointments.map(renderAppointmentCard)}
                     </div>
-                    <div className="appointment-card__details">
-                      <div className="appointment-card__topline">
-                        <span
-                          className={`appointment-status appointment-status--${appointment.status}`}
-                        >
-                          {formatStatusLabel(appointment.status)}
-                        </span>
-                      </div>
-                      <h2>
-                        {services[appointment.service_id] || "Booked service"}
-                      </h2>
-                      <p>
-                        with{" "}
-                        {providers[appointment.provider_id] || "your provider"}
-                      </p>
-
-                      {appointment.notes && (
-                        <div className="appointment-detail">
-                          <span>Note: {appointment.notes}</span>
-                        </div>
-                      )}
-
-                      {rescheduling?.id === appointment.id && (
-                        <RescheduleFlow
-                          appointment={appointment}
-                          serviceName={
-                            services[appointment.service_id] || "Booked service"
-                          }
-                          providerName={
-                            providers[appointment.provider_id] ||
-                            "Your provider"
-                          }
-                          token={token!}
-                          onCancel={() => setRescheduling(null)}
-                          onComplete={async () => {
-                            setRescheduling(null);
-                            await loadAppointments();
-                          }}
-                        />
-                      )}
-                    </div>
-                    <div className="appointment-actions">
-                      {customer?.role.toLowerCase() === "customer" &&
-                        appointment.status.toLowerCase() === "completed" && (
-                          <AppointmentReview
-                            appointmentId={appointment.id}
-                            providerName={
-                              providers[appointment.provider_id] ||
-                              "Your provider"
-                            }
-                            serviceName={
-                              services[appointment.service_id] ||
-                              "Booked service"
-                            }
-                            token={token!}
-                          />
-                        )}
-                      {canChange && (
-                        <>
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            disabled={!canModify(appointment)}
-                            title={
-                              !canModify(appointment)
-                                ? "Changes are not allowed within 2 hours of the booking."
-                                : undefined
-                            }
-                            onClick={() => setRescheduling(appointment)}
-                          >
-                            Reschedule
-                          </button>
-                          <button
-                            className="text-button"
-                            type="button"
-                            disabled={!canModify(appointment)}
-                            title={
-                              !canModify(appointment)
-                                ? "Changes are not allowed within 2 hours of the booking."
-                                : undefined
-                            }
-                            onClick={() =>
-                              void cancelAppointment(appointment.id)
-                            }
-                          >
-                            Cancel appointment
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+                  </section>
+                ),
+              )}
             </div>
           ) : (
             <div className="empty-services appointment-empty">
