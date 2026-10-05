@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { BookingDetails, Service, AvailabilitySlot } from "../types";
+import type { BookingDetails, Service, AvailabilitySlot } from "../types";
 import { formatDate, formatTime } from "../utils";
 
 type Props = {

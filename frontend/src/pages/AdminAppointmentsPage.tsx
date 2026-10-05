@@ -6,7 +6,7 @@ import {
   type AdminAppointmentListResponse,
 } from "../lib/adminAppointments";
 import AdminAppointmentsFilters, {
-  NamedRecord,
+  type NamedRecord,
 } from "../features/admin/appointments/AdminAppointmentsFilters";
 import AdminAppointmentsTable from "../features/admin/appointments/AdminAppointmentsTable";
 import AdminAppointmentsPagination from "../features/admin/appointments/AdminAppointmentsPagination";
