@@ -15,6 +15,27 @@ export type BookingDetails = {
   notes: string;
 };
 
+export type RecurrenceFrequency = "WEEKLY" | "MONTHLY";
+export type RecurrenceEndMode = "COUNT" | "END_DATE";
+export type RecurrenceInterval = 1 | 2;
+
+export type RecurrenceOptionsValue = {
+  frequency: RecurrenceFrequency;
+  interval: RecurrenceInterval;
+  endMode: RecurrenceEndMode;
+  occurrenceCount: number | null;
+  endDate: string | null;
+};
+
+export type RecurrenceValidationErrors = Partial<
+  Record<"frequency" | "occurrenceCount" | "endDate", string>
+>;
+
+export type RecurrenceValidation = {
+  isValid: boolean;
+  errors: RecurrenceValidationErrors;
+};
+
 export type AvailabilitySlot = {
   provider_id: string;
   provider_name: string;
