@@ -80,8 +80,9 @@ class AppointmentResponse(BaseModel):
     def from_appointment(cls, appointment, timezone: str) -> "AppointmentResponse":
         response = cls.model_validate(appointment)
 
+        from datetime import UTC, datetime
+
         from app.services.booking import get_booking_status
-        from datetime import datetime, UTC
 
         now_utc = datetime.now(UTC)
         response.status = get_booking_status(
@@ -102,3 +103,12 @@ class AppointmentListResponse(BaseModel):
     page_size: int
     total: int
     total_pages: int
+
+
+class CustomerAppointmentResponse(AppointmentResponse):
+    series_id: UUID | None = None
+    occurrence_number: int | None = None
+
+
+class CustomerAppointmentListResponse(AppointmentListResponse):
+    appointments: list[CustomerAppointmentResponse]

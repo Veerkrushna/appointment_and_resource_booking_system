@@ -13,9 +13,10 @@ from app.models.customer import Customer
 from app.models.user import UserRole
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
-    AppointmentListResponse,
     AppointmentRescheduleCreate,
     AppointmentResponse,
+    CustomerAppointmentListResponse,
+    CustomerAppointmentResponse,
 )
 from app.services.booking import (
     BookingConflictError,
@@ -44,7 +45,7 @@ def _owned(db: Session, appointment_id: UUID, customer: Customer) -> Appointment
     return appointment
 
 
-@router.get("", response_model=AppointmentListResponse)
+@router.get("", response_model=CustomerAppointmentListResponse)
 def list_customer_appointments(
     customer: Annotated[Customer, Depends(get_current_customer)],
     db: Annotated[Session, Depends(get_db)],
@@ -62,9 +63,9 @@ def list_customer_appointments(
     appointments = db.scalars(
         query.offset((page - 1) * page_size).limit(page_size)
     ).all()
-    return AppointmentListResponse(
+    return CustomerAppointmentListResponse(
         appointments=[
-            AppointmentResponse.from_appointment(item, timezone)
+            CustomerAppointmentResponse.from_appointment(item, timezone)
             for item in appointments
         ],
         page=page,
