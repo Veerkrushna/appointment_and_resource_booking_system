@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatInTimeZone } from "date-fns-tz";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
@@ -23,6 +24,11 @@ import {
   createDefaultRecurrenceOptions,
   validateRecurrenceOptions,
 } from "../features/booking/utils";
+import {
+  AppointmentSeriesApiError,
+  createAppointmentSeries,
+} from "../lib/appointmentSeries";
+import type { AppointmentSeriesResponse } from "../lib/appointmentSeries";
 import BookingSummary from "../features/booking/components/BookingSummary";
 import BookingSteps from "../features/booking/components/BookingSteps";
 import StepDateTime from "../features/booking/components/StepDateTime";
@@ -126,6 +132,8 @@ function BookingPage() {
     null,
   );
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [recurringSeries, setRecurringSeries] =
+    useState<AppointmentSeriesResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const bookingSubmissionInFlight = useRef(false);
   const [details, setDetails] = useState<BookingDetails>(
@@ -450,17 +458,118 @@ function BookingPage() {
     setStep(3);
   }
 
+  async function confirmRecurringBooking() {
+    if (bookingSubmissionInFlight.current || isConfirmed) return;
+
+    if (authIsLoading) {
+      setBookingError("Checking your account. Please try again in a moment.");
+      return;
+    }
+    if (!token || !customer || customer.role.toLowerCase() !== "customer") {
+      setBookingError(
+        "Sign in with a customer account to book recurring appointments.",
+      );
+      return;
+    }
+    if (!selectedSlot || !service) {
+      setBookingError("Choose an available time before continuing.");
+      return;
+    }
+    if (!recurrenceValidation.isValid) {
+      setBookingError("Complete the recurrence options before continuing.");
+      return;
+    }
+    if (!selectedProviderTimezone) {
+      setBookingError("The provider timezone is not available yet.");
+      return;
+    }
+    if (new Date(selectedSlot.start).getTime() <= Date.now()) {
+      setAvailableSlots((current) =>
+        current.filter((slot) => new Date(slot.start).getTime() > Date.now()),
+      );
+      setSelectedSlot(null);
+      setStep(1);
+      setBookingError(
+        "That time has already passed. Choose another available time.",
+      );
+      return;
+    }
+
+    bookingSubmissionInFlight.current = true;
+    setIsSubmitting(true);
+    setBookingError(null);
+    setBookingOutcomeUnknown(false);
+    let requestSent = false;
+
+    try {
+      const request = {
+        service_id: service.id,
+        provider_id: selectedSlot.provider_id,
+        start_date: selectedSlot.date,
+        local_start_time: formatInTimeZone(
+          selectedSlot.start,
+          selectedProviderTimezone,
+          "HH:mm:ss",
+        ),
+        frequency: recurrence.frequency,
+        interval: recurrence.interval,
+        end_mode: recurrence.endMode,
+        occurrence_count:
+          recurrence.endMode === "COUNT" ? recurrence.occurrenceCount : null,
+        end_date: recurrence.endMode === "END_DATE" ? recurrence.endDate : null,
+        user_name: details.name,
+        user_email: details.email,
+        user_phone: details.phone || null,
+        notes: details.notes || null,
+      };
+
+      requestSent = true;
+      const createdSeries = await createAppointmentSeries(token, request);
+      window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+      setRecurringSeries(createdSeries);
+      setIsConfirmed(true);
+    } catch (requestError) {
+      const outcomeUnknown =
+        requestSent &&
+        (!(requestError instanceof AppointmentSeriesApiError) ||
+          requestError.status === null ||
+          requestError.status >= 500);
+      setBookingOutcomeUnknown(outcomeUnknown);
+
+      if (requestError instanceof AppointmentSeriesApiError) {
+        if (requestError.status === 409) {
+          const conflictDetails = requestError.conflicts
+            .map(
+              (conflict) =>
+                `Occurrence ${conflict.occurrence_number} on ${conflict.date}: ${conflict.reason}`,
+            )
+            .join(" ");
+          setBookingError(
+            conflictDetails
+              ? `One of the recurring appointments is unavailable. ${conflictDetails}`
+              : "One of the recurring appointments is unavailable. Review the recurrence and try again.",
+          );
+        } else {
+          setBookingError(requestError.message);
+        }
+      } else if (outcomeUnknown) {
+        setBookingError(
+          "We couldn't confirm whether your recurring bookings were created. Check My Appointments before trying again.",
+        );
+      } else {
+        setBookingError(
+          "Unable to prepare the recurring booking. Check the selected provider and try again.",
+        );
+      }
+    } finally {
+      bookingSubmissionInFlight.current = false;
+      setIsSubmitting(false);
+    }
+  }
+
   async function confirmBooking() {
     if (bookingKind === "RECURRING") {
-      setBookingError(
-        recurrenceAccess !== "customer"
-          ? "Sign in with a customer account to create a recurring booking."
-          : !recurrenceValidation.isValid
-            ? "Complete the recurrence options before continuing."
-            : !selectedProviderTimezone
-              ? "The provider timezone is not available yet."
-              : "Recurring booking submission is not available yet.",
-      );
+      await confirmRecurringBooking();
       return;
     }
 
@@ -642,6 +751,7 @@ function BookingPage() {
           {step === 3 && (
             <StepConfirmation
               isConfirmed={isConfirmed}
+              bookingKind={bookingKind}
               details={details}
               selectedSlot={selectedSlot}
               service={service}
@@ -649,6 +759,7 @@ function BookingPage() {
               setStep={setStep}
               isSubmitting={isSubmitting}
               bookingOutcomeUnknown={bookingOutcomeUnknown}
+              recurringSeries={recurringSeries}
               confirmBooking={confirmBooking}
               bookingError={bookingError}
             />
