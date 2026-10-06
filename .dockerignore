@@ -1,0 +1,23 @@
+.git
+.gitignore
+.dockerignore
+.vscode
+.ruff_cache
+.pytest_cache
+*.pyc
+__pycache__
+
+# Backend virtual environments and build cache
+backend/.venv
+backend/__pycache__
+backend/*.egg-info
+
+# Frontend build cache and dependencies
+frontend/node_modules
+frontend/dist
+frontend/.env.local
+npm-debug.log*
+
+# Uploads directory contents
+backend/uploads/*
+!backend/uploads/.gitkeep

@@ -1,4 +1,3 @@
-import React from "react";
 import { type AdminAppointment } from "../../../lib/adminAppointments";
 
 type Props = {

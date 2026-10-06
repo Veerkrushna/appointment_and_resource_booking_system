@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type CalendarView = "month" | "week";
 type AvailabilityStatus = "available" | "booked" | "unavailable" | "limited";

@@ -583,7 +583,7 @@
   font-size: 0.88rem;
 }
 
-.schedule-card__head > span {
+.schedule-card__head>span {
   padding: 0.3rem 0.5rem;
   border-radius: 5px;
   color: #c05d27;
@@ -626,7 +626,7 @@
   font-size: 0.7rem;
 }
 
-.schedule-item > .auth-icon {
+.schedule-item>.auth-icon {
   color: #c05d27;
 }
 
@@ -1137,14 +1137,14 @@ main {
   min-height: 10rem;
 }
 
-.availability-day > span {
+.availability-day>span {
   display: flex;
   justify-content: space-between;
   font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
 }
 
-.availability-day > span small {
+.availability-day>span small {
   color: #64736e;
   font-family: "DM Sans", sans-serif;
   font-size: 0.7rem;
@@ -1423,7 +1423,7 @@ main {
   gap: 1rem;
 }
 
-.status-bar > div:first-child {
+.status-bar>div:first-child {
   display: flex;
   justify-content: space-between;
   margin-bottom: 0.4rem;
@@ -1797,7 +1797,7 @@ main {
   line-height: 1.2;
 }
 
-.appointment-review__summary-stars > span {
+.appointment-review__summary-stars>span {
   color: #aeb8b1;
 }
 
@@ -1949,7 +1949,7 @@ main {
   outline-offset: 2px;
 }
 
-.appointment-review__dialog form > .field-label textarea {
+.appointment-review__dialog form>.field-label textarea {
   min-height: 7rem;
   resize: vertical;
 }
@@ -2163,7 +2163,7 @@ main {
   opacity: 0.6;
 }
 
-.calendar-day > span {
+.calendar-day>span {
   font-size: 0.82rem;
   font-weight: 700;
 }
@@ -2222,19 +2222,19 @@ main {
   opacity: 0.7;
 }
 
-.provider-booking > div {
+.provider-booking>div {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.provider-booking > div strong {
+.provider-booking>div strong {
   color: #18312f;
   font-family: "Space Grotesk", sans-serif;
   font-size: 0.95rem;
 }
 
-.provider-booking > div span,
+.provider-booking>div span,
 .provider-booking section p,
 .provider-booking section small,
 .provider-booking em {
@@ -2275,7 +2275,7 @@ main {
   text-align: center;
 }
 
-.provider-agenda__empty > span {
+.provider-agenda__empty>span {
   display: inline-grid;
   width: 2.5rem;
   height: 2.5rem;
@@ -2535,7 +2535,7 @@ main {
   font-size: 1.5rem;
 }
 
-.booking-summary > p:not(.summary-label) {
+.booking-summary>p:not(.summary-label) {
   margin: 0.9rem 0 1.5rem;
   color: #64736e;
   font-size: 0.9rem;
@@ -2831,8 +2831,8 @@ main {
   opacity: 0.4;
 }
 
-.booking-panel > div > .primary-button,
-.booking-panel form > .booking-actions {
+.booking-panel>div>.primary-button,
+.booking-panel form>.booking-actions {
   margin-top: 2rem;
 }
 
@@ -2943,7 +2943,7 @@ main {
   font-size: 1.4rem;
 }
 
-.confirmation-panel > p:not(.panel-kicker) {
+.confirmation-panel>p:not(.panel-kicker) {
   margin: -0.8rem 0 1.5rem;
   color: #64736e;
   line-height: 1.55;
@@ -3365,7 +3365,7 @@ main {
   border-radius: 9px;
 }
 
-.site-nav .brand-mark > span {
+.site-nav .brand-mark>span {
   display: block;
 }
 
@@ -3381,7 +3381,7 @@ main {
   gap: 2.15rem;
 }
 
-.site-nav .nav-links > a,
+.site-nav .nav-links>a,
 .site-nav .profile-menu__trigger,
 .site-nav .nav-auth-btn {
   margin-left: 1.25rem;
@@ -3392,7 +3392,7 @@ main {
   box-sizing: border-box;
 }
 
-.site-nav .nav-links > a,
+.site-nav .nav-links>a,
 .site-nav .profile-menu__trigger {
   position: relative;
   padding: 0;
@@ -3406,18 +3406,18 @@ main {
   transition: color 160ms ease;
 }
 
-.site-nav .nav-links > a:hover,
+.site-nav .nav-links>a:hover,
 .site-nav .profile-menu__trigger:hover {
   color: #ffffff;
 }
 
-.site-nav .nav-links > a.active,
+.site-nav .nav-links>a.active,
 .site-nav .profile-menu__trigger[aria-expanded="true"] {
   color: #ffffff;
   font-weight: 700;
 }
 
-.site-nav .nav-links > a.active::after {
+.site-nav .nav-links>a.active::after {
   position: absolute;
   right: 0;
   bottom: 0.2rem;
@@ -4064,7 +4064,7 @@ main {
   line-height: 1;
 }
 
-.section-heading > div > p:last-child {
+.section-heading>div>p:last-child {
   max-width: 33rem;
   margin: 0.9rem 0 0;
   color: #64736e;
@@ -4317,7 +4317,7 @@ main {
   color: #8a9b94;
 }
 
-.provider-preview-card > a {
+.provider-preview-card>a {
   color: #c05d27;
   font-size: 1.2rem;
   text-decoration: none;
@@ -4344,7 +4344,7 @@ main {
   max-width: 34rem;
 }
 
-.home-cta > div > p:last-child {
+.home-cta>div>p:last-child {
   margin: 1rem 0 0;
   color: #b9cbc3;
 }
@@ -4416,9 +4416,9 @@ main {
     align-items: stretch;
     gap: 1rem;
     padding: 1.2rem;
-    border: 1px solid #31544d;
+    border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 6px;
-    background: #18312f;
+    background: #c05d27;
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
   }
 
@@ -4432,13 +4432,13 @@ main {
     gap: 1rem;
   }
 
-  .site-nav .nav-links > a,
+  .site-nav .nav-links>a,
   .site-nav .profile-menu__trigger {
     min-height: 3rem;
     justify-content: flex-start;
   }
 
-  .site-nav .nav-links > a.active::after {
+  .site-nav .nav-links>a.active::after {
     bottom: 0.25rem;
   }
 
@@ -4586,6 +4586,15 @@ main {
 
 .admin-appointments-page {
   padding-top: clamp(3rem, 7vw, 6rem);
+  width: 100%;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.admin-appointments-page .admin-appointments-card {
+  width: 100%;
+  max-width: 100% !important;
+  box-sizing: border-box;
 }
 
 .admin-page-header {
@@ -4621,9 +4630,10 @@ main {
 
 .admin-appointments-card {
   padding: 1.5rem;
-  border: 1px solid #dbe5dc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: #fbfcf8;
+  background: #ffffff;
+  box-sizing: border-box;
 }
 
 .admin-appointments-card__header {
@@ -4709,42 +4719,60 @@ main {
 .admin-appointments-table-wrapper {
   width: 100%;
   overflow-x: auto;
+  border-radius: 12px;
+  border: 2px solid #000;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  margin-top: 1rem;
 }
 
 .admin-appointments-table {
   width: 100%;
-  min-width: 850px;
   border-collapse: collapse;
-  color: #64736e;
-  font-size: 0.85rem;
+  color: #000000;
+  font-size: 0.88rem;
   text-align: left;
-  table-layout: auto;
+  table-layout: fixed;
+  background-color: #fff;
+}
+
+.admin-appointments-table thead {
+  background-color: #e2784d;
 }
 
 .admin-appointments-table th {
-  padding: 0.75rem 0.9rem;
-  border-bottom: 1px solid #dbe5dc;
-  color: #8a9b94;
-  font-size: 0.7rem;
+  padding: 0.9rem 0.75rem;
+  border-bottom: 3px solid #cf6740;
+  color: #ffffff;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-appointments-table td {
-  padding: 1rem 0.9rem;
-  border-top: 1px solid #e3eae2;
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid #d1d5db;
   vertical-align: middle;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  color: #000000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-appointments-table tr:last-child td {
+  border-bottom: none;
 }
 
 .admin-appointments-table td:first-child {
-  min-width: 15rem;
+  width: 22%;
 }
 
 .admin-appointments-table td strong,
-.admin-appointments-table td > span:not([class^="admin-appointment-status"]) {
+.admin-appointments-table td>span:not([class^="admin-appointment-status"]) {
   display: block;
 }
 
@@ -4764,7 +4792,7 @@ main {
 }
 
 .admin-appointments-table tbody tr:hover {
-  background: #f6f8f3;
+  background-color: #fff4ed;
 }
 
 .admin-appointment-status {
@@ -4795,7 +4823,7 @@ main {
 }
 
 .admin-appointments-filter label {
-  color: #557b69;
+  color: #e2784d;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -4810,7 +4838,7 @@ main {
   box-sizing: border-box;
   height: 2.75rem;
   padding: 0.65rem 0.8rem;
-  border: 1px solid #ccd8d0;
+  border: 1.5px solid #fdba74;
   border-radius: 8px;
   background: #ffffff;
   color: #18312f;
@@ -4834,14 +4862,14 @@ main {
 .admin-appointments-filter input:focus,
 .admin-appointments-filter select:focus {
   outline: none;
-  border-color: #557b69;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(85, 123, 105, 0.14);
+  border-color: #e2784d;
+  background: #fffbf8;
+  box-shadow: 0 0 0 3px rgba(226, 120, 77, 0.15);
 }
 
 .admin-appointments-filter input:hover,
 .admin-appointments-filter select:hover {
-  border-color: #9eb6a7;
+  border-color: #e2784d;
 }
 
 .admin-appointments-filter input[type="date"] {
@@ -4857,7 +4885,8 @@ main {
   gap: 1.15rem;
   padding: 1.25rem;
   border-radius: 10px;
-  background: #f1f5ee;
+  background: #fff8f4;
+  border: 1.5px solid #fdba74;
 }
 
 .admin-appointments-card__header {
@@ -4871,15 +4900,15 @@ main {
   gap: 1rem;
   margin-top: 1.5rem;
   padding-top: 1.25rem;
-  border-top: 1px solid #e3eae2;
+  border-top: 2px solid #fdba74;
 }
 
 .admin-appointments-pagination button {
-  border: 1px solid #ccd8d0;
+  border: 1.5px solid #e2784d;
   border-radius: 999px;
   padding: 0.65rem 1.1rem;
   background: #ffffff;
-  color: #557b69;
+  color: #e2784d;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
@@ -4888,17 +4917,21 @@ main {
     background-color 0.2s ease,
     color 0.2s ease,
     border-color 0.2s ease,
-    opacity 0.2s ease;
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .admin-appointments-pagination button:hover:not(:disabled) {
-  border-color: #18312f;
-  background: #18312f;
+  border-color: #e2784d;
+  background: #e2784d;
   color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(226, 120, 77, 0.25);
 }
 
 .admin-appointments-pagination button:focus-visible {
-  outline: 3px solid rgba(192, 93, 39, 0.3);
+  outline: 3px solid rgba(226, 120, 77, 0.3);
   outline-offset: 3px;
 }
 
@@ -4908,7 +4941,7 @@ main {
 }
 
 .admin-appointments-pagination span {
-  color: #64736e;
+  color: #e2784d;
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -4969,7 +5002,7 @@ main {
     grid-column: auto;
   }
 
-  .admin-appointments-filters > button {
+  .admin-appointments-filters>button {
     width: 100%;
     justify-self: stretch;
   }
@@ -5000,16 +5033,29 @@ main {
 }
 
 /* Admin Table & Premium Form Styles */
+.admin-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+  margin-top: 0.5rem;
+  box-sizing: border-box;
+}
+
 .admin-table {
   width: 100%;
+  min-width: 800px;
   border-collapse: collapse;
-  font-size: 0.95rem;
-  background-color: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-  margin-top: 1.5rem;
-  border: 2px solid #000;
+  font-size: 0.85rem;
+  background-color: #ffffff;
+  border-radius: 0;
+  overflow: visible;
+  box-shadow: none;
+  margin-top: 0;
+  border: none;
 }
 
 .admin-table thead {
@@ -5021,17 +5067,19 @@ main {
   text-transform: uppercase;
   font-weight: 700;
   letter-spacing: 0.06em;
-  font-size: 0.75rem;
-  padding: 1.25rem 1rem;
+  font-size: 0.7rem;
+  padding: 0.75rem 0.85rem;
   text-align: left;
-  border-bottom: 3px solid #cf6740;
+  border-bottom: 2px solid #cf6740;
+  white-space: nowrap;
 }
 
 .admin-table td {
-  padding: 1.25rem 1rem;
-  border-bottom: 1px solid #d1d5db;
-  color: #000000;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
   vertical-align: middle;
+  font-size: 0.84rem;
 }
 
 .admin-table tr:last-child td {
@@ -5039,14 +5087,16 @@ main {
 }
 
 .admin-table tbody tr {
-  transition: background-color 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 
 .admin-table tbody tr:hover {
-  background-color: #fff4ed;
+  background-color: #fff8f4;
 }
 
 .admin-providers-page {
+  padding-top: clamp(2rem, 4vw, 3.5rem);
+  padding-bottom: 3rem;
   width: 100%;
   max-width: 100% !important;
   box-sizing: border-box;
@@ -5056,6 +5106,12 @@ main {
   width: 100%;
   max-width: 100% !important;
   box-sizing: border-box;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.15rem;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
 }
 
 .admin-table-edit-btn {
@@ -5669,7 +5725,7 @@ main {
   white-space: nowrap;
 }
 
-.admin-services-page .admin-services-table td:last-child button + button {
+.admin-services-page .admin-services-table td:last-child button+button {
   margin-left: 0.35rem;
 }
 

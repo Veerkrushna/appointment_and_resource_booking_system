@@ -1,4 +1,3 @@
-import React from "react";
 
 type Overview = {
   total_appointments: number;
