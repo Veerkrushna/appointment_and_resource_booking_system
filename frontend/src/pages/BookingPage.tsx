@@ -450,6 +450,10 @@ function BookingPage() {
 
   function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (bookingKind === "RECURRING" && !recurrenceValidation.isValid) {
+      setBookingError("Complete the recurrence options before continuing.");
+      return;
+    }
     if (!isValidEmail(details.email)) {
       setBookingError("Not a valid email. Kindly check Again");
       return;

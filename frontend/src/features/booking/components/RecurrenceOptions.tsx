@@ -155,7 +155,7 @@ export default function RecurrenceOptions({
           <input
             id="recurrence-count"
             type="number"
-            min={1}
+            min={2}
             max={52}
             step={1}
             required

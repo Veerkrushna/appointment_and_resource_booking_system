@@ -7,6 +7,10 @@ import type {
   RecurrenceValidationErrors,
   RecurrenceOptionsValue,
 } from "./types";
+import {
+  generateRecurringOccurrences,
+  RecurrenceGenerationError,
+} from "./recurrence";
 
 export const BOOKING_DRAFT_STORAGE_KEY = "booking-page-draft";
 
@@ -15,7 +19,7 @@ export function createDefaultRecurrenceOptions(): RecurrenceOptionsValue {
     frequency: "WEEKLY",
     interval: 1,
     endMode: "COUNT",
-    occurrenceCount: 1,
+    occurrenceCount: 2,
     endDate: null,
   };
 }
@@ -26,29 +30,34 @@ export function validateRecurrenceOptions(
 ): RecurrenceValidation {
   const errors: RecurrenceValidationErrors = {};
 
-  if (
-    (value.frequency === "WEEKLY" &&
-      value.interval !== 1 &&
-      value.interval !== 2) ||
-    (value.frequency === "MONTHLY" && value.interval !== 1)
-  ) {
-    errors.frequency = "Choose a supported recurrence frequency.";
+  if (value.endMode === "END_DATE" && !startDate) {
+    errors.endDate = "Choose a start date first.";
+    return { isValid: false, errors };
   }
 
-  if (value.endMode === "COUNT") {
-    if (value.occurrenceCount == null) {
-      errors.occurrenceCount = "Enter the number of occurrences.";
-    } else if (!Number.isInteger(value.occurrenceCount)) {
-      errors.occurrenceCount = "Enter a whole number of occurrences.";
-    } else if (value.occurrenceCount < 1 || value.occurrenceCount > 52) {
-      errors.occurrenceCount = "Choose between 1 and 52 occurrences.";
+  try {
+    generateRecurringOccurrences({
+      start_date: startDate || "2000-01-01",
+      local_start_time: "00:00:00",
+      frequency: value.frequency,
+      interval: value.interval,
+      end_mode: value.endMode,
+      occurrence_count:
+        value.endMode === "COUNT" ? value.occurrenceCount : null,
+      end_date: value.endMode === "END_DATE" ? value.endDate : null,
+    });
+  } catch (error) {
+    if (error instanceof RecurrenceGenerationError) {
+      if (error.field === "frequency") {
+        errors.frequency = error.message;
+      } else if (error.field === "occurrenceCount") {
+        errors.occurrenceCount = error.message;
+      } else {
+        errors.endDate = error.message;
+      }
+    } else {
+      throw error;
     }
-  } else if (!value.endDate) {
-    errors.endDate = "Choose an end date.";
-  } else if (!startDate) {
-    errors.endDate = "Choose a start date first.";
-  } else if (value.endDate < startDate) {
-    errors.endDate = "End date cannot be before the start date.";
   }
 
   return { isValid: Object.keys(errors).length === 0, errors };
@@ -73,7 +82,7 @@ function normalizeRecurrenceOptions(value: unknown): RecurrenceOptionsValue {
           ? saved.occurrenceCount
           : saved.occurrenceCount === null
             ? null
-            : 1
+            : 2
         : null,
     endDate:
       endMode === "END_DATE" && typeof saved.endDate === "string"
