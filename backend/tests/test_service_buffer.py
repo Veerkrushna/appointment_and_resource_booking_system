@@ -113,6 +113,7 @@ def buffer_records(monkeypatch):
 
 
 def add_existing_appointment(db, provider_id, service_id, start, duration):
+    service = db.get(Service, service_id)
     appointment = Appointment(
         provider_id=provider_id,
         service_id=service_id,
@@ -121,6 +122,7 @@ def add_existing_appointment(db, provider_id, service_id, start, duration):
         appointment_start=start,
         appointment_end=start + timedelta(minutes=duration),
         duration_minutes=duration,
+        buffer_time_minutes=service.buffer_time_minutes or 0,
         status=AppointmentStatus.CONFIRMED,
     )
     db.add(appointment)
@@ -254,6 +256,79 @@ def test_null_existing_buffer_behaves_as_zero(buffer_records):
     db.close()
 
 
+def test_new_appointment_snapshots_service_buffer(buffer_records):
+    (provider_id, service_a_id, _service_b_id), monday = buffer_records
+    db = SessionLocal()
+    appointment = create_appointment(
+        db,
+        appointment_payload(provider_id, service_a_id, monday + timedelta(hours=10)),
+    )
+
+    assert appointment.buffer_time_minutes == 10
+
+    service = db.get(Service, service_a_id)
+    service.buffer_time_minutes = 20
+    db.commit()
+    db.refresh(appointment)
+    assert appointment.buffer_time_minutes == 10
+    db.close()
+
+
+def test_null_service_buffer_snapshots_as_zero(buffer_records):
+    (provider_id, service_a_id, _service_b_id), monday = buffer_records
+    db = SessionLocal()
+    service = db.get(Service, service_a_id)
+    service.buffer_time_minutes = None
+    db.commit()
+
+    appointment = create_appointment(
+        db,
+        appointment_payload(provider_id, service_a_id, monday + timedelta(hours=10)),
+    )
+
+    assert appointment.buffer_time_minutes == 0
+    db.close()
+
+
+def test_availability_uses_existing_appointment_buffer_snapshot(buffer_records):
+    (provider_id, service_a_id, service_b_id), monday = buffer_records
+    db = SessionLocal()
+    appointment = create_appointment(
+        db,
+        appointment_payload(provider_id, service_a_id, monday + timedelta(hours=10)),
+    )
+    service = db.get(Service, service_a_id)
+    service.buffer_time_minutes = 20
+    db.commit()
+
+    starts = availability_starts(db, provider_id, service_b_id, monday.date())
+    assert monday + timedelta(hours=10, minutes=30) not in starts
+    assert monday + timedelta(hours=10, minutes=40) in starts
+    assert appointment.buffer_time_minutes == 10
+    db.close()
+
+
+def test_booking_conflicts_use_existing_appointment_buffer_snapshot(buffer_records):
+    (provider_id, service_a_id, service_b_id), monday = buffer_records
+    db = SessionLocal()
+    appointment = create_appointment(
+        db,
+        appointment_payload(provider_id, service_a_id, monday + timedelta(hours=10)),
+    )
+    service = db.get(Service, service_a_id)
+    service.buffer_time_minutes = 20
+    db.commit()
+
+    candidate_start = monday + timedelta(hours=10, minutes=40)
+    candidate = create_appointment(
+        db, appointment_payload(provider_id, service_b_id, candidate_start)
+    )
+
+    assert appointment.buffer_time_minutes == 10
+    assert candidate.appointment_start == candidate_start
+    db.close()
+
+
 def test_reschedule_uses_existing_appointment_service_buffer(buffer_records):
     (provider_id, service_a_id, service_b_id), monday = buffer_records
     db = SessionLocal()
@@ -299,4 +374,30 @@ def test_reschedule_does_not_conflict_with_own_appointment(buffer_records):
     assert rescheduled.id == appointment.id
     assert rescheduled.appointment_start == start
     assert rescheduled.appointment_end == start + timedelta(minutes=30)
+    db.close()
+
+
+def test_reschedule_preserves_existing_buffer_snapshot(buffer_records):
+    (provider_id, service_a_id, _service_b_id), monday = buffer_records
+    db = SessionLocal()
+    start = monday + timedelta(hours=10)
+    appointment = create_appointment(
+        db,
+        appointment_payload(provider_id, service_a_id, start),
+    )
+    service = db.get(Service, service_a_id)
+    service.buffer_time_minutes = 20
+    db.commit()
+
+    rescheduled = reschedule_appointment(
+        db,
+        appointment.id,
+        AppointmentRescheduleCreate(
+            appointment_start=start + timedelta(hours=1),
+            cancelled_by="customer",
+        ),
+    )
+
+    assert rescheduled.buffer_time_minutes == 10
+    assert rescheduled.appointment_start == start + timedelta(hours=1)
     db.close()

@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime, time, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
@@ -83,7 +84,7 @@ def _validate_slot(
     duration_minutes: int,
     provider: Provider,
     exclude_appointment_id=None,
-    service_buffer_minutes: int | None = None,
+    buffer_time_minutes: int = 0,
 ) -> tuple[datetime, datetime]:
     try:
         zone = ZoneInfo(provider.timezone)
@@ -95,7 +96,7 @@ def _validate_slot(
         raise BookingValidationError("Appointments cannot be booked in the past")
 
     end_utc = start_utc + timedelta(minutes=duration_minutes)
-    blocked_end_utc = end_utc + timedelta(minutes=service_buffer_minutes or 0)
+    blocked_end_utc = end_utc + timedelta(minutes=buffer_time_minutes)
     local_start = start_utc.astimezone(zone)
     local_blocked_end = blocked_end_utc.astimezone(zone)
     if local_start.date() != local_blocked_end.date():
@@ -137,15 +138,11 @@ def _validate_slot(
             raise BookingValidationError("Appointment overlaps a provider blackout")
 
     existing_start, existing_blocked_end = appointment_blocked_interval()
-    overlapping_query = (
-        select(Appointment.id)
-        .join(Service, Service.id == Appointment.service_id)
-        .where(
-            Appointment.provider_id == provider.id,
-            Appointment.status != AppointmentStatus.CANCELLED,
-            existing_start < blocked_end_utc,
-            existing_blocked_end > start_utc,
-        )
+    overlapping_query = select(Appointment.id).where(
+        Appointment.provider_id == provider.id,
+        Appointment.status != AppointmentStatus.CANCELLED,
+        existing_start < blocked_end_utc,
+        existing_blocked_end > start_utc,
     )
     if exclude_appointment_id is not None:
         overlapping_query = overlapping_query.where(
@@ -157,11 +154,11 @@ def _validate_slot(
     return start_utc, end_utc
 
 
-def create_appointment(
-    db: Session, payload: AppointmentCreate, customer: Customer | None = None
-) -> Appointment:
+def _lock_provider_and_get_service(
+    db: Session, provider_id: UUID, service_id: UUID
+) -> tuple[Provider, Service]:
     provider = db.scalar(
-        select(Provider).where(Provider.id == payload.provider_id).with_for_update()
+        select(Provider).where(Provider.id == provider_id).with_for_update()
     )
     if provider is None:
         raise BookingValidationError("Provider not found")
@@ -172,7 +169,7 @@ def create_appointment(
         select(Service)
         .join(ProviderService, ProviderService.service_id == Service.id)
         .where(
-            Service.id == payload.service_id,
+            Service.id == service_id,
             Service.status == ServiceStatus.ACTIVE,
             ProviderService.provider_id == provider.id,
             ProviderService.is_active.is_(True),
@@ -180,21 +177,52 @@ def create_appointment(
     )
     if service is None:
         raise BookingValidationError("Active service is not offered by provider")
+    return provider, service
+
+
+def _build_appointment(
+    payload: AppointmentCreate,
+    customer: Customer | None,
+    service: Service,
+    start_utc: datetime,
+    end_utc: datetime,
+    *,
+    series_id: UUID | None = None,
+    occurrence_number: int | None = None,
+) -> Appointment:
+    return Appointment(
+        **payload.model_dump(exclude={"appointment_start"}),
+        customer_id=customer.id if customer is not None else None,
+        appointment_start=start_utc,
+        appointment_end=end_utc,
+        duration_minutes=service.duration_minutes,
+        buffer_time_minutes=service.buffer_time_minutes or 0,
+        series_id=series_id,
+        occurrence_number=occurrence_number,
+    )
+
+
+def create_appointment(
+    db: Session, payload: AppointmentCreate, customer: Customer | None = None
+) -> Appointment:
+    provider, service = _lock_provider_and_get_service(
+        db, payload.provider_id, payload.service_id
+    )
 
     start_utc, end_utc = _validate_slot(
         db,
         payload.appointment_start,
         service.duration_minutes,
         provider,
-        service_buffer_minutes=service.buffer_time_minutes,
+        buffer_time_minutes=service.buffer_time_minutes or 0,
     )
 
-    appointment = Appointment(
-        **payload.model_dump(exclude={"appointment_start"}),
-        customer_id=customer.id if customer is not None else None,
-        appointment_start=start_utc,
-        appointment_end=end_utc,
-        duration_minutes=service.duration_minutes,
+    appointment = _build_appointment(
+        payload,
+        customer,
+        service,
+        start_utc,
+        end_utc,
     )
     db.add(appointment)
     db.commit()
@@ -243,7 +271,7 @@ def update_appointment(
             appointment.duration_minutes,
             provider,
             appointment.id,
-            appointment.service.buffer_time_minutes,
+            appointment.buffer_time_minutes,
         )
         appointment.appointment_start = start_utc
         appointment.appointment_end = end_utc
@@ -374,7 +402,7 @@ def reschedule_appointment(
         appointment.duration_minutes,
         provider,
         exclude_appointment_id=appointment.id,
-        service_buffer_minutes=appointment.service.buffer_time_minutes,
+        buffer_time_minutes=appointment.buffer_time_minutes,
     )
     appointment.appointment_start = start_utc
     appointment.appointment_end = end_utc

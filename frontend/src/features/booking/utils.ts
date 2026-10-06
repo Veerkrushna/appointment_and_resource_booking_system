@@ -3,9 +3,93 @@ import type {
   BookingDraft,
   AvailabilityResponse,
   ProviderOption,
+  RecurrenceValidation,
+  RecurrenceValidationErrors,
+  RecurrenceOptionsValue,
 } from "./types";
+import {
+  generateRecurringOccurrences,
+  RecurrenceGenerationError,
+} from "./recurrence";
 
 export const BOOKING_DRAFT_STORAGE_KEY = "booking-page-draft";
+
+export function createDefaultRecurrenceOptions(): RecurrenceOptionsValue {
+  return {
+    frequency: "WEEKLY",
+    interval: 1,
+    endMode: "COUNT",
+    occurrenceCount: 2,
+    endDate: null,
+  };
+}
+
+export function validateRecurrenceOptions(
+  value: RecurrenceOptionsValue,
+  startDate: string,
+): RecurrenceValidation {
+  const errors: RecurrenceValidationErrors = {};
+
+  if (value.endMode === "END_DATE" && !startDate) {
+    errors.endDate = "Choose a start date first.";
+    return { isValid: false, errors };
+  }
+
+  try {
+    generateRecurringOccurrences({
+      start_date: startDate || "2000-01-01",
+      local_start_time: "00:00:00",
+      frequency: value.frequency,
+      interval: value.interval,
+      end_mode: value.endMode,
+      occurrence_count:
+        value.endMode === "COUNT" ? value.occurrenceCount : null,
+      end_date: value.endMode === "END_DATE" ? value.endDate : null,
+    });
+  } catch (error) {
+    if (error instanceof RecurrenceGenerationError) {
+      if (error.field === "frequency") {
+        errors.frequency = error.message;
+      } else if (error.field === "occurrenceCount") {
+        errors.occurrenceCount = error.message;
+      } else {
+        errors.endDate = error.message;
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  return { isValid: Object.keys(errors).length === 0, errors };
+}
+
+function normalizeRecurrenceOptions(value: unknown): RecurrenceOptionsValue {
+  if (typeof value !== "object" || value === null) {
+    return createDefaultRecurrenceOptions();
+  }
+
+  const saved = value as Partial<RecurrenceOptionsValue>;
+  const frequency = saved.frequency === "MONTHLY" ? "MONTHLY" : "WEEKLY";
+  const endMode = saved.endMode === "END_DATE" ? "END_DATE" : "COUNT";
+
+  return {
+    frequency,
+    interval: frequency === "MONTHLY" ? 1 : saved.interval === 2 ? 2 : 1,
+    endMode,
+    occurrenceCount:
+      endMode === "COUNT"
+        ? typeof saved.occurrenceCount === "number"
+          ? saved.occurrenceCount
+          : saved.occurrenceCount === null
+            ? null
+            : 2
+        : null,
+    endDate:
+      endMode === "END_DATE" && typeof saved.endDate === "string"
+        ? saved.endDate
+        : null,
+  };
+}
 
 export function normalizeBookingValue(value: string | null | undefined) {
   return value == null ? "" : value.trim();
@@ -60,6 +144,8 @@ export function readBookingDraft(): BookingDraft | null {
       serviceId: typeof draft.serviceId === "string" ? draft.serviceId : null,
       providerId:
         typeof draft.providerId === "string" ? draft.providerId : null,
+      bookingKind: draft.bookingKind === "RECURRING" ? "RECURRING" : "ONE_TIME",
+      recurrence: normalizeRecurrenceOptions(draft.recurrence),
       step: draft.step,
       date: draft.date,
       selectedSlot: draft.selectedSlot ?? null,
@@ -148,7 +234,9 @@ export async function fetchAvailabilitySlots(
   return data.slots;
 }
 
-export function getProviderOptions(slots: AvailabilitySlot[]): ProviderOption[] {
+export function getProviderOptions(
+  slots: AvailabilitySlot[],
+): ProviderOption[] {
   const providers = new Map<string, ProviderOption>();
   for (const slot of slots) {
     if (!providers.has(slot.provider_id)) {

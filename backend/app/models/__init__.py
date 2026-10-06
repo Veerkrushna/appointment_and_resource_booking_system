@@ -1,5 +1,13 @@
+# ruff: noqa: F401
+
 from app.models.appointment import Appointment
 from app.models.appointment_cancellation import AppointmentCancellation
+from app.models.appointment_series import (
+    AppointmentSeries,
+    AppointmentSeriesEndMode,
+    AppointmentSeriesFrequency,
+    AppointmentSeriesStatus,
+)
 from app.models.availability import (
     ProviderAvailability,
     ProviderBlackoutDate,

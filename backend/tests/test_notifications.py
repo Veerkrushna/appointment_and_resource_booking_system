@@ -21,6 +21,16 @@ from app.tasks.notification_tasks import (
 )
 
 
+def _future_sunday_at_10() -> datetime:
+    now = datetime.now(UTC)
+    days_until_sunday = (6 - now.weekday()) % 7 or 7
+    return datetime.combine(
+        now.date() + timedelta(days=days_until_sunday),
+        time(10),
+        tzinfo=UTC,
+    )
+
+
 @pytest.fixture
 def notification_records():
     db = SessionLocal()
@@ -139,7 +149,7 @@ def test_booking_confirmation_creates_sent_notification(notification_records):
             provider_id=provider_id,
             user_name="Confirmation Test",
             user_email="confirmation@example.com",
-            appointment_start=datetime(2026, 9, 20, 10, 0, tzinfo=UTC),
+            appointment_start=_future_sunday_at_10(),
         ),
     )
 
@@ -162,6 +172,36 @@ def test_booking_confirmation_creates_sent_notification(notification_records):
     mock_send_email.assert_called_once()
 
 
+def test_one_time_booking_still_queues_confirmation_and_reminders(
+    notification_records, monkeypatch
+):
+    provider_id, service_id = notification_records
+    confirmation_appointments = []
+    scheduled_appointments = []
+    monkeypatch.setattr(
+        "app.services.booking.enqueue_confirmation_notification",
+        lambda appointment: confirmation_appointments.append(appointment.id),
+    )
+    monkeypatch.setattr(
+        "app.services.booking.schedule_appointment_notifications",
+        lambda appointment: scheduled_appointments.append(appointment.id),
+    )
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="One-time Notification Test",
+                user_email="one-time-notification@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+
+    assert confirmation_appointments == [appointment.id]
+    assert scheduled_appointments == [appointment.id]
+
+
 def test_cancellation_notification_is_sent(notification_records):
     provider_id, service_id = notification_records
 
@@ -174,7 +214,7 @@ def test_cancellation_notification_is_sent(notification_records):
             provider_id=provider_id,
             user_name="Cancellation Notification Test",
             user_email="cancellation-notification@example.com",
-            appointment_start=datetime(2026, 9, 20, 10, 0, tzinfo=UTC),
+            appointment_start=_future_sunday_at_10(),
         ),
     )
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatInTimeZone } from "date-fns-tz";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
@@ -9,7 +10,11 @@ import type {
   ProviderOption,
   ProviderType,
   BookingDraft,
+  BookingKind,
+  RecurrenceAccess,
+  RecurrenceOptionsValue,
 } from "../features/booking/types";
+import { generateRecurringOccurrences } from "../features/booking/recurrence";
 import {
   BOOKING_DRAFT_STORAGE_KEY,
   readBookingDraft,
@@ -17,7 +22,14 @@ import {
   fetchAvailabilitySlots,
   getProviderOptions,
   isValidEmail,
+  createDefaultRecurrenceOptions,
+  validateRecurrenceOptions,
 } from "../features/booking/utils";
+import {
+  AppointmentSeriesApiError,
+  createAppointmentSeries,
+} from "../lib/appointmentSeries";
+import type { AppointmentSeriesResponse } from "../lib/appointmentSeries";
 import BookingSummary from "../features/booking/components/BookingSummary";
 import BookingSteps from "../features/booking/components/BookingSteps";
 import StepDateTime from "../features/booking/components/StepDateTime";
@@ -25,7 +37,7 @@ import StepDetails from "../features/booking/components/StepDetails";
 import StepConfirmation from "../features/booking/components/StepConfirmation";
 
 function BookingPage() {
-  const { token, customer } = useAuth();
+  const { token, customer, isLoading: authIsLoading } = useAuth();
   const { serviceId } = useParams();
   const [searchParams] = useSearchParams();
   const initialDate = searchParams.get("date") || "";
@@ -35,6 +47,8 @@ function BookingPage() {
   const initialDraft = readBookingDraft();
   const initialBookingState: {
     bookingMode: "self" | "other";
+    bookingKind: BookingKind;
+    recurrence: RecurrenceOptionsValue;
     date: string;
     selectedSlot: AvailabilitySlot | null;
     details: BookingDetails;
@@ -52,6 +66,8 @@ function BookingPage() {
     if (!restoredDraft) {
       return {
         bookingMode: hasAuthenticatedCustomer ? "self" : "other",
+        bookingKind: "ONE_TIME",
+        recurrence: createDefaultRecurrenceOptions(),
         date: initialDate,
         selectedSlot: null,
         details: hasAuthenticatedCustomer
@@ -73,6 +89,8 @@ function BookingPage() {
 
     return {
       bookingMode: restoredDraft.bookingMode,
+      bookingKind: restoredDraft.bookingKind,
+      recurrence: restoredDraft.recurrence,
       date: restoredDraft.date || initialDate,
       selectedSlot: restoredDraft.selectedSlot,
       details: restoredDraft.details,
@@ -82,6 +100,12 @@ function BookingPage() {
 
   const [bookingMode, setBookingMode] = useState<"self" | "other">(
     initialBookingState.bookingMode,
+  );
+  const [bookingKind, setBookingKind] = useState<BookingKind>(
+    initialBookingState.bookingKind,
+  );
+  const [recurrence, setRecurrence] = useState<RecurrenceOptionsValue>(
+    initialBookingState.recurrence,
   );
   const [service, setService] = useState<Service | null>(null);
   const [date, setDate] = useState(initialBookingState.date);
@@ -93,6 +117,10 @@ function BookingPage() {
   const [providerTypes, setProviderTypes] = useState<
     Record<string, ProviderType>
   >({});
+  const [providerTimezones, setProviderTimezones] = useState<
+    Record<string, string>
+  >({});
+  const [providerTimezonesLoaded, setProviderTimezonesLoaded] = useState(false);
   const [selectedProviderId, setSelectedProviderId] = useState(providerId);
   const selectedProviderIdRef = useRef(providerId);
   const selectedSlotRef = useRef(initialBookingState.selectedSlot);
@@ -105,6 +133,8 @@ function BookingPage() {
     null,
   );
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [recurringSeries, setRecurringSeries] =
+    useState<AppointmentSeriesResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const bookingSubmissionInFlight = useRef(false);
   const [details, setDetails] = useState<BookingDetails>(
@@ -115,6 +145,55 @@ function BookingPage() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingOutcomeUnknown, setBookingOutcomeUnknown] = useState(false);
   const [step, setStep] = useState(initialBookingState.step);
+  const recurrenceStartDate = selectedSlot?.date || date;
+  const recurrenceValidation = useMemo(
+    () => validateRecurrenceOptions(recurrence, recurrenceStartDate),
+    [recurrence, recurrenceStartDate],
+  );
+  const recurrenceAccess: RecurrenceAccess = authIsLoading
+    ? "loading"
+    : customer?.role.toLowerCase() === "customer"
+      ? "customer"
+      : customer
+        ? "unavailable"
+        : "guest";
+  const timezoneProviderId = selectedSlot?.provider_id || selectedProviderId;
+  const selectedProviderTimezone = timezoneProviderId
+    ? (providerTimezones[timezoneProviderId] ?? null)
+    : null;
+  const recurrenceOccurrences = useMemo(() => {
+    if (
+      step !== 3 ||
+      bookingKind !== "RECURRING" ||
+      !recurrenceValidation.isValid ||
+      !selectedSlot ||
+      !selectedProviderTimezone
+    ) {
+      return [];
+    }
+
+    return generateRecurringOccurrences({
+      start_date: selectedSlot.date,
+      local_start_time: formatInTimeZone(
+        selectedSlot.start,
+        selectedProviderTimezone,
+        "HH:mm:ss",
+      ),
+      frequency: recurrence.frequency,
+      interval: recurrence.interval,
+      end_mode: recurrence.endMode,
+      occurrence_count:
+        recurrence.endMode === "COUNT" ? recurrence.occurrenceCount : null,
+      end_date: recurrence.endMode === "END_DATE" ? recurrence.endDate : null,
+    });
+  }, [
+    bookingKind,
+    recurrence,
+    recurrenceValidation.isValid,
+    selectedProviderTimezone,
+    selectedSlot,
+    step,
+  ]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -161,21 +240,31 @@ function BookingPage() {
     fetch("/api/providers")
       .then((response) => {
         if (!response.ok) return [];
-        return response.json() as Promise<{ id: string; type: string }[]>;
+        return response.json() as Promise<
+          { id: string; type: string; timezone?: string | null }[]
+        >;
       })
       .then((providers) => {
         if (!isCurrent) return;
         const types: Record<string, ProviderType> = {};
+        const timezones: Record<string, string> = {};
         for (const provider of providers) {
           const type = provider.type.toLowerCase();
           if (type === "person" || type === "resource") {
             types[provider.id] = type;
           }
+          if (provider.timezone) {
+            timezones[provider.id] = provider.timezone;
+          }
         }
         setProviderTypes(types);
+        setProviderTimezones(timezones);
       })
       .catch(() => {
         // Provider types are supplemental; availability remains usable without them.
+      })
+      .finally(() => {
+        if (isCurrent) setProviderTimezonesLoaded(true);
       });
 
     return () => {
@@ -331,6 +420,8 @@ function BookingPage() {
     const draft: BookingDraft = {
       serviceId,
       providerId: selectedProviderId || selectedSlot?.provider_id || null,
+      bookingKind,
+      recurrence,
       step,
       date,
       selectedSlot,
@@ -343,9 +434,11 @@ function BookingPage() {
       JSON.stringify(draft),
     );
   }, [
+    bookingKind,
     bookingMode,
     date,
     details,
+    recurrence,
     selectedProviderId,
     selectedSlot,
     serviceId,
@@ -354,6 +447,14 @@ function BookingPage() {
 
   function handleDetailsChange(field: keyof BookingDetails, value: string) {
     setDetails((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleBookingKindChange(kind: BookingKind) {
+    setBookingKind(kind);
+  }
+
+  function handleRecurrenceChange(value: RecurrenceOptionsValue) {
+    setRecurrence(value);
   }
 
   function applyBookingMode(mode: "self" | "other") {
@@ -383,6 +484,10 @@ function BookingPage() {
 
   function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (bookingKind === "RECURRING" && !recurrenceValidation.isValid) {
+      setBookingError("Complete the recurrence options before continuing.");
+      return;
+    }
     if (!isValidEmail(details.email)) {
       setBookingError("Not a valid email. Kindly check Again");
       return;
@@ -391,7 +496,121 @@ function BookingPage() {
     setStep(3);
   }
 
+  async function confirmRecurringBooking() {
+    if (bookingSubmissionInFlight.current || isConfirmed) return;
+
+    if (authIsLoading) {
+      setBookingError("Checking your account. Please try again in a moment.");
+      return;
+    }
+    if (!token || !customer || customer.role.toLowerCase() !== "customer") {
+      setBookingError(
+        "Sign in with a customer account to book recurring appointments.",
+      );
+      return;
+    }
+    if (!selectedSlot || !service) {
+      setBookingError("Choose an available time before continuing.");
+      return;
+    }
+    if (!recurrenceValidation.isValid) {
+      setBookingError("Complete the recurrence options before continuing.");
+      return;
+    }
+    if (!selectedProviderTimezone) {
+      setBookingError("The provider timezone is not available yet.");
+      return;
+    }
+    if (new Date(selectedSlot.start).getTime() <= Date.now()) {
+      setAvailableSlots((current) =>
+        current.filter((slot) => new Date(slot.start).getTime() > Date.now()),
+      );
+      setSelectedSlot(null);
+      setStep(1);
+      setBookingError(
+        "That time has already passed. Choose another available time.",
+      );
+      return;
+    }
+
+    bookingSubmissionInFlight.current = true;
+    setIsSubmitting(true);
+    setBookingError(null);
+    setBookingOutcomeUnknown(false);
+    let requestSent = false;
+
+    try {
+      const request = {
+        service_id: service.id,
+        provider_id: selectedSlot.provider_id,
+        start_date: selectedSlot.date,
+        local_start_time: formatInTimeZone(
+          selectedSlot.start,
+          selectedProviderTimezone,
+          "HH:mm:ss",
+        ),
+        frequency: recurrence.frequency,
+        interval: recurrence.interval,
+        end_mode: recurrence.endMode,
+        occurrence_count:
+          recurrence.endMode === "COUNT" ? recurrence.occurrenceCount : null,
+        end_date: recurrence.endMode === "END_DATE" ? recurrence.endDate : null,
+        user_name: details.name,
+        user_email: details.email,
+        user_phone: details.phone || null,
+        notes: details.notes || null,
+      };
+
+      requestSent = true;
+      const createdSeries = await createAppointmentSeries(token, request);
+      window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+      setRecurringSeries(createdSeries);
+      setIsConfirmed(true);
+    } catch (requestError) {
+      const outcomeUnknown =
+        requestSent &&
+        (!(requestError instanceof AppointmentSeriesApiError) ||
+          requestError.status === null ||
+          requestError.status >= 500);
+      setBookingOutcomeUnknown(outcomeUnknown);
+
+      if (requestError instanceof AppointmentSeriesApiError) {
+        if (requestError.status === 409) {
+          const conflictDetails = requestError.conflicts
+            .map(
+              (conflict) =>
+                `Occurrence ${conflict.occurrence_number} on ${conflict.date}: ${conflict.reason}`,
+            )
+            .join(" ");
+          setBookingError(
+            conflictDetails
+              ? `One of the recurring appointments is unavailable. ${conflictDetails}`
+              : "One of the recurring appointments is unavailable. Review the recurrence and try again.",
+          );
+        } else {
+          setBookingError(requestError.message);
+        }
+      } else if (outcomeUnknown) {
+        setBookingError(
+          "We couldn't confirm whether your recurring bookings were created. Check My Appointments before trying again.",
+        );
+      } else {
+        setBookingError(
+          "Unable to prepare the recurring booking. Check the selected provider and try again.",
+        );
+      }
+    } finally {
+      bookingSubmissionInFlight.current = false;
+      setIsSubmitting(false);
+    }
+  }
+
   async function confirmBooking() {
+    if (bookingKind === "RECURRING") {
+      await confirmRecurringBooking();
+      return;
+    }
+
     if (
       !selectedSlot ||
       !service ||
@@ -521,6 +740,8 @@ function BookingPage() {
           service={service}
           selectedSlot={selectedSlot}
           date={date}
+          bookingKind={bookingKind}
+          recurrence={recurrence}
         />
 
         <div className="booking-panel">
@@ -540,6 +761,14 @@ function BookingPage() {
               setAvailableSlots={setAvailableSlots}
               setAvailabilityError={setAvailabilityError}
               setAvailabilityLoading={setAvailabilityLoading}
+              bookingKind={bookingKind}
+              setBookingKind={handleBookingKindChange}
+              recurrence={recurrence}
+              setRecurrence={handleRecurrenceChange}
+              recurrenceValidation={recurrenceValidation}
+              recurrenceAccess={recurrenceAccess}
+              selectedProviderTimezone={selectedProviderTimezone}
+              providerTimezonesLoaded={providerTimezonesLoaded}
               setStep={setStep}
             />
           )}
@@ -560,6 +789,7 @@ function BookingPage() {
           {step === 3 && (
             <StepConfirmation
               isConfirmed={isConfirmed}
+              bookingKind={bookingKind}
               details={details}
               selectedSlot={selectedSlot}
               service={service}
@@ -567,6 +797,9 @@ function BookingPage() {
               setStep={setStep}
               isSubmitting={isSubmitting}
               bookingOutcomeUnknown={bookingOutcomeUnknown}
+              recurringSeries={recurringSeries}
+              recurrenceValidation={recurrenceValidation}
+              recurrenceOccurrences={recurrenceOccurrences}
               confirmBooking={confirmBooking}
               bookingError={bookingError}
             />

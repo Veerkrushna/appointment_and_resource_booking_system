@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 
 if TYPE_CHECKING:
+    from app.models.appointment_series import AppointmentSeries
     from app.models.providers import Provider
     from app.models.review import Review
 
@@ -77,6 +78,9 @@ class User(Base):
     )
     created_users: Mapped[list["User"]] = relationship(back_populates="created_by_user")
     appointments = relationship("Appointment", back_populates="customer")
+    appointment_series: Mapped[list["AppointmentSeries"]] = relationship(
+        back_populates="customer"
+    )
     provider_profile: Mapped["Provider | None"] = relationship(back_populates="user")
     reviews: Mapped[list["Review"]] = relationship(
         back_populates="customer", cascade="all, delete", passive_deletes=True
