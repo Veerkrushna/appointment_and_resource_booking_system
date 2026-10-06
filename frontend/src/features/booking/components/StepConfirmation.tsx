@@ -4,10 +4,13 @@ import type {
   AvailabilitySlot,
   BookingDetails,
   BookingKind,
+  RecurrenceValidation,
   Service,
 } from "../types";
 import type { AppointmentSeriesResponse } from "../../../lib/appointmentSeries";
+import type { RecurringOccurrence } from "../recurrence";
 import { formatDate, formatTime } from "../utils";
+import RecurringSchedulePreview from "./RecurringSchedulePreview";
 
 type Props = {
   isConfirmed: boolean;
@@ -20,6 +23,8 @@ type Props = {
   isSubmitting: boolean;
   bookingOutcomeUnknown: boolean;
   recurringSeries: AppointmentSeriesResponse | null;
+  recurrenceValidation: RecurrenceValidation;
+  recurrenceOccurrences: RecurringOccurrence[];
   confirmBooking: () => void;
   bookingError: string | null;
 };
@@ -35,9 +40,16 @@ export default function StepConfirmation({
   isSubmitting,
   bookingOutcomeUnknown,
   recurringSeries,
+  recurrenceValidation,
+  recurrenceOccurrences,
   confirmBooking,
   bookingError,
 }: Props) {
+  const recurrenceError =
+    recurrenceValidation.errors.frequency ??
+    recurrenceValidation.errors.occurrenceCount ??
+    recurrenceValidation.errors.endDate;
+
   return (
     <div className="confirmation-panel">
       <span className="confirmation-mark" aria-hidden="true">
@@ -79,6 +91,11 @@ export default function StepConfirmation({
           </>
         )}
       </div>
+      <RecurringSchedulePreview
+        bookingKind={bookingKind}
+        occurrences={recurrenceOccurrences}
+        validationError={recurrenceError}
+      />
       {!isConfirmed && (
         <div className="booking-actions">
           <button
@@ -90,7 +107,11 @@ export default function StepConfirmation({
           </button>
           <button
             className="primary-button"
-            disabled={isSubmitting || bookingOutcomeUnknown}
+            disabled={
+              isSubmitting ||
+              bookingOutcomeUnknown ||
+              (bookingKind === "RECURRING" && !recurrenceValidation.isValid)
+            }
             onClick={() => void confirmBooking()}
             type="button"
           >

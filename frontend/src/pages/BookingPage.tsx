@@ -14,6 +14,7 @@ import type {
   RecurrenceAccess,
   RecurrenceOptionsValue,
 } from "../features/booking/types";
+import { generateRecurringOccurrences } from "../features/booking/recurrence";
 import {
   BOOKING_DRAFT_STORAGE_KEY,
   readBookingDraft,
@@ -160,6 +161,39 @@ function BookingPage() {
   const selectedProviderTimezone = timezoneProviderId
     ? (providerTimezones[timezoneProviderId] ?? null)
     : null;
+  const recurrenceOccurrences = useMemo(() => {
+    if (
+      step !== 3 ||
+      bookingKind !== "RECURRING" ||
+      !recurrenceValidation.isValid ||
+      !selectedSlot ||
+      !selectedProviderTimezone
+    ) {
+      return [];
+    }
+
+    return generateRecurringOccurrences({
+      start_date: selectedSlot.date,
+      local_start_time: formatInTimeZone(
+        selectedSlot.start,
+        selectedProviderTimezone,
+        "HH:mm:ss",
+      ),
+      frequency: recurrence.frequency,
+      interval: recurrence.interval,
+      end_mode: recurrence.endMode,
+      occurrence_count:
+        recurrence.endMode === "COUNT" ? recurrence.occurrenceCount : null,
+      end_date: recurrence.endMode === "END_DATE" ? recurrence.endDate : null,
+    });
+  }, [
+    bookingKind,
+    recurrence,
+    recurrenceValidation.isValid,
+    selectedProviderTimezone,
+    selectedSlot,
+    step,
+  ]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -764,6 +798,8 @@ function BookingPage() {
               isSubmitting={isSubmitting}
               bookingOutcomeUnknown={bookingOutcomeUnknown}
               recurringSeries={recurringSeries}
+              recurrenceValidation={recurrenceValidation}
+              recurrenceOccurrences={recurrenceOccurrences}
               confirmBooking={confirmBooking}
               bookingError={bookingError}
             />
