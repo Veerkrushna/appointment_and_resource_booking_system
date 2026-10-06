@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.crud.provider_ratings import provider_rating_subquery
@@ -242,11 +242,17 @@ def calculate_available_slots(
                 appointment_start, appointment_blocked_end = (
                     appointment_blocked_interval()
                 )
+                now_utc = datetime.now(UTC)
+                hold_cutoff = now_utc - timedelta(minutes=10)
                 appointment_intervals = list(
                     db.execute(
                         select(appointment_start, appointment_blocked_end).where(
                             Appointment.provider_id == provider.id,
                             Appointment.status != AppointmentStatus.CANCELLED,
+                            or_(
+                                Appointment.status != AppointmentStatus.PENDING,
+                                Appointment.created_at >= hold_cutoff,
+                            ),
                             appointment_start < day_end,
                             appointment_blocked_end > day_start,
                         )

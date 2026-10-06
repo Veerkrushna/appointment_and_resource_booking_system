@@ -28,9 +28,11 @@ if TYPE_CHECKING:
     from app.models.review import Review
     from app.models.service import Service
     from app.models.user import User
+    from app.payments.models import Payment
 
 
 class AppointmentStatus(enum.StrEnum):
+    PENDING = "pending"
     CONFIRMED = "confirmed"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -108,7 +110,7 @@ class Appointment(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[AppointmentStatus] = mapped_column(
         SQLEnum(AppointmentStatus, name="appointment_status"),
-        default=AppointmentStatus.CONFIRMED,
+        default=AppointmentStatus.PENDING,
         nullable=False,
     )
     confirmation_token: Mapped[str | None] = mapped_column(
@@ -142,4 +144,7 @@ class Appointment(Base):
     )
     review: Mapped["Review | None"] = relationship(
         back_populates="appointment", cascade="all, delete-orphan", passive_deletes=True
+    )
+    payments: Mapped[list["Payment"]] = relationship(
+        back_populates="booking", cascade="all, delete-orphan"
     )

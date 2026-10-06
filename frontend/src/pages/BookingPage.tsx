@@ -133,6 +133,10 @@ function BookingPage() {
     null,
   );
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
+  const [bookingStatus, setBookingStatus] = useState<
+    "Pending" | "Confirmed" | "Payment failed" | null
+  >(null);
   const [recurringSeries, setRecurringSeries] =
     useState<AppointmentSeriesResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -671,8 +675,10 @@ function BookingPage() {
         throw new Error(message);
       }
 
+      const createdAppointment = await response.json();
       window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
-      setIsConfirmed(true);
+      setCreatedBookingId(createdAppointment.id);
+      setBookingStatus("Pending");
       setAvailableSlots((current) =>
         current.filter(
           (slot) =>
@@ -802,6 +808,15 @@ function BookingPage() {
               recurrenceOccurrences={recurrenceOccurrences}
               confirmBooking={confirmBooking}
               bookingError={bookingError}
+              createdBookingId={createdBookingId}
+              bookingStatus={bookingStatus}
+              onPaid={() => {
+                setBookingStatus("Confirmed");
+                setIsConfirmed(true);
+              }}
+              onPaymentFailed={() => {
+                setBookingStatus("Payment failed");
+              }}
             />
           )}
         </div>

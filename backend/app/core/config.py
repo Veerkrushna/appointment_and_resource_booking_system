@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     auth_secret: str = "change-this-secret-in-production"
     auth_token_expiry_seconds: int = 60 * 60 * 24 * 7
 
+    razorpay_key_id: str = "rzp_test_1234567890abcdef"
+    razorpay_key_secret: str = "rzp_test_secret_placeholder"
+    razorpay_webhook_secret: str = "rzp_test_webhook_secret_placeholder"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

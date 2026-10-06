@@ -3,7 +3,7 @@ from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.appointment import Appointment, AppointmentStatus
@@ -51,6 +51,8 @@ def get_booking_status(
 ) -> str:
     if status == AppointmentStatus.CANCELLED:
         return "cancelled"
+    if status == AppointmentStatus.PENDING:
+        return "pending"
 
     appointment_end = appointment_start + timedelta(minutes=duration_minutes)
     if now_utc >= appointment_end:
@@ -137,10 +139,32 @@ def _validate_slot(
         if start_utc < blackout_end and blocked_end_utc > blackout_start:
             raise BookingValidationError("Appointment overlaps a provider blackout")
 
+    now_utc = datetime.now(UTC)
+    hold_cutoff = now_utc - timedelta(minutes=10)
+
+    # Release any expired pending bookings for this provider (> 10 minutes)
+    expired_pending = list(
+        db.scalars(
+            select(Appointment).where(
+                Appointment.provider_id == provider.id,
+                Appointment.status == AppointmentStatus.PENDING,
+                Appointment.created_at < hold_cutoff,
+            )
+        ).all()
+    )
+    for exp in expired_pending:
+        exp.status = AppointmentStatus.CANCELLED
+    if expired_pending:
+        db.commit()
+
     existing_start, existing_blocked_end = appointment_blocked_interval()
     overlapping_query = select(Appointment.id).where(
         Appointment.provider_id == provider.id,
         Appointment.status != AppointmentStatus.CANCELLED,
+        or_(
+            Appointment.status != AppointmentStatus.PENDING,
+            Appointment.created_at >= hold_cutoff,
+        ),
         existing_start < blocked_end_utc,
         existing_blocked_end > start_utc,
     )
@@ -227,19 +251,20 @@ def create_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
-    try:
-        enqueue_confirmation_notification(appointment)
-    except Exception:
-        logger.exception(
-            "Unable to enqueue confirmation notification for appointment %s",
-            appointment.id,
-        )
-    try:
-        schedule_appointment_notifications(appointment)
-    except Exception:
-        logger.exception(
-            "Unable to schedule notifications for appointment %s", appointment.id
-        )
+    if appointment.status == AppointmentStatus.CONFIRMED:
+        try:
+            enqueue_confirmation_notification(appointment)
+        except Exception:
+            logger.exception(
+                "Unable to enqueue confirmation notification for appointment %s",
+                appointment.id,
+            )
+        try:
+            schedule_appointment_notifications(appointment)
+        except Exception:
+            logger.exception(
+                "Unable to schedule notifications for appointment %s", appointment.id
+            )
     return appointment
 
 

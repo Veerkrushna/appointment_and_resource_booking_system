@@ -14,6 +14,7 @@ from app.api.routes.reviews import router as reviews_router
 from app.api.routes.services import router as services_router
 from app.api.routes.terms import router as terms_router
 from app.api.routes.uploads import router as uploads_router
+from app.payments.router import router as payments_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -37,6 +38,8 @@ app.include_router(customer_router)
 app.include_router(terms_router)
 app.include_router(password_reset_router)
 app.include_router(uploads_router)
+app.include_router(payments_router)
+app.include_router(payments_router, prefix="/api")
 
 # Mount the static files directory for uploads
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

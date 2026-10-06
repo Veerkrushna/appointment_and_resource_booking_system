@@ -6,6 +6,7 @@ from alembic import context
 from app.core.config import settings
 from app.db.database import Base
 import app.models  # noqa
+from app.payments.models import Payment  # noqa: F401
 
 # Alembic Config object
 config = context.config

@@ -21,3 +21,4 @@ from app.models.providers import Provider
 from app.models.review import Review
 from app.models.service import Service
 from app.models.user import User, UserRole
+from app.payments.models import Payment, PaymentStatus

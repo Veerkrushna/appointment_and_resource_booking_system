@@ -1,4 +1,3 @@
-import React from "react";
 import type {
   AvailabilitySlot,
   BookingKind,
@@ -54,6 +53,14 @@ export default function BookingSummary({
           <dt>Time</dt>
           <dd>
             {selectedSlot ? formatTime(selectedSlot.start) : "Not selected"}
+          </dd>
+        </div>
+        <div>
+          <dt>Price</dt>
+          <dd>
+            {service.price != null && Number(service.price) > 0
+              ? `₹${Number(service.price).toFixed(2)}`
+              : "₹500.00 (Demo)"}
           </dd>
         </div>
         {bookingKind === "RECURRING" && (
