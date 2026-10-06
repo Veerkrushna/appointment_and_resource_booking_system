@@ -1,0 +1,282 @@
+import type {
+  RecurrenceEndMode,
+  RecurrenceFrequency,
+  RecurrenceInterval,
+} from "../features/booking/types";
+
+export type AppointmentSeriesCreateRequest = {
+  service_id: string;
+  provider_id: string;
+  start_date: string;
+  local_start_time: string;
+  frequency: RecurrenceFrequency;
+  interval: RecurrenceInterval;
+  end_mode: RecurrenceEndMode;
+  occurrence_count: number | null;
+  end_date: string | null;
+  user_name: string;
+  user_email: string;
+  user_phone: string | null;
+  notes: string | null;
+};
+
+export type AppointmentSeriesConflict = {
+  occurrence_number: number;
+  date: string;
+  reason: string;
+};
+
+export type AppointmentSeriesOccurrence = {
+  id: string;
+  occurrence_number: number;
+  appointment_start: string;
+  appointment_end: string;
+  status: "confirmed" | "completed" | "cancelled";
+};
+
+export type AppointmentSeriesResponse = {
+  id: string;
+  service_id: string;
+  provider_id: string;
+  frequency: "weekly" | "monthly";
+  interval: RecurrenceInterval;
+  start_date: string;
+  local_start_time: string;
+  timezone: string;
+  end_mode: "count" | "end_date";
+  occurrence_count: number | null;
+  end_date: string | null;
+  status: "active" | "cancelled";
+  occurrences: AppointmentSeriesOccurrence[];
+};
+
+export type AppointmentSeriesDetail = {
+  series_id: string;
+  service_id: string;
+  provider_id: string;
+  frequency: "weekly" | "monthly";
+  interval: RecurrenceInterval;
+  start_date: string;
+  local_start_time: string;
+  provider_timezone: string;
+  end_mode: "count" | "end_date";
+  occurrence_count: number | null;
+  end_date: string | null;
+  status: "active" | "cancelled";
+  occurrences: AppointmentSeriesOccurrence[];
+};
+
+export type AppointmentSeriesCancellationResponse = {
+  series_id: string;
+  status: "cancelled";
+  appointments_cancelled: number;
+  cancelled_appointment_ids: string[];
+};
+
+export class AppointmentSeriesApiError extends Error {
+  readonly status: number | null;
+  readonly conflicts: AppointmentSeriesConflict[];
+
+  constructor(
+    message: string,
+    status: number | null,
+    conflicts: AppointmentSeriesConflict[] = [],
+  ) {
+    super(message);
+    this.name = "AppointmentSeriesApiError";
+    this.status = status;
+    this.conflicts = conflicts;
+  }
+}
+
+export class AppointmentSeriesCancellationError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "AppointmentSeriesCancellationError";
+    this.status = status;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseConflicts(value: unknown): AppointmentSeriesConflict[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (conflict): conflict is AppointmentSeriesConflict =>
+      isRecord(conflict) &&
+      typeof conflict.occurrence_number === "number" &&
+      typeof conflict.date === "string" &&
+      typeof conflict.reason === "string",
+  );
+}
+
+function errorMessage(status: number, detail: unknown): string {
+  if (status >= 500) {
+    return "We couldn't create your recurring appointments. Please try again.";
+  }
+  if (status === 401) {
+    return "Your session has expired. Please sign in again.";
+  }
+  if (status === 403) {
+    return "Recurring booking is available to customer accounts only.";
+  }
+  if (status === 409) {
+    return isRecord(detail) && typeof detail.message === "string"
+      ? detail.message
+      : "One or more recurring appointments are unavailable.";
+  }
+  if (status === 422) {
+    return "Please check your recurrence settings and contact details.";
+  }
+  if (typeof detail === "string") return detail;
+  return "Unable to create recurring appointments. Please try again.";
+}
+
+export async function createAppointmentSeries(
+  token: string,
+  request: AppointmentSeriesCreateRequest,
+): Promise<AppointmentSeriesResponse> {
+  let response: Response;
+  try {
+    response = await fetch("/api/appointment-series", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new AppointmentSeriesApiError(
+      "Unable to reach the server. Check your appointments before trying again.",
+      null,
+    );
+  }
+
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    if (response.ok) {
+      throw new AppointmentSeriesApiError(
+        "The recurring booking response could not be read. Check your appointments before trying again.",
+        null,
+      );
+    }
+  }
+
+  if (!response.ok) {
+    const detail = isRecord(body) ? body.detail : undefined;
+    const conflicts =
+      response.status === 409 && isRecord(detail)
+        ? parseConflicts(detail.conflicts)
+        : [];
+    throw new AppointmentSeriesApiError(
+      errorMessage(response.status, detail),
+      response.status,
+      conflicts,
+    );
+  }
+
+  return body as AppointmentSeriesResponse;
+}
+
+export async function fetchAppointmentSeries(
+  token: string,
+  seriesId: string,
+): Promise<AppointmentSeriesDetail> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/appointment-series/${encodeURIComponent(seriesId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch {
+    throw new Error("Unable to load recurring series. Please try again.");
+  }
+
+  if (!response.ok) {
+    let detail: unknown;
+    try {
+      const body: unknown = await response.json();
+      detail = isRecord(body) ? body.detail : undefined;
+    } catch {
+      detail = undefined;
+    }
+
+    if (response.status === 401) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    if (response.status === 403) {
+      throw new Error("Recurring series details are available to customers only.");
+    }
+    if (response.status === 404) {
+      throw new Error("This recurring series could not be found.");
+    }
+    if (response.status >= 500) {
+      throw new Error("Unable to load recurring series. Please try again.");
+    }
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : "Unable to load recurring series. Please try again.",
+    );
+  }
+
+  try {
+    return (await response.json()) as AppointmentSeriesDetail;
+  } catch {
+    throw new Error("Unable to read recurring series details. Please retry.");
+  }
+}
+
+export async function cancelAppointmentSeries(
+  token: string,
+  seriesId: string,
+): Promise<AppointmentSeriesCancellationResponse> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/appointment-series/${encodeURIComponent(seriesId)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+  } catch {
+    throw new AppointmentSeriesCancellationError(
+      "Unable to cancel this series. Please try again.",
+      null,
+    );
+  }
+
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      401: "Your session has expired. Please sign in again.",
+      403: "You are not allowed to cancel this series.",
+      404: "This recurring series could not be found.",
+      409: "This recurring series has already been cancelled.",
+    };
+    throw new AppointmentSeriesCancellationError(
+      response.status >= 500
+        ? "Unable to cancel this series. Please try again."
+        : (messages[response.status] ??
+            "Unable to cancel this series. Please try again."),
+      response.status,
+    );
+  }
+
+  try {
+    return (await response.json()) as AppointmentSeriesCancellationResponse;
+  } catch {
+    throw new AppointmentSeriesCancellationError(
+      "Unable to read the series cancellation response. Please refresh your appointments.",
+      null,
+    );
+  }
+}

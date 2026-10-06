@@ -5,11 +5,13 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.appointment import Appointment
+from app.models.appointment_series import AppointmentSeries
 from app.models.notification import Notification, NotificationStatus, NotificationType
 
 logger = logging.getLogger(__name__)
@@ -97,9 +99,7 @@ def deliver_notification(
         sms_body = "Reminder: your appointment is coming up soon."
     elif notification.notification_type == NotificationType.CANCELLATION:
         subject = "Appointment cancelled"
-        body = (
-            f"Hello {appointment.user_name},\n\n" "Your appointment has been cancelled."
-        )
+        body = f"Hello {appointment.user_name},\n\nYour appointment has been cancelled."
         sms_body = body
     elif notification.notification_type == NotificationType.RESCHEDULE:
         subject = "Appointment rescheduled"
@@ -126,6 +126,67 @@ def deliver_notification(
         _record_result(db, notification, delivered=False)
     else:
         _record_result(db, notification, delivered=True)
+
+
+def deliver_email_notification(
+    db: Session,
+    notification: Notification,
+    recipient_email: str,
+    subject: str,
+    body: str,
+) -> bool:
+    try:
+        send_email(recipient_email, subject, body)
+    except Exception:
+        logger.exception("Failed to send notification %s", notification.id)
+        _record_result(db, notification, delivered=False)
+        return False
+
+    _record_result(db, notification, delivered=True)
+    return True
+
+
+def build_series_confirmation_email(
+    series: AppointmentSeries, appointments: list[Appointment]
+) -> tuple[str, str]:
+    timezone = ZoneInfo(series.timezone)
+    ordered_appointments = sorted(
+        appointments, key=lambda appointment: appointment.occurrence_number or 0
+    )
+    if series.frequency.value == "weekly":
+        recurrence_rule = "Every 2 weeks" if series.interval == 2 else "Every week"
+    else:
+        recurrence_rule = "Monthly"
+
+    def format_appointment(appointment: Appointment) -> str:
+        local_start = appointment.appointment_start.astimezone(timezone)
+        date_label = (
+            f"{local_start:%A}, {local_start:%B} {local_start.day}, {local_start:%Y}"
+        )
+        time_label = local_start.strftime("%I:%M %p").lstrip("0")
+        return f"{date_label} — {time_label}"
+
+    first_appointment = ordered_appointments[0]
+    last_appointment = ordered_appointments[-1]
+    schedule = "\n".join(
+        f"{appointment.occurrence_number}. {format_appointment(appointment)}"
+        for appointment in ordered_appointments
+    )
+    body = (
+        f"Hello {first_appointment.user_name},\n\n"
+        "Your recurring appointments have been successfully booked.\n\n"
+        f"Service: {series.service.name}\n"
+        f"Provider: {series.provider.name}\n"
+        f"Schedule: {recurrence_rule}\n"
+        f"Appointments: {len(ordered_appointments)}\n"
+        f"Timezone: {series.timezone}\n"
+        f"First appointment: {format_appointment(first_appointment)}\n"
+        f"Last appointment: {format_appointment(last_appointment)}\n\n"
+        "Appointment schedule:\n"
+        f"{schedule}\n\n"
+        "Thank you."
+    )
+    return "Recurring appointments confirmed", body
 
 
 def send_booking_confirmation(db: Session, appointment: Appointment) -> None:

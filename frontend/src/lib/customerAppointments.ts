@@ -7,6 +7,8 @@ export type CustomerAppointment = {
   duration_minutes: number;
   status: string;
   notes: string | null;
+  series_id: string | null;
+  occurrence_number: number | null;
 };
 
 export type CustomerAppointmentsResponse = {

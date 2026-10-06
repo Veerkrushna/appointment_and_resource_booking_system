@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy import Enum as SQLEnum
@@ -22,6 +23,7 @@ from app.models.appointment_cancellation import AppointmentCancellation
 from app.models.notification import Notification
 
 if TYPE_CHECKING:
+    from app.models.appointment_series import AppointmentSeries
     from app.models.providers import Provider
     from app.models.review import Review
     from app.models.service import Service
@@ -46,6 +48,18 @@ class Appointment(Base):
         CheckConstraint(
             "duration_minutes > 0", name="ck_appointment_duration_positive"
         ),
+        CheckConstraint(
+            "buffer_time_minutes >= 0",
+            name="ck_appointment_buffer_time_nonnegative",
+        ),
+        CheckConstraint(
+            "(series_id IS NULL AND occurrence_number IS NULL) "
+            "OR (series_id IS NOT NULL AND occurrence_number IS NOT NULL AND occurrence_number > 0)",
+            name="ck_appointment_series_occurrence_pair",
+        ),
+        UniqueConstraint(
+            "series_id", "occurrence_number", name="uq_appointments_series_occurrence"
+        ),
         Index("ix_appointments_provider_start", "provider_id", "appointment_start"),
         Index("ix_appointments_user_email", "user_email"),
         Index("ix_appointments_status_start", "status", "appointment_start"),
@@ -64,6 +78,15 @@ class Appointment(Base):
     customer_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    series_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "appointment_series.id",
+            name="fk_appointments_series_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
+    occurrence_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     user_name: Mapped[str] = mapped_column(String(255), nullable=False)
     user_email: Mapped[str] = mapped_column(String(320), nullable=False)
@@ -78,6 +101,9 @@ class Appointment(Base):
         DateTime(timezone=True), nullable=False
     )
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    buffer_time_minutes: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[AppointmentStatus] = mapped_column(
@@ -105,6 +131,9 @@ class Appointment(Base):
     service: Mapped["Service"] = relationship()
     provider: Mapped["Provider"] = relationship()
     customer: Mapped["User | None"] = relationship(back_populates="appointments")
+    series: Mapped["AppointmentSeries | None"] = relationship(
+        back_populates="appointments"
+    )
     cancellations: Mapped[list["AppointmentCancellation"]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan"
     )
