@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, time, timedelta
 from threading import Barrier
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,8 +32,8 @@ client = TestClient(app)
 @pytest.fixture
 def series_records(monkeypatch):
     monkeypatch.setattr(
-        "app.services.appointment_series.enqueue_confirmation_notification",
-        lambda _appointment: None,
+        "app.services.appointment_series.enqueue_series_confirmation_notification",
+        lambda _series_id: None,
     )
     monkeypatch.setattr(
         "app.services.appointment_series.schedule_appointment_notifications",
@@ -248,20 +249,26 @@ def _create_cancellation_series(
 
 
 def test_authenticated_customer_creates_atomic_series(series_records, monkeypatch):
-    observed_notifications = []
+    enqueued_series = []
+    scheduled_appointments = []
 
-    def notification_spy(appointment):
+    def series_confirmation_spy(series_id):
+        with SessionLocal() as verify_db:
+            assert verify_db.get(AppointmentSeries, series_id) is not None
+        enqueued_series.append(series_id)
+
+    def reminder_spy(appointment):
         with SessionLocal() as verify_db:
             assert verify_db.get(Appointment, appointment.id) is not None
-        observed_notifications.append(appointment.id)
+        scheduled_appointments.append(appointment.id)
 
     monkeypatch.setattr(
-        "app.services.appointment_series.enqueue_confirmation_notification",
-        notification_spy,
+        "app.services.appointment_series.enqueue_series_confirmation_notification",
+        series_confirmation_spy,
     )
     monkeypatch.setattr(
         "app.services.appointment_series.schedule_appointment_notifications",
-        notification_spy,
+        reminder_spy,
     )
 
     db = SessionLocal()
@@ -304,7 +311,9 @@ def test_authenticated_customer_creates_atomic_series(series_records, monkeypatc
     ]
     assert all(item["status"] == "confirmed" for item in result["occurrences"])
     assert commit_count == 1
-    assert len(observed_notifications) == 6
+    assert len(enqueued_series) == 1
+    assert enqueued_series == [result["id"]]
+    assert len(scheduled_appointments) == 3
 
     with SessionLocal() as verify_db:
         series = verify_db.get(AppointmentSeries, result["id"])
@@ -325,6 +334,97 @@ def test_authenticated_customer_creates_atomic_series(series_records, monkeypatc
         assert all(item.user_name == "Recurring Customer" for item in appointments)
         assert all(item.user_phone == "555-0100" for item in appointments)
         assert all(item.notes == "Recurring appointment note" for item in appointments)
+
+
+def test_series_confirmation_email_uses_contact_email_and_provider_timezone(
+    series_records, monkeypatch
+):
+    with SessionLocal() as db:
+        provider = db.get(Provider, series_records["provider_id"])
+        provider.timezone = "Asia/Kolkata"
+        db.commit()
+
+    recipient_email = f"booking-recipient-{uuid4()}@example.com"
+    start_date = date.today() + timedelta(days=14)
+    response = client.post(
+        "/api/appointment-series",
+        headers=_headers(series_records),
+        json=_request_body(
+            series_records,
+            start_date=start_date.isoformat(),
+            local_start_time="10:00:00",
+            occurrence_count=3,
+            user_email=recipient_email,
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    series_id = response.json()["id"]
+    email_messages = []
+    monkeypatch.setattr(
+        "app.services.notifications.send_email",
+        lambda recipient, subject, body: email_messages.append(
+            (recipient, subject, body)
+        ),
+    )
+
+    from app.tasks.notification_tasks import send_series_confirmation_notification
+
+    send_series_confirmation_notification.run(series_id)
+    send_series_confirmation_notification.run(series_id)
+
+    assert len(email_messages) == 1
+    recipient, subject, body = email_messages[0]
+    assert recipient == recipient_email
+    assert subject == "Recurring appointments confirmed"
+    assert "Service: Series Service" in body
+    assert "Provider: Series Provider" in body
+    assert "Schedule: Every week" in body
+    assert "Appointments: 3" in body
+    assert "Timezone: Asia/Kolkata" in body
+
+    expected_occurrences = []
+    for occurrence_number in range(3):
+        local_start = datetime.combine(
+            start_date + timedelta(weeks=occurrence_number),
+            time(10),
+            tzinfo=ZoneInfo("Asia/Kolkata"),
+        )
+        expected_date = (
+            f"{local_start:%A}, {local_start:%B} {local_start.day}, {local_start:%Y}"
+        )
+        expected_occurrences.append(
+            f"{occurrence_number + 1}. {expected_date} — 10:00 AM"
+        )
+
+    assert all(occurrence in body for occurrence in expected_occurrences)
+    assert f"First appointment: {expected_occurrences[0].split('. ', 1)[1]}" in body
+    assert f"Last appointment: {expected_occurrences[-1].split('. ', 1)[1]}" in body
+
+    with SessionLocal() as db:
+        series = db.get(AppointmentSeries, series_id)
+        assert series.customer_id == series_records["customer_id"]
+        owner = db.get(User, series_records["customer_id"])
+        assert owner.email != recipient_email
+        assert recipient != owner.email
+        appointments = db.scalars(
+            select(Appointment)
+            .where(Appointment.series_id == series.id)
+            .order_by(Appointment.occurrence_number)
+        ).all()
+        assert all(
+            appointment.user_email == recipient_email for appointment in appointments
+        )
+        assert all(
+            appointment.appointment_start.isoformat() not in body
+            for appointment in appointments
+        )
+
+
+def test_missing_series_confirmation_does_nothing():
+    from app.tasks.notification_tasks import send_series_confirmation_notification
+
+    send_series_confirmation_notification.run(str(uuid4()))
 
 
 def test_unauthenticated_and_non_customer_users_are_rejected(series_records):
@@ -463,14 +563,15 @@ def test_unavailable_occurrence_rolls_back_entire_series(series_records, monkeyp
     db.commit()
     db.close()
 
-    notifications = []
+    enqueued_series = []
+    scheduled_appointments = []
     monkeypatch.setattr(
-        "app.services.appointment_series.enqueue_confirmation_notification",
-        lambda appointment: notifications.append(appointment.id),
+        "app.services.appointment_series.enqueue_series_confirmation_notification",
+        lambda series_id: enqueued_series.append(series_id),
     )
     monkeypatch.setattr(
         "app.services.appointment_series.schedule_appointment_notifications",
-        lambda appointment: notifications.append(appointment.id),
+        lambda appointment: scheduled_appointments.append(appointment.id),
     )
     response = client.post(
         "/api/appointment-series",
@@ -487,7 +588,8 @@ def test_unavailable_occurrence_rolls_back_entire_series(series_records, monkeyp
     )
     assert _count_records(AppointmentSeries, series_records["provider_id"]) == 0
     assert _count_records(Appointment, series_records["provider_id"]) == 1
-    assert notifications == []
+    assert enqueued_series == []
+    assert scheduled_appointments == []
 
 
 def test_existing_appointment_buffer_snapshot_blocks_occurrence(series_records):
@@ -620,14 +722,15 @@ def test_end_date_recurrence_over_52_occurrences_is_rejected(series_records):
 def test_database_failure_rolls_back_without_leaking_or_notifying(
     series_records, monkeypatch
 ):
-    notifications = []
+    enqueued_series = []
+    scheduled_appointments = []
     monkeypatch.setattr(
-        "app.services.appointment_series.enqueue_confirmation_notification",
-        lambda appointment: notifications.append(appointment.id),
+        "app.services.appointment_series.enqueue_series_confirmation_notification",
+        lambda series_id: enqueued_series.append(series_id),
     )
     monkeypatch.setattr(
         "app.services.appointment_series.schedule_appointment_notifications",
-        lambda appointment: notifications.append(appointment.id),
+        lambda appointment: scheduled_appointments.append(appointment.id),
     )
     db = SessionLocal()
 
@@ -653,7 +756,8 @@ def test_database_failure_rolls_back_without_leaking_or_notifying(
     assert response.status_code == 500
     assert response.json()["detail"] == "Unable to create appointment series"
     assert "private database detail" not in response.text
-    assert notifications == []
+    assert enqueued_series == []
+    assert scheduled_appointments == []
     assert _count_records(AppointmentSeries, series_records["provider_id"]) == 0
     assert _count_records(Appointment, series_records["provider_id"]) == 0
 

@@ -19,14 +19,16 @@ from app.services.booking import (
     _build_appointment,
     _lock_provider_and_get_service,
     _validate_slot,
-    enqueue_confirmation_notification,
     schedule_appointment_notifications,
 )
 from app.services.recurrence import (
     RecurrenceValidationError,
     generate_occurrence_starts,
 )
-from app.tasks.notification_tasks import send_cancellation_notification
+from app.tasks.notification_tasks import (
+    enqueue_series_confirmation_notification,
+    send_cancellation_notification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,15 +91,17 @@ def _record_conflict(
     )
 
 
-def _enqueue_notifications(appointments: list[Appointment]) -> None:
+def _enqueue_notifications(
+    series: AppointmentSeries, appointments: list[Appointment]
+) -> None:
+    try:
+        enqueue_series_confirmation_notification(str(series.id))
+    except Exception:
+        logger.exception(
+            "Unable to enqueue confirmation notification for series %s", series.id
+        )
+
     for appointment in appointments:
-        try:
-            enqueue_confirmation_notification(appointment)
-        except Exception:
-            logger.exception(
-                "Unable to enqueue confirmation notification for appointment %s",
-                appointment.id,
-            )
         try:
             schedule_appointment_notifications(appointment)
         except Exception:
@@ -241,7 +245,7 @@ def create_appointment_series(
         db.rollback()
         raise
 
-    _enqueue_notifications(appointments)
+    _enqueue_notifications(series, appointments)
     return series, appointments
 
 
