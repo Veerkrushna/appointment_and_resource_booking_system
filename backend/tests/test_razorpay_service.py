@@ -23,6 +23,51 @@ def test_create_order_sends_amount_currency_and_receipt():
     )
 
 
+def test_verify_payment_checks_signature_and_captured_payment_order():
+    client = MagicMock()
+    client.utility.verify_payment_signature.return_value = True
+    client.payment.fetch.return_value = {
+        "order_id": "order_test",
+        "status": "captured",
+    }
+    service = RazorpayService(client=client)
+
+    assert service.verify_payment("order_test", "pay_test", "signature_test")
+    client.utility.verify_payment_signature.assert_called_once_with(
+        {
+            "razorpay_order_id": "order_test",
+            "razorpay_payment_id": "pay_test",
+            "razorpay_signature": "signature_test",
+        }
+    )
+    client.payment.fetch.assert_called_once_with("pay_test")
+
+
+def test_verify_payment_rejects_invalid_signature_without_fetching_payment():
+    client = MagicMock()
+    client.utility.verify_payment_signature.return_value = False
+    service = RazorpayService(client=client)
+
+    assert not service.verify_payment("order_test", "pay_test", "invalid")
+    client.payment.fetch.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "payment_response",
+    [
+        {"order_id": "different_order", "status": "captured"},
+        {"order_id": "order_test", "status": "authorized"},
+    ],
+)
+def test_verify_payment_rejects_non_captured_or_mismatched_payment(payment_response):
+    client = MagicMock()
+    client.utility.verify_payment_signature.return_value = True
+    client.payment.fetch.return_value = payment_response
+    service = RazorpayService(client=client)
+
+    assert not service.verify_payment("order_test", "pay_test", "signature_test")
+
+
 @pytest.mark.parametrize(
     "failure",
     [

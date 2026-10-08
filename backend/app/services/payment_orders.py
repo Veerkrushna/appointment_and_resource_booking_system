@@ -39,13 +39,14 @@ def _ensure_no_active_hold(
     end_utc: datetime,
     buffer_time_minutes: int,
     now_utc: datetime,
+    exclude_hold_id=None,
 ) -> None:
     requested_blocked_end = end_utc + timedelta(minutes=buffer_time_minutes)
     held_blocked_end = BookingHold.appointment_end + (
         func.coalesce(Service.buffer_time_minutes, 0)
         * literal_column("INTERVAL '1 minute'")
     )
-    overlapping_hold = db.scalar(
+    query = (
         select(BookingHold.id)
         .join(Service, Service.id == BookingHold.service_id)
         .where(
@@ -57,6 +58,9 @@ def _ensure_no_active_hold(
         )
         .limit(1)
     )
+    if exclude_hold_id is not None:
+        query = query.where(BookingHold.id != exclude_hold_id)
+    overlapping_hold = db.scalar(query)
     if overlapping_hold is not None:
         raise BookingConflictError("Appointment slot is already held")
 
