@@ -96,6 +96,9 @@ def payment_order_records(monkeypatch):
     records = {
         "customer_id": customer.id,
         "customer_token": create_access_token(customer.id, customer.role),
+        "customer_name": customer.name,
+        "customer_email": customer.email,
+        "customer_phone": customer.phone,
         "other_customer_id": other_customer.id,
         "other_customer_token": create_access_token(
             other_customer.id, other_customer.role
@@ -162,6 +165,10 @@ def _request_order(records, *, token=None, body=None):
             "service_id": str(records["service_id"]),
             "provider_id": str(records["provider_id"]),
             "appointment_start": records["appointment_start"].isoformat(),
+            "user_name": "Appointment Recipient",
+            "user_email": "appointment-recipient@example.com",
+            "user_phone": "+15550001111",
+            "notes": "Recipient booking notes",
         },
     )
 
@@ -223,11 +230,71 @@ def test_creates_payment_order_and_active_hold(payment_order_records, monkeypatc
     assert hold is not None
     assert hold.status == BookingHoldStatus.ACTIVE
     assert hold.customer_id == records["customer_id"]
+    assert hold.user_name == "Appointment Recipient"
+    assert hold.user_email == "appointment-recipient@example.com"
+    assert hold.user_phone == "+15550001111"
+    assert hold.notes == "Recipient booking notes"
     assert hold.appointment_start == records["appointment_start"]
     assert hold.appointment_end == records["appointment_start"] + timedelta(minutes=30)
     assert hold.expires_at > datetime.now(UTC)
     assert hold.expires_at <= datetime.now(UTC) + timedelta(minutes=11)
     assert appointment_count == 0
+    db.close()
+
+
+def test_payment_order_rejects_client_customer_id(payment_order_records, monkeypatch):
+    records = payment_order_records
+    calls = _mock_razorpay_order(monkeypatch)
+
+    response = _request_order(
+        records,
+        body={
+            "service_id": str(records["service_id"]),
+            "provider_id": str(records["provider_id"]),
+            "appointment_start": records["appointment_start"].isoformat(),
+            "user_name": "Appointment Recipient",
+            "user_email": "appointment-recipient@example.com",
+            "customer_id": str(records["other_customer_id"]),
+        },
+    )
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_payment_order_can_snapshot_authenticated_customer_as_recipient(
+    payment_order_records, monkeypatch
+):
+    records = payment_order_records
+    _mock_razorpay_order(monkeypatch)
+
+    response = _request_order(
+        records,
+        body={
+            "service_id": str(records["service_id"]),
+            "provider_id": str(records["provider_id"]),
+            "appointment_start": records["appointment_start"].isoformat(),
+            "user_name": records["customer_name"],
+            "user_email": records["customer_email"],
+            "user_phone": records["customer_phone"],
+            "notes": None,
+        },
+    )
+
+    assert response.status_code == 201
+    db = SessionLocal()
+    payment = db.get(Payment, response.json()["payment_id"])
+    hold = db.scalar(
+        select(BookingHold).where(
+            BookingHold.payment_id == response.json()["payment_id"]
+        )
+    )
+    assert payment.customer_id == records["customer_id"]
+    assert hold.customer_id == records["customer_id"]
+    assert hold.user_name == records["customer_name"]
+    assert hold.user_email == records["customer_email"]
+    assert hold.user_phone == records["customer_phone"]
+    assert hold.notes is None
     db.close()
 
 
@@ -270,6 +337,8 @@ def test_active_hold_makes_slot_unavailable(payment_order_records, monkeypatch):
         customer_id=records["customer_id"],
         service_id=records["service_id"],
         provider_id=records["provider_id"],
+        user_name="Existing Hold Recipient",
+        user_email="existing-hold@example.com",
         appointment_start=records["appointment_start"],
         appointment_end=records["appointment_start"] + timedelta(minutes=30),
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
@@ -311,6 +380,8 @@ def test_concurrent_order_requests_create_only_one_hold(
                 service_id=records["service_id"],
                 provider_id=records["provider_id"],
                 appointment_start=records["appointment_start"],
+                user_name="Concurrent Recipient",
+                user_email="concurrent-recipient@example.com",
             )
             barrier.wait(timeout=5)
             payment = create_appointment_payment_order(db, customer, payload)

@@ -72,10 +72,11 @@ def _build_held_appointment(
     payload = AppointmentCreate(
         service_id=service.id,
         provider_id=hold.provider_id,
-        user_name=customer.name,
-        user_email=customer.email,
-        user_phone=customer.phone,
+        user_name=hold.user_name,
+        user_email=hold.user_email,
+        user_phone=hold.user_phone,
         appointment_start=start_utc,
+        notes=hold.notes,
     )
     appointment = _build_appointment(
         payload,

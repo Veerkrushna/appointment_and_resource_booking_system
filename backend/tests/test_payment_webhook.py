@@ -100,9 +100,13 @@ def webhook_records(monkeypatch):
         customer_id=customer.id,
         service_id=service.id,
         provider_id=provider.id,
+        user_name="Webhook Recipient",
+        user_email="webhook-recipient@example.com",
+        user_phone="+15550003333",
         appointment_start=appointment_start,
         appointment_end=appointment_start + timedelta(minutes=30),
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        notes="Webhook recipient notes",
         status=BookingHoldStatus.ACTIVE,
         payment_id=payment.id,
     )
@@ -119,6 +123,10 @@ def webhook_records(monkeypatch):
         "event_id": f"evt_{uuid4().hex}",
         "signature": f"signature_{uuid4().hex}",
         "appointment_start": appointment_start,
+        "recipient_name": "Webhook Recipient",
+        "recipient_email": "webhook-recipient@example.com",
+        "recipient_phone": "+15550003333",
+        "recipient_notes": "Webhook recipient notes",
         "test_event_ids": [],
     }
     db.close()
@@ -229,6 +237,11 @@ def test_valid_captured_webhook_creates_confirmed_appointment(
     assert len(appointments) == 1
     assert appointments[0].status == AppointmentStatus.CONFIRMED
     assert appointments[0].buffer_time_minutes == 10
+    assert appointments[0].customer_id == records["customer_id"]
+    assert appointments[0].user_name == records["recipient_name"]
+    assert appointments[0].user_email == records["recipient_email"]
+    assert appointments[0].user_phone == records["recipient_phone"]
+    assert appointments[0].notes == records["recipient_notes"]
     assert payment.status == PaymentStatus.CAPTURED
     assert payment.provider_payment_id == records["provider_payment_id"]
     assert payment.provider_signature is None
@@ -505,6 +518,22 @@ def test_webhook_before_browser_verification_is_idempotent(
 
     assert response.status_code == browser_response.status_code == 200
     assert len(_state(records)[2]) == 1
+
+
+def test_webhook_before_browser_uses_hold_recipient_snapshot(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+    response, _ = _post_webhook(records, monkeypatch)
+
+    assert response.status_code == 200
+    appointment = _state(records)[2][0]
+    assert appointment.customer_id == records["customer_id"]
+    assert appointment.user_name == records["recipient_name"]
+    assert appointment.user_email == records["recipient_email"]
+    assert appointment.user_phone == records["recipient_phone"]
+    assert appointment.notes == records["recipient_notes"]
 
 
 @pytest.mark.parametrize(

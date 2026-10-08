@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.appointment import AppointmentStatus
 from app.models.payment import PaymentStatus
@@ -13,6 +13,10 @@ class AppointmentPaymentOrderCreate(BaseModel):
     service_id: UUID
     provider_id: UUID
     appointment_start: datetime
+    user_name: str = Field(min_length=1, max_length=255)
+    user_email: EmailStr
+    user_phone: str | None = Field(default=None, max_length=30)
+    notes: str | None = None
 
 
 class PaymentOrderResponse(BaseModel):

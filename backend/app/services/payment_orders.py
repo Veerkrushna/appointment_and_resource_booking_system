@@ -107,9 +107,13 @@ def create_appointment_payment_order(
             customer_id=customer.id,
             service_id=service.id,
             provider_id=provider.id,
+            user_name=payload.user_name,
+            user_email=str(payload.user_email),
+            user_phone=payload.user_phone,
             appointment_start=start_utc,
             appointment_end=end_utc,
             expires_at=expires_at,
+            notes=payload.notes,
             status=BookingHoldStatus.ACTIVE,
             payment_id=payment_id,
         )

@@ -96,9 +96,13 @@ def verification_records():
         customer_id=customer.id,
         service_id=service.id,
         provider_id=provider.id,
+        user_name="Verification Recipient",
+        user_email="verification-recipient@example.com",
+        user_phone="+15550002222",
         appointment_start=appointment_start,
         appointment_end=appointment_start + timedelta(minutes=30),
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        notes="Verification recipient notes",
         status=BookingHoldStatus.ACTIVE,
         payment_id=payment.id,
     )
@@ -107,6 +111,9 @@ def verification_records():
 
     records = {
         "customer_id": customer.id,
+        "customer_name": customer.name,
+        "customer_email": customer.email,
+        "customer_phone": customer.phone,
         "customer_token": create_access_token(customer.id, customer.role),
         "other_customer_token": create_access_token(
             other_customer.id, other_customer.role
@@ -119,6 +126,10 @@ def verification_records():
         "payment_provider_id": f"pay_{uuid4().hex}",
         "signature": f"signature_{uuid4().hex}",
         "appointment_start": appointment_start,
+        "recipient_name": "Verification Recipient",
+        "recipient_email": "verification-recipient@example.com",
+        "recipient_phone": "+15550002222",
+        "recipient_notes": "Verification recipient notes",
     }
     db.close()
     try:
@@ -219,6 +230,14 @@ def test_valid_signature_captures_payment_and_converts_hold(
     assert str(payment.appointment_id) == data["appointment_id"]
     assert hold.status == BookingHoldStatus.CONVERTED
     assert appointment_count == 1
+    db = SessionLocal()
+    appointment = db.get(Appointment, data["appointment_id"])
+    assert appointment.customer_id == records["customer_id"]
+    assert appointment.user_name == records["recipient_name"]
+    assert appointment.user_email == records["recipient_email"]
+    assert appointment.user_phone == records["recipient_phone"]
+    assert appointment.notes == records["recipient_notes"]
+    db.close()
 
 
 def test_invalid_signature_does_not_capture_payment(verification_records, monkeypatch):
@@ -233,6 +252,53 @@ def test_invalid_signature_does_not_capture_payment(verification_records, monkey
     assert payment.appointment_id is None
     assert hold.status == BookingHoldStatus.ACTIVE
     assert appointment_count == 0
+
+
+@pytest.mark.parametrize(
+    ("recipient_name", "recipient_email"),
+    [
+        pytest.param(None, None, id="book-for-self"),
+        ("Someone Else", "someone-else@example.com"),
+    ],
+)
+def test_verification_uses_saved_recipient_not_verify_request(
+    verification_records, monkeypatch, recipient_name, recipient_email
+):
+    records = verification_records
+    if recipient_name is None:
+        recipient_name = records["customer_name"]
+        recipient_email = records["customer_email"]
+    db = SessionLocal()
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    hold.user_name = recipient_name
+    hold.user_email = recipient_email
+    hold.user_phone = (
+        records["customer_phone"]
+        if recipient_name == records["customer_name"]
+        else None
+    )
+    hold.notes = None
+    db.commit()
+    db.close()
+    _stub_verification(monkeypatch)
+
+    response = _verify_request(records)
+
+    assert response.status_code == 200
+    db = SessionLocal()
+    appointment = db.get(Appointment, response.json()["appointment_id"])
+    assert appointment.customer_id == records["customer_id"]
+    assert appointment.user_name == recipient_name
+    assert appointment.user_email == recipient_email
+    assert appointment.user_phone == (
+        records["customer_phone"]
+        if recipient_name == records["customer_name"]
+        else None
+    )
+    assert appointment.notes is None
+    db.close()
 
 
 @pytest.mark.parametrize(
