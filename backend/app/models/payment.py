@@ -76,7 +76,7 @@ class Payment(Base):
     provider: Mapped[PaymentProvider] = mapped_column(
         SQLEnum(PaymentProvider, name="payment_provider"), nullable=False
     )
-    provider_order_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_signature: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -163,6 +163,16 @@ def test_payment_without_booking_is_valid_before_booking(payment_records):
     db.close()
 
 
+def test_payment_can_exist_before_provider_order_creation(payment_records):
+    db = SessionLocal()
+    payment = make_payment(payment_records)
+    payment.provider_order_id = None
+    db.add(payment)
+    db.commit()
+    assert payment.provider_order_id is None
+    db.close()
+
+
 def test_captured_payment_can_precede_booking_creation(payment_records):
     db = SessionLocal()
     payment = make_payment(payment_records)
