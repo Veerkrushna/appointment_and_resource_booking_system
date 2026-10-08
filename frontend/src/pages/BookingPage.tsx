@@ -30,11 +30,20 @@ import {
   createAppointmentSeries,
 } from "../lib/appointmentSeries";
 import type { AppointmentSeriesResponse } from "../lib/appointmentSeries";
+import {
+  PaymentApiError,
+  createPaymentOrder,
+  verifyPayment,
+} from "../lib/payments";
+import type { PaymentOrderResponse } from "../lib/payments";
+import { openRazorpayCheckout } from "../lib/razorpayCheckout";
+import type { CheckoutResult } from "../lib/razorpayCheckout";
 import BookingSummary from "../features/booking/components/BookingSummary";
 import BookingSteps from "../features/booking/components/BookingSteps";
 import StepDateTime from "../features/booking/components/StepDateTime";
 import StepDetails from "../features/booking/components/StepDetails";
 import StepConfirmation from "../features/booking/components/StepConfirmation";
+import type { PaymentFlowState } from "../features/booking/components/StepConfirmation";
 
 function BookingPage() {
   const { token, customer, isLoading: authIsLoading } = useAuth();
@@ -144,6 +153,12 @@ function BookingPage() {
   const [error, setError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingOutcomeUnknown, setBookingOutcomeUnknown] = useState(false);
+  const [paymentFlowState, setPaymentFlowState] =
+    useState<PaymentFlowState>("ready");
+  const [activePaymentOrder, setActivePaymentOrder] = useState<{
+    order: PaymentOrderResponse;
+    requestKey: string;
+  } | null>(null);
   const [step, setStep] = useState(initialBookingState.step);
   const recurrenceStartDate = selectedSlot?.date || date;
   const recurrenceValidation = useMemo(
@@ -632,46 +647,90 @@ function BookingPage() {
       return;
     }
 
+    if (authIsLoading) {
+      setBookingError("Checking your account. Please try again in a moment.");
+      return;
+    }
+    if (!token || !customer || customer.role.toLowerCase() !== "customer") {
+      setBookingError(
+        "Sign in with a customer account to make a paid booking.",
+      );
+      return;
+    }
+
     bookingSubmissionInFlight.current = true;
     setIsSubmitting(true);
     setBookingError(null);
     setBookingOutcomeUnknown(false);
-    let responseReceived = false;
-    let responseStatus = 0;
+    let verificationAttempted = false;
     try {
-      const response = await fetch("/api/appointments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          service_id: service.id,
-          provider_id: selectedSlot.provider_id,
-          user_name: details.name,
-          user_email: details.email,
-          user_phone: details.phone || null,
-          appointment_start: selectedSlot.start,
-          notes: details.notes || null,
-        }),
-      });
-      responseReceived = true;
-      responseStatus = response.status;
+      const paymentRequest = {
+        service_id: service.id,
+        provider_id: selectedSlot.provider_id,
+        appointment_start: selectedSlot.start,
+        user_name: details.name,
+        user_email: details.email,
+        user_phone: details.phone || null,
+        notes: details.notes || null,
+      };
+      const requestKey = JSON.stringify(paymentRequest);
+      let order =
+        activePaymentOrder?.requestKey === requestKey &&
+        new Date(activePaymentOrder.order.hold_expires_at).getTime() >
+          Date.now()
+          ? activePaymentOrder.order
+          : null;
 
-      if (!response.ok) {
-        let message = "Unable to confirm this booking.";
-        try {
-          const body = await response.json();
-          if (typeof body.detail === "string") {
-            message = body.detail;
-          }
-        } catch {
-          // Keep the fallback for non-JSON error responses.
-        }
-        throw new Error(message);
+      if (!order) {
+        setPaymentFlowState("creating-order");
+        order = await createPaymentOrder(token, paymentRequest);
+        setActivePaymentOrder({ order, requestKey });
       }
 
+      setPaymentFlowState("loading-checkout");
+      let checkoutResult: CheckoutResult;
+      try {
+        checkoutResult = await openRazorpayCheckout(
+          order,
+          service.name,
+          selectedSlot.provider_name,
+          details.name,
+          details.email,
+          details.phone,
+        );
+      } catch {
+        setPaymentFlowState("failed");
+        setBookingError(
+          "Razorpay Checkout couldn't be opened. Your slot is temporarily held and will be released automatically if you don't complete payment. You can retry payment using this order or leave the page.",
+        );
+        return;
+      }
+
+      if (checkoutResult.kind === "dismissed") {
+        setPaymentFlowState("dismissed");
+        setBookingError(
+          "Payment was not completed. Your slot is temporarily held and will be released automatically if you don't complete payment.",
+        );
+        return;
+      }
+      if (checkoutResult.kind === "failed") {
+        setPaymentFlowState("failed");
+        setBookingError(
+          "Razorpay reported that the payment was not completed. Your slot may remain temporarily held until the hold expires.",
+        );
+        return;
+      }
+      setPaymentFlowState("verifying");
+      verificationAttempted = true;
+      await verifyPayment(token, {
+        payment_id: order.payment_id,
+        order_id: checkoutResult.response.razorpay_order_id,
+        signature: checkoutResult.response.razorpay_signature,
+      });
+
       window.sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY);
+      setPaymentFlowState("confirmed");
+      setActivePaymentOrder(null);
       setIsConfirmed(true);
       setAvailableSlots((current) =>
         current.filter(
@@ -681,14 +740,25 @@ function BookingPage() {
         ),
       );
     } catch (requestError) {
-      const outcomeUnknown = !responseReceived || responseStatus >= 500;
+      const outcomeUnknown = verificationAttempted
+        ? !(
+            requestError instanceof PaymentApiError &&
+            (requestError.status === 400 || requestError.status === 422)
+          )
+        : requestError instanceof PaymentApiError &&
+          (requestError.status === null || requestError.status >= 500);
       setBookingOutcomeUnknown(outcomeUnknown);
-      setBookingError(
+      setPaymentFlowState(
         outcomeUnknown
-          ? "We couldn't confirm whether your booking was created. Check My Appointments before trying again."
-          : requestError instanceof Error
-            ? requestError.message
-            : "Unable to confirm this booking.",
+          ? verificationAttempted
+            ? "unknown"
+            : "order-unknown"
+          : "failed",
+      );
+      setBookingError(
+        requestError instanceof PaymentApiError
+          ? requestError.message
+          : "Unable to start payment. Please review the booking and try again.",
       );
     } finally {
       bookingSubmissionInFlight.current = false;
@@ -797,6 +867,7 @@ function BookingPage() {
               setStep={setStep}
               isSubmitting={isSubmitting}
               bookingOutcomeUnknown={bookingOutcomeUnknown}
+              paymentFlowState={paymentFlowState}
               recurringSeries={recurringSeries}
               recurrenceValidation={recurrenceValidation}
               recurrenceOccurrences={recurrenceOccurrences}
