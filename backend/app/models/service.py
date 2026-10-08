@@ -2,6 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, Numeric, String, func
 from sqlalchemy import Enum as SQLEnum
@@ -10,6 +11,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
 from app.models.provider_service import ProviderService
+
+if TYPE_CHECKING:
+    from app.models.booking_hold import BookingHold
 
 
 class ServiceStatus(enum.StrEnum):
@@ -81,6 +85,7 @@ class Service(Base):
     provider_links: Mapped[list["ProviderService"]] = relationship(
         back_populates="service", cascade="all, delete-orphan"
     )
+    booking_holds: Mapped[list["BookingHold"]] = relationship(back_populates="service")
 
     def __repr__(self) -> str:
         return f"<Service id={self.id} name={self.name!r} status={self.status.value}>"

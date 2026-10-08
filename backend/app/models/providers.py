@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         ProviderBlackoutDate,
         ProviderBreak,
     )
+    from app.models.booking_hold import BookingHold
     from app.models.provider_service import ProviderService
     from app.models.review import Review
     from app.models.user import User
@@ -100,6 +101,7 @@ class Provider(Base):
     service_links: Mapped[list["ProviderService"]] = relationship(
         back_populates="provider", cascade="all, delete-orphan"
     )
+    booking_holds: Mapped[list["BookingHold"]] = relationship(back_populates="provider")
 
     user: Mapped["User | None"] = relationship(back_populates="provider_profile")
     reviews: Mapped[list["Review"]] = relationship(

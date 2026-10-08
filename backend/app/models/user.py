@@ -11,6 +11,8 @@ from app.db.database import Base
 
 if TYPE_CHECKING:
     from app.models.appointment_series import AppointmentSeries
+    from app.models.booking_hold import BookingHold
+    from app.models.payment import Payment
     from app.models.providers import Provider
     from app.models.review import Review
 
@@ -81,6 +83,8 @@ class User(Base):
     appointment_series: Mapped[list["AppointmentSeries"]] = relationship(
         back_populates="customer"
     )
+    payments: Mapped[list["Payment"]] = relationship(back_populates="customer")
+    booking_holds: Mapped[list["BookingHold"]] = relationship(back_populates="customer")
     provider_profile: Mapped["Provider | None"] = relationship(back_populates="user")
     reviews: Mapped[list["Review"]] = relationship(
         back_populates="customer", cascade="all, delete", passive_deletes=True

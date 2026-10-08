@@ -22,6 +22,7 @@ from app.db.database import Base
 
 if TYPE_CHECKING:
     from app.models.appointment import Appointment
+    from app.models.payment import Payment
     from app.models.providers import Provider
     from app.models.service import Service
     from app.models.user import User
@@ -129,3 +130,4 @@ class AppointmentSeries(Base):
     appointments: Mapped[list["Appointment"]] = relationship(
         back_populates="series", passive_deletes="all"
     )
+    payment: Mapped["Payment | None"] = relationship(back_populates="series")
