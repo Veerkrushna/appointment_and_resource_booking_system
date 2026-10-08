@@ -299,6 +299,8 @@ def test_duplicate_verification_returns_existing_appointment(
         .select_from(BookingHold)
         .where(BookingHold.payment_id == records["payment_id"])
     )
+    db.get(Payment, records["payment_id"]).provider_signature = None
+    db.commit()
     db.close()
 
     commits = []
@@ -313,7 +315,7 @@ def test_duplicate_verification_returns_existing_appointment(
 
     assert first.status_code == second.status_code == 200
     assert first_data["appointment_id"] == second.json()["appointment_id"]
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert commits == []
 
     db = SessionLocal()

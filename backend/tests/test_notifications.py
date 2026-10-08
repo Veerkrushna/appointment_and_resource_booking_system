@@ -17,6 +17,7 @@ from app.services.booking import create_appointment
 from app.services.notifications import send_booking_confirmation
 from app.tasks.notification_tasks import (
     schedule_appointment_notifications,
+    send_confirmation_notification,
     send_email_reminder,
 )
 
@@ -169,6 +170,39 @@ def test_booking_confirmation_creates_sent_notification(notification_records):
 
     assert notification is not None
     assert notification.status == NotificationStatus.SENT
+    mock_send_email.assert_called_once()
+
+
+def test_confirmation_task_is_idempotent_on_redelivery(notification_records):
+    provider_id, service_id = notification_records
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="Repeated Confirmation Test",
+                user_email=f"repeated-confirmation-{uuid4()}@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+        appointment_id = str(appointment.id)
+
+    with patch("app.services.notifications._send_email") as mock_send_email:
+        send_confirmation_notification.run(appointment_id)
+        send_confirmation_notification.run(appointment_id)
+
+    with SessionLocal() as db:
+        notifications = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id == appointment.id,
+                Notification.notification_type == NotificationType.CONFIRMATION,
+                Notification.recipient_email == appointment.user_email,
+            )
+        ).all()
+
+    assert len(notifications) == 1
+    assert notifications[0].status == NotificationStatus.SENT
     mock_send_email.assert_called_once()
 
 

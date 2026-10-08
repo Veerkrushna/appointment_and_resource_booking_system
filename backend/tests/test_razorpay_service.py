@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from pydantic import SecretStr
-from razorpay.errors import ServerError
+from razorpay.errors import ServerError, SignatureVerificationError
 
 from app.core.config import Settings
 from app.services.razorpay import RazorpayIntegrationError, RazorpayService
@@ -66,6 +66,51 @@ def test_verify_payment_rejects_non_captured_or_mismatched_payment(payment_respo
     service = RazorpayService(client=client)
 
     assert not service.verify_payment("order_test", "pay_test", "signature_test")
+
+
+def test_webhook_signature_uses_raw_body_and_separate_webhook_secret(monkeypatch):
+    client = MagicMock()
+    client.utility.verify_webhook_signature.return_value = True
+    monkeypatch.setattr(
+        "app.services.razorpay.settings.razorpay_webhook_secret",
+        SecretStr("test_webhook_secret"),
+    )
+    service = RazorpayService(client=client)
+    raw_body = b'{ "event":"payment.captured", "payload":{} }'
+
+    assert service.verify_webhook_signature(raw_body, "test_signature")
+    client.utility.verify_webhook_signature.assert_called_once_with(
+        raw_body.decode("utf-8"), "test_signature", "test_webhook_secret"
+    )
+
+
+def test_invalid_webhook_signature_is_safely_rejected(monkeypatch):
+    client = MagicMock()
+    client.utility.verify_webhook_signature.side_effect = SignatureVerificationError(
+        "test_webhook_secret"
+    )
+    monkeypatch.setattr(
+        "app.services.razorpay.settings.razorpay_webhook_secret",
+        SecretStr("test_webhook_secret"),
+    )
+    service = RazorpayService(client=client)
+
+    assert not service.verify_webhook_signature(b"{}", "invalid")
+
+
+def test_webhook_secret_loads_separately_from_api_secret(monkeypatch):
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "test_api_secret")
+    monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", "test_webhook_secret")
+
+    configured = Settings(
+        _env_file=None,
+        database_url="postgresql://localhost/test",
+    )
+
+    assert configured.razorpay_key_secret == SecretStr("test_api_secret")
+    assert configured.razorpay_webhook_secret == SecretStr("test_webhook_secret")
+    assert configured.razorpay_key_secret != configured.razorpay_webhook_secret
+    assert "test_webhook_secret" not in repr(configured)
 
 
 @pytest.mark.parametrize(

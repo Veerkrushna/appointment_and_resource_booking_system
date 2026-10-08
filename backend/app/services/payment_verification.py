@@ -123,24 +123,23 @@ def verify_appointment_payment(
                 "Payment cannot be verified in its current state"
             )
 
+        if payment.status == PaymentStatus.CAPTURED:
+            if (
+                payment.appointment_id is None
+                or payment.appointment is None
+                or payment.provider_payment_id != payload.payment_id
+            ):
+                raise PaymentStateConflictError(
+                    "Captured payment does not match this verification request"
+                )
+            return payment
+
         if not RazorpayService().verify_payment(
             payload.order_id, payload.payment_id, payload.signature
         ):
             raise InvalidPaymentVerificationError(
                 "Payment signature or status is invalid"
             )
-
-        if payment.status == PaymentStatus.CAPTURED:
-            if (
-                payment.appointment_id is None
-                or payment.appointment is None
-                or payment.provider_payment_id != payload.payment_id
-                or payment.provider_signature != payload.signature
-            ):
-                raise PaymentStateConflictError(
-                    "Captured payment does not match this verification request"
-                )
-            return payment
 
         hold = _load_payment_hold(db, payment.id)
         if hold is None or hold.customer_id != customer.id:

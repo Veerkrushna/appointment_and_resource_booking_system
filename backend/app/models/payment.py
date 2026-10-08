@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -37,6 +38,13 @@ class PaymentStatus(enum.StrEnum):
 
 class PaymentProvider(enum.StrEnum):
     RAZORPAY = "RAZORPAY"
+
+
+class PaymentWebhookEventStatus(enum.StrEnum):
+    RECEIVED = "RECEIVED"
+    PROCESSED = "PROCESSED"
+    IGNORED = "IGNORED"
+    FAILED = "FAILED"
 
 
 class Payment(Base):
@@ -93,3 +101,40 @@ class Payment(Base):
     appointment: Mapped["Appointment | None"] = relationship(back_populates="payment")
     series: Mapped["AppointmentSeries | None"] = relationship(back_populates="payment")
     booking_holds: Mapped[list["BookingHold"]] = relationship(back_populates="payment")
+
+
+class PaymentWebhookEvent(Base):
+    __tablename__ = "payment_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_event_id",
+            name="uq_payment_webhook_events_provider_event_id",
+        ),
+        Index("ix_payment_webhook_events_status", "status"),
+        Index("ix_payment_webhook_events_created_at", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[PaymentWebhookEventStatus] = mapped_column(
+        SQLEnum(PaymentWebhookEventStatus, name="payment_webhook_event_status"),
+        nullable=False,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

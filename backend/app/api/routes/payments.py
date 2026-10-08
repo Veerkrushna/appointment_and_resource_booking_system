@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -21,7 +22,8 @@ from app.services.payment_verification import (
     PaymentStateConflictError,
     verify_appointment_payment,
 )
-from app.services.razorpay import RazorpayIntegrationError
+from app.services.payment_webhooks import process_payment_webhook
+from app.services.razorpay import RazorpayIntegrationError, RazorpayService
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -113,3 +115,68 @@ def verify_payment_endpoint(
         appointment_start=appointment.appointment_start,
         appointment_end=appointment.appointment_end,
     )
+
+
+@router.post("/webhook")
+async def razorpay_webhook_endpoint(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    signature: Annotated[str | None, Header(alias="X-Razorpay-Signature")] = None,
+    event_id: Annotated[str | None, Header(alias="X-Razorpay-Event-Id")] = None,
+):
+    if not signature:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing Razorpay signature",
+        )
+
+    raw_body = await request.body()
+    try:
+        signature_valid = RazorpayService().verify_webhook_signature(
+            raw_body, signature
+        )
+    except RazorpayIntegrationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook verification is unavailable",
+        ) from error
+    if not signature_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Razorpay signature",
+        )
+    if not event_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing Razorpay event ID",
+        )
+    if len(event_id) > 255:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Razorpay event ID",
+        )
+
+    try:
+        payload = await request.json()
+    except (UnicodeDecodeError, ValueError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook JSON",
+        ) from error
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook payload",
+        )
+
+    event_type = payload.get("event")
+    if not isinstance(event_type, str) or not event_type or len(event_type) > 100:
+        event_type = "unknown"
+    try:
+        event_status = process_payment_webhook(db, event_id, event_type, payload)
+    except SQLAlchemyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook processing will be retried",
+        ) from error
+    return {"status": event_status.value}
