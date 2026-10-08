@@ -180,8 +180,9 @@ def _verify_request(records, *, token=None, body=None):
         headers={"Authorization": f"Bearer {token or records['customer_token']}"},
         json=body
         or {
-            "payment_id": records["payment_provider_id"],
+            "payment_id": str(records["payment_id"]),
             "order_id": records["order_id"],
+            "provider_payment_id": records["payment_provider_id"],
             "signature": records["signature"],
         },
     )
@@ -213,6 +214,7 @@ def test_valid_signature_captures_payment_and_converts_hold(
 
     assert response.status_code == 200, response.text
     data = response.json()
+    assert data["payment_id"] == str(records["payment_id"])
     assert data["status"] == PaymentStatus.CAPTURED
     assert data["appointment_status"] == AppointmentStatus.CONFIRMED
     assert data["order_id"] == records["order_id"]
@@ -223,6 +225,7 @@ def test_valid_signature_captures_payment_and_converts_hold(
             records["signature"],
         )
     ]
+    assert str(records["payment_id"]) not in [call[1] for call in calls]
     payment, hold, appointment_count = _read_payment_state(records)
     assert payment.status == PaymentStatus.CAPTURED
     assert payment.provider_payment_id == records["payment_provider_id"]
@@ -305,7 +308,7 @@ def test_verification_uses_saved_recipient_not_verify_request(
     "body_change",
     [
         {"order_id": f"order_{uuid4().hex}"},
-        {"payment_id": f"pay_{uuid4().hex}", "order_id": f"order_{uuid4().hex}"},
+        {"payment_id": str(uuid4())},
     ],
 )
 def test_wrong_or_unknown_order_is_rejected(
@@ -314,15 +317,16 @@ def test_wrong_or_unknown_order_is_rejected(
     records = verification_records
     calls = _stub_verification(monkeypatch)
     body = {
-        "payment_id": records["payment_provider_id"],
+        "payment_id": str(records["payment_id"]),
         "order_id": records["order_id"],
+        "provider_payment_id": records["payment_provider_id"],
         "signature": records["signature"],
         **body_change,
     }
 
     response = _verify_request(records, body=body)
 
-    assert response.status_code == 404
+    assert response.status_code == (409 if "order_id" in body_change else 404)
     assert calls == []
     payment, hold, appointment_count = _read_payment_state(records)
     assert payment.status == PaymentStatus.CREATED
@@ -484,8 +488,9 @@ def test_customer_id_is_not_accepted_in_verification_payload(
     records = verification_records
     calls = _stub_verification(monkeypatch)
     body = {
-        "payment_id": records["payment_provider_id"],
+        "payment_id": str(records["payment_id"]),
         "order_id": records["order_id"],
+        "provider_payment_id": records["payment_provider_id"],
         "signature": records["signature"],
         "customer_id": str(records["customer_id"]),
     }
@@ -494,6 +499,47 @@ def test_customer_id_is_not_accepted_in_verification_payload(
 
     assert response.status_code == 422
     assert calls == []
+
+
+def test_provider_payment_id_is_required(verification_records, monkeypatch):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    response = _verify_request(
+        records,
+        body={
+            "payment_id": str(records["payment_id"]),
+            "order_id": records["order_id"],
+            "signature": records["signature"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert calls == []
+
+
+def test_mismatched_provider_payment_id_is_rejected_for_captured_payment(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    first = _verify_request(records)
+    assert first.status_code == 200
+
+    body = {
+        "payment_id": str(records["payment_id"]),
+        "order_id": records["order_id"],
+        "provider_payment_id": f"pay_{uuid4().hex}",
+        "signature": records["signature"],
+    }
+    second = _verify_request(records, body=body)
+
+    assert second.status_code == 409
+    assert len(calls) == 1
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.provider_payment_id == records["payment_provider_id"]
+    assert payment.status == PaymentStatus.CAPTURED
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert appointment_count == 1
 
 
 def test_notifications_are_triggered_only_after_successful_commit(

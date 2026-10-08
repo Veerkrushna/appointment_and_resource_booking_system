@@ -460,8 +460,9 @@ def test_webhook_after_browser_verification_does_not_change_appointment(
             "Authorization": f"Bearer {create_access_token(records['customer_id'], UserRole.CUSTOMER)}"
         },
         json={
-            "payment_id": records["provider_payment_id"],
+            "payment_id": str(records["payment_id"]),
             "order_id": records["order_id"],
+            "provider_payment_id": records["provider_payment_id"],
             "signature": records["signature"],
         },
     )
@@ -510,8 +511,9 @@ def test_webhook_before_browser_verification_is_idempotent(
             "Authorization": f"Bearer {create_access_token(records['customer_id'], UserRole.CUSTOMER)}"
         },
         json={
-            "payment_id": records["provider_payment_id"],
+            "payment_id": str(records["payment_id"]),
             "order_id": records["order_id"],
+            "provider_payment_id": records["provider_payment_id"],
             "signature": records["signature"],
         },
     )

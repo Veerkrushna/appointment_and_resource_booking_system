@@ -31,8 +31,9 @@ class PaymentOrderResponse(BaseModel):
 class PaymentVerificationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    payment_id: str = Field(min_length=1, max_length=255)
+    payment_id: UUID
     order_id: str = Field(min_length=1, max_length=255)
+    provider_payment_id: str = Field(min_length=1, max_length=255)
     signature: str = Field(min_length=1, max_length=512)
 
 

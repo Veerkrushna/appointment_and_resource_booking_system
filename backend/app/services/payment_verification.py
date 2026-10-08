@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -39,13 +40,13 @@ class PaymentStateConflictError(ValueError):
     pass
 
 
-def _load_payment(db: Session, customer: User, order_id: str) -> Payment | None:
+def _load_payment(db: Session, customer: User, payment_id: UUID) -> Payment | None:
     return db.scalar(
         select(Payment)
         .options(selectinload(Payment.appointment))
         .where(
             Payment.customer_id == customer.id,
-            Payment.provider_order_id == order_id,
+            Payment.id == payment_id,
         )
         .with_for_update()
     )
@@ -111,9 +112,18 @@ def verify_appointment_payment(
     payload: PaymentVerificationRequest,
 ) -> Payment:
     try:
-        payment = _load_payment(db, customer, payload.order_id)
+        payment = _load_payment(db, customer, payload.payment_id)
         if payment is None or payment.provider != PaymentProvider.RAZORPAY:
             raise PaymentNotFoundError("Payment was not found")
+        if not payment.provider_order_id:
+            raise PaymentStateConflictError("Payment has no provider order ID")
+        if payload.order_id != payment.provider_order_id:
+            raise PaymentStateConflictError("Payment order ID does not match")
+        if (
+            payment.provider_payment_id is not None
+            and payment.provider_payment_id != payload.provider_payment_id
+        ):
+            raise PaymentStateConflictError("Provider payment ID does not match")
 
         if payment.status not in {
             PaymentStatus.CREATED,
@@ -128,7 +138,7 @@ def verify_appointment_payment(
             if (
                 payment.appointment_id is None
                 or payment.appointment is None
-                or payment.provider_payment_id != payload.payment_id
+                or payment.provider_payment_id != payload.provider_payment_id
             ):
                 raise PaymentStateConflictError(
                     "Captured payment does not match this verification request"
@@ -136,7 +146,9 @@ def verify_appointment_payment(
             return payment
 
         if not RazorpayService().verify_payment(
-            payload.order_id, payload.payment_id, payload.signature
+            payment.provider_order_id,
+            payload.provider_payment_id,
+            payload.signature,
         ):
             raise InvalidPaymentVerificationError(
                 "Payment signature or status is invalid"
@@ -185,7 +197,7 @@ def verify_appointment_payment(
         db.flush()
 
         payment.status = PaymentStatus.CAPTURED
-        payment.provider_payment_id = payload.payment_id
+        payment.provider_payment_id = payload.provider_payment_id
         payment.provider_signature = payload.signature
         payment.appointment_id = appointment.id
         hold.status = BookingHoldStatus.CONVERTED

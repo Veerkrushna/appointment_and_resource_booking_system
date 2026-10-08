@@ -20,6 +20,7 @@ export type PaymentOrderResponse = {
 export type PaymentVerificationRequest = {
   payment_id: string;
   order_id: string;
+  provider_payment_id: string;
   signature: string;
 };
 

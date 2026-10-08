@@ -725,6 +725,7 @@ function BookingPage() {
       await verifyPayment(token, {
         payment_id: order.payment_id,
         order_id: checkoutResult.response.razorpay_order_id,
+        provider_payment_id: checkoutResult.response.razorpay_payment_id,
         signature: checkoutResult.response.razorpay_signature,
       });
 
