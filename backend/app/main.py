@@ -9,6 +9,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.availability import router as availability_router
 from app.api.routes.customer import router as customer_router
 from app.api.routes.password_reset import router as password_reset_router
+from app.api.routes.payments import router as payments_router
 from app.api.routes.providers import router as providers_router
 from app.api.routes.reviews import router as reviews_router
 from app.api.routes.services import router as services_router
@@ -36,6 +37,7 @@ app.include_router(auth_router)
 app.include_router(customer_router)
 app.include_router(terms_router)
 app.include_router(password_reset_router)
+app.include_router(payments_router)
 app.include_router(uploads_router)
 
 # Mount the static files directory for uploads

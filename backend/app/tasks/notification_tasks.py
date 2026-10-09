@@ -94,9 +94,18 @@ def _send_once(
     notification_type: NotificationType,
     recipient_email: str | None,
     recipient_phone: str | None,
+    *,
+    lock_appointment: bool = False,
 ) -> bool:
     with SessionLocal() as db:
-        appointment = db.get(Appointment, appointment_id)
+        if lock_appointment:
+            appointment = db.scalar(
+                select(Appointment)
+                .where(Appointment.id == appointment_id)
+                .with_for_update()
+            )
+        else:
+            appointment = db.get(Appointment, appointment_id)
 
         if appointment is None or appointment.status == AppointmentStatus.CANCELLED:
             return False
@@ -123,7 +132,10 @@ def _send_once(
                 recipient_phone=recipient_phone,
             )
             db.add(notification)
-            db.commit()
+            if not lock_appointment:
+                db.commit()
+            else:
+                db.flush()
 
         return deliver_notification(db, notification, appointment)
 
@@ -138,17 +150,14 @@ def _send_once(
 def send_confirmation_notification(appointment_id: str) -> None:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
-        if appointment is None:
-            return
-
-        notification = Notification(
-            appointment_id=appointment.id,
-            notification_type=NotificationType.CONFIRMATION,
-            recipient_email=appointment.user_email,
-        )
-        db.add(notification)
-        db.commit()
-        deliver_notification(db, notification, appointment)
+        if appointment is not None:
+            _send_once(
+                appointment_id,
+                NotificationType.CONFIRMATION,
+                appointment.user_email,
+                None,
+                lock_appointment=True,
+            )
 
 
 @celery_app.task(

@@ -24,6 +24,7 @@ from app.models.notification import Notification
 
 if TYPE_CHECKING:
     from app.models.appointment_series import AppointmentSeries
+    from app.models.payment import Payment
     from app.models.providers import Provider
     from app.models.review import Review
     from app.models.service import Service
@@ -134,6 +135,7 @@ class Appointment(Base):
     series: Mapped["AppointmentSeries | None"] = relationship(
         back_populates="appointments"
     )
+    payment: Mapped["Payment | None"] = relationship(back_populates="appointment")
     cancellations: Mapped[list["AppointmentCancellation"]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan"
     )

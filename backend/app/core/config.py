@@ -1,3 +1,4 @@
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,11 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_starttls: bool = True
+
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: SecretStr | None = Field(default=None, repr=False)
+    razorpay_webhook_secret: SecretStr | None = Field(default=None, repr=False)
+    payment_hold_duration_minutes: int = Field(default=10, gt=0)
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
