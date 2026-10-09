@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useAuth } from "../auth/useAuth";
+import { useAuth } from "../../auth/useAuth";
 import {
   type Provider,
   type Service,
@@ -7,8 +7,8 @@ import {
   updateProvider,
   fetchServices,
   fetchProviderServices,
-} from "../lib/providers";
-import ProviderForm from "../components/admin/ProviderForm";
+} from "../../lib/providers";
+import ProviderForm from "../../components/admin/ProviderForm";
 
 function formatProviderRating(rating: number) {
   return new Intl.NumberFormat("en-US", {

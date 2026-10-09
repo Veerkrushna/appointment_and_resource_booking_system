@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import type { FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";
+import { useAuth } from "../../auth/useAuth";
 import type {
   Service,
   BookingDetails,
@@ -13,8 +13,8 @@ import type {
   BookingKind,
   RecurrenceAccess,
   RecurrenceOptionsValue,
-} from "../features/booking/types";
-import { generateRecurringOccurrences } from "../features/booking/recurrence";
+} from "../../features/booking/types";
+import { generateRecurringOccurrences } from "../../features/booking/recurrence";
 import {
   BOOKING_DRAFT_STORAGE_KEY,
   readBookingDraft,
@@ -24,26 +24,26 @@ import {
   isValidEmail,
   createDefaultRecurrenceOptions,
   validateRecurrenceOptions,
-} from "../features/booking/utils";
+} from "../../features/booking/utils";
 import {
   AppointmentSeriesApiError,
   createAppointmentSeries,
-} from "../lib/appointmentSeries";
-import type { AppointmentSeriesResponse } from "../lib/appointmentSeries";
+} from "../../lib/appointmentSeries";
+import type { AppointmentSeriesResponse } from "../../lib/appointmentSeries";
 import {
   PaymentApiError,
   createPaymentOrder,
   verifyPayment,
-} from "../lib/payments";
-import type { PaymentOrderResponse } from "../lib/payments";
-import { openRazorpayCheckout } from "../lib/razorpayCheckout";
-import type { CheckoutResult } from "../lib/razorpayCheckout";
-import BookingSummary from "../features/booking/components/BookingSummary";
-import BookingSteps from "../features/booking/components/BookingSteps";
-import StepDateTime from "../features/booking/components/StepDateTime";
-import StepDetails from "../features/booking/components/StepDetails";
-import StepConfirmation from "../features/booking/components/StepConfirmation";
-import type { PaymentFlowState } from "../features/booking/components/StepConfirmation";
+} from "../../lib/payments";
+import type { PaymentOrderResponse } from "../../lib/payments";
+import { openRazorpayCheckout } from "../../lib/razorpayCheckout";
+import type { CheckoutResult } from "../../lib/razorpayCheckout";
+import BookingSummary from "../../features/booking/components/BookingSummary";
+import BookingSteps from "../../features/booking/components/BookingSteps";
+import StepDateTime from "../../features/booking/components/StepDateTime";
+import StepDetails from "../../features/booking/components/StepDetails";
+import StepConfirmation from "../../features/booking/components/StepConfirmation";
+import type { PaymentFlowState } from "../../features/booking/components/StepConfirmation";
 
 function BookingPage() {
   const { token, customer, isLoading: authIsLoading } = useAuth();

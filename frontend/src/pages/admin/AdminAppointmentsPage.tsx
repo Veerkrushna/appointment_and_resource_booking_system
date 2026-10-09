@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "../auth/useAuth";
+import { useAuth } from "../../auth/useAuth";
 import {
   fetchAdminAppointments,
   type AdminAppointment,
   type AdminAppointmentListResponse,
-} from "../lib/adminAppointments";
+} from "../../lib/adminAppointments";
 import AdminAppointmentsFilters, {
   type NamedRecord,
-} from "../features/admin/appointments/AdminAppointmentsFilters";
-import AdminAppointmentsTable from "../features/admin/appointments/AdminAppointmentsTable";
-import AdminAppointmentsPagination from "../features/admin/appointments/AdminAppointmentsPagination";
+} from "../../features/admin/appointments/AdminAppointmentsFilters";
+import AdminAppointmentsTable from "../../features/admin/appointments/AdminAppointmentsTable";
+import AdminAppointmentsPagination from "../../features/admin/appointments/AdminAppointmentsPagination";
 
 export default function AdminAppointmentsPage() {
   const { token } = useAuth();

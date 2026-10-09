@@ -1,4 +1,3 @@
-import React from "react";
 import { Link } from "react-router-dom";
 import ProviderRatingSelect from "../../../components/ProviderRatingSelect";
 import RecurrenceOptions from "./RecurrenceOptions";

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+
 from app.api.routes.admin import router as admin_router
 from app.api.routes.admin_users import router as admin_users_router
 from app.api.routes.appointment_series import router as appointment_series_router

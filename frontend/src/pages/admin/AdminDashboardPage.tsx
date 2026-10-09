@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../auth/useAuth";
-import DashboardStatsGrid from "../features/admin/dashboard/DashboardStatsGrid";
-import DashboardAvailabilityCalendar from "../features/admin/dashboard/DashboardAvailabilityCalendar";
-import DashboardStatusMix from "../features/admin/dashboard/DashboardStatusMix";
-import DashboardActivityTable from "../features/admin/dashboard/DashboardActivityTable";
+import { useAuth } from "../../auth/useAuth";
+import DashboardStatsGrid from "../../features/admin/dashboard/DashboardStatsGrid";
+import DashboardAvailabilityCalendar from "../../features/admin/dashboard/DashboardAvailabilityCalendar";
+import DashboardStatusMix from "../../features/admin/dashboard/DashboardStatusMix";
+import DashboardActivityTable from "../../features/admin/dashboard/DashboardActivityTable";
 
 type Overview = {
   total_appointments: number;

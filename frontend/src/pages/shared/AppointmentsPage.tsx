@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import AppointmentReview from "../components/AppointmentReview";
-import RescheduleFlow from "../components/RescheduleFlow";
-import { useAuth } from "../auth/useAuth";
+import AppointmentReview from "../../components/AppointmentReview";
+import RescheduleFlow from "../../components/RescheduleFlow";
+import { useAuth } from "../../auth/useAuth";
 import {
   cancelCustomerAppointment,
   fetchCustomerAppointments,
   type CustomerAppointment,
   type NamedRecord,
-} from "../lib/customerAppointments";
+} from "../../lib/customerAppointments";
 import {
   cancelAppointmentSeries,
   AppointmentSeriesCancellationError,
   fetchAppointmentSeries,
   type AppointmentSeriesDetail,
-} from "../lib/appointmentSeries";
+} from "../../lib/appointmentSeries";
 type Tab = "upcoming" | "past" | "cancelled";
 
 const tabs: { id: Tab; label: string }[] = [

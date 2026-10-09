@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import RescheduleFlow from "../components/RescheduleFlow";
-import { useAuth } from "../auth/useAuth";
+import RescheduleFlow from "../../components/RescheduleFlow";
+import { useAuth } from "../../auth/useAuth";
 import {
   cancelCustomerAppointment,
   fetchCustomerAppointments,
   type CustomerAppointment,
-} from "../lib/customerAppointments";
+} from "../../lib/customerAppointments";
 
 type NamedRecord = { id: string; name: string };
 

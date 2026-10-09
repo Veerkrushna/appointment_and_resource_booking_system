@@ -2,23 +2,22 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import AppLayout from "../components/AppLayout";
-import AdminDashboardPage from "../pages/AdminDashboardPage";
-import AppointmentsPage from "../pages/AppointmentsPage";
-import BookingPage from "../pages/BookingPage";
-import ProvidersPage from "../pages/ProvidersPage";
-import ServicesPage from "../pages/ServicesPage";
-import AuthPage from "../pages/AuthPage";
-import ForgotPasswordPage from "../pages/ForgotPasswordPage";
-import ProfilePage from "../pages/ProfilePage";
-import TermsPage from "../pages/TermsPage";
-import ProviderDashboardPage from "../pages/ProviderDashboardPage";
-
-import ProviderAvailabilityPage from "../pages/ProviderAvailabilityPage";
-import ProviderServicesPage from "../pages/ProviderServicesPage";
+import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
+import AdminAppointmentsPage from "../pages/admin/AdminAppointmentsPage";
+import AdminServicesPage from "../pages/admin/AdminServicesPage";
+import AdminProvidersPage from "../pages/admin/AdminProvidersPage";
+import ProviderDashboardPage from "../pages/provider/ProviderDashboardPage";
+import ProviderAvailabilityPage from "../pages/provider/ProviderAvailabilityPage";
+import ProviderServicesPage from "../pages/provider/ProviderServicesPage";
+import BookingPage from "../pages/customer/BookingPage";
+import AuthPage from "../pages/auth/AuthPage";
+import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
+import AppointmentsPage from "../pages/shared/AppointmentsPage";
+import ProvidersPage from "../pages/shared/ProvidersPage";
+import ServicesPage from "../pages/shared/ServicesPage";
+import ProfilePage from "../pages/shared/ProfilePage";
+import TermsPage from "../pages/shared/TermsPage";
 import { useAuth } from "../auth/useAuth";
-import AdminAppointmentsPage from "../pages/AdminAppointmentsPage";
-import AdminServicesPage from "../pages/AdminServicesPage";
-import AdminProvidersPage from "../pages/AdminProvidersPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { customer, isLoading } = useAuth();
