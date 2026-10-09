@@ -12,13 +12,22 @@ async function requestAuth(path: string, payload: object) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  const text = await response.text();
+  let body: any = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Response was not JSON
+  }
+
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
     throw new Error(
-      typeof body?.detail === "string" ? body.detail : "Authentication failed.",
+      typeof body?.detail === "string"
+        ? body.detail
+        : body?.message || text || "Authentication failed.",
     );
   }
-  return (await response.json()) as AuthResponse;
+  return body as AuthResponse;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
