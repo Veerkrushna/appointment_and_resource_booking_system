@@ -137,11 +137,14 @@ function AuthPage() {
             method: "POST",
             body: formData,
           });
+          const text = await res.text();
+          let data: any = null;
+          try {
+            data = JSON.parse(text);
+          } catch {}
           if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            throw new Error(data?.detail || "Photo upload failed.");
+            throw new Error(data?.detail || text || "Photo upload failed.");
           }
-          const data = await res.json();
           uploadedPhotoUrl = data.url;
         }
         await register(name, email, password, phone, uploadedPhotoUrl);
