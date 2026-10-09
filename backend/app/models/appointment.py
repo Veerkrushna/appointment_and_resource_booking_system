@@ -32,9 +32,19 @@ if TYPE_CHECKING:
 
 
 class AppointmentStatus(enum.StrEnum):
-    CONFIRMED = "confirmed"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+    @classmethod
+    def _missing_(cls, value):
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().upper()
+        if normalized in cls._value2member_map_:
+            return cls(normalized)
+        return None
 
 
 class Appointment(Base):

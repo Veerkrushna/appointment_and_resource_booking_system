@@ -187,7 +187,7 @@ function AdminProvidersPage() {
             }
           }}
         >
-          {showForm ? "Cancel" : "+ Add Provider"}
+          {showForm ? "✖" : "+ Add Provider"}
         </button>
       </header>
 
