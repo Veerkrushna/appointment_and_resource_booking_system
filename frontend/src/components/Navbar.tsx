@@ -152,6 +152,13 @@ function Navbar() {
                   >
                     Providers
                   </NavLink>
+                  <NavLink
+                    to="/admin/admins"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Admins
+                  </NavLink>
                 </>
               ) : (
                 <>

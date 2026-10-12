@@ -5094,7 +5094,8 @@ main {
   background-color: #fff8f4;
 }
 
-.admin-providers-page {
+.admin-providers-page,
+.admin-admins-page {
   padding-top: clamp(2rem, 4vw, 3.5rem);
   padding-bottom: 3rem;
   width: 100%;
@@ -5102,7 +5103,8 @@ main {
   box-sizing: border-box;
 }
 
-.admin-providers-page .admin-appointments-card {
+.admin-providers-page .admin-appointments-card,
+.admin-admins-page .admin-appointments-card {
   width: 100%;
   max-width: 100% !important;
   box-sizing: border-box;
