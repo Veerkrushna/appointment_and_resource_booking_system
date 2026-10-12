@@ -1,58 +1,69 @@
 import { type AdminAppointment } from "../../../lib/adminAppointments";
+import DataTable, { type ColumnDef } from "../../../components/common/DataTable";
+import StatusBadge from "../../../components/common/StatusBadge";
+import { formatDateTime } from "../../../utils/dateUtils";
 
 type Props = {
   appointments: AdminAppointment[];
 };
 
 export function formatAppointmentDate(dateString: string): string {
-  return new Date(dateString).toLocaleString([], {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return formatDateTime(dateString);
 }
 
 export function getStatusClass(status: string): string {
   return `admin-appointment-status admin-appointment-status--${status.toLowerCase()}`;
 }
 
-export default function AdminAppointmentsTable({ appointments }: Props) {
-  if (appointments.length === 0) {
-    return <p>No appointments found.</p>;
-  }
+const columns: ColumnDef<AdminAppointment>[] = [
+  {
+    header: "Customer",
+    key: "customer",
+    render: (apt) => (
+      <div>
+        <strong>{apt.user_name}</strong>
+        <span style={{ display: "block", fontSize: "0.85rem", color: "#64748b" }}>
+          {apt.user_email}
+        </span>
+      </div>
+    ),
+  },
+  {
+    header: "Service",
+    key: "service_name",
+    accessor: "service_name",
+  },
+  {
+    header: "Provider",
+    key: "provider_name",
+    accessor: "provider_name",
+  },
+  {
+    header: "Appointment time",
+    key: "appointment_start",
+    render: (apt) => formatDateTime(apt.appointment_start),
+  },
+  {
+    header: "Duration",
+    key: "duration_minutes",
+    render: (apt) => `${apt.duration_minutes} min`,
+  },
+  {
+    header: "Status",
+    key: "status",
+    render: (apt) => <StatusBadge status={apt.status} />,
+  },
+];
 
+export default function AdminAppointmentsTable({ appointments }: Props) {
   return (
-    <div className="admin-appointments-table-wrapper">
-      <table className="admin-appointments-table">
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th>Service</th>
-            <th>Provider</th>
-            <th>Appointment time</th>
-            <th>Duration</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {appointments.map((appointment) => (
-            <tr key={appointment.id}>
-              <td>
-                <strong>{appointment.user_name}</strong>
-                <span>{appointment.user_email}</span>
-              </td>
-              <td>{appointment.service_name}</td>
-              <td>{appointment.provider_name}</td>
-              <td>{formatAppointmentDate(appointment.appointment_start)}</td>
-              <td>{appointment.duration_minutes} min</td>
-              <td>
-                <span className={getStatusClass(appointment.status)}>
-                  {appointment.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      data={appointments}
+      keyExtractor={(apt) => apt.id}
+      wrapperClassName="admin-appointments-table-wrapper"
+      tableClassName="admin-appointments-table"
+      emptyMessage="No appointments found."
+    />
   );
 }

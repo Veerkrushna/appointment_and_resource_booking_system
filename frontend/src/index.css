@@ -5142,6 +5142,59 @@ main {
   transform: translateY(0);
 }
 
+.admin-table-edit-btn--danger {
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+  background-color: #fee2e2 !important;
+}
+
+.admin-table-edit-btn--danger:hover {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+}
+
+.admin-table-edit-btn--success {
+  color: #16a34a !important;
+  border-color: #86efac !important;
+  background-color: #dcfce7 !important;
+}
+
+.admin-table-edit-btn--success:hover {
+  background-color: #16a34a !important;
+  color: #ffffff !important;
+  border-color: #16a34a !important;
+}
+
+.admin-table-name-btn {
+  background-color: #fff4ed;
+  color: #e2784d;
+  border: 1px solid #fdba74;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.admin-table-name-btn:hover {
+  background-color: #ffedd5;
+  border-color: #fb923c;
+}
+
+.admin-table-tag {
+  background-color: #fff4ed;
+  color: #e2784d;
+  border: 1px solid #fdba74;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
 .admin-appointments-card__content form label {
   font-size: 0.85rem;
   font-weight: 600;

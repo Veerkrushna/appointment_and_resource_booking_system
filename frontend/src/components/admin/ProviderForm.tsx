@@ -5,6 +5,7 @@ import type {
   ProviderUpdate,
 } from "../../lib/providers";
 import AntTimeRangePicker from "../AntTimeRangePicker";
+import ImageUploadField from "../common/ImageUploadField";
 import {
   updateProvider,
   updateProviderServices,
@@ -442,57 +443,11 @@ export default function ProviderForm({
             </div>
           </div>
 
-          <div>
-            <label>Photo (.jpg, .jpeg)</label>
-            <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-              <input
-                type="file"
-                accept=".jpg,.jpeg"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const uploadData = new FormData();
-                  uploadData.append("file", file);
-                  try {
-                    const res = await fetch("/api/upload/image", {
-                      method: "POST",
-                      body: uploadData,
-                    });
-                    if (!res.ok) {
-                      const errorData = await res.json();
-                      throw new Error(errorData.detail || "Upload failed");
-                    }
-                    const data = await res.json();
-                    setFormData((prev) => ({
-                      ...prev,
-                      photo: `http://localhost:8000${data.url}`,
-                    }));
-                  } catch (err: any) {
-                    setFormError(err.message);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: "0.5rem",
-                  border: "1px solid #ccc",
-                  borderRadius: "4px",
-                }}
-              />
-              {formData.photo && (
-                <img
-                  src={formData.photo}
-                  alt="Preview"
-                  style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-            </div>
-          </div>
+          <ImageUploadField
+            value={formData.photo}
+            onChange={(url) => setFormData((prev) => ({ ...prev, photo: url || "" }))}
+            onError={(err) => setFormError(err)}
+          />
 
           <div>
             <label>Bio</label>
