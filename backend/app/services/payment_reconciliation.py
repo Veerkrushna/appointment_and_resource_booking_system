@@ -34,9 +34,18 @@ def _candidate_reasons(
     as_of: datetime,
 ) -> list[PaymentReconciliationReason]:
     reasons: set[PaymentReconciliationReason] = set()
-    if payment.status == PaymentStatus.CAPTURED:
+    validation_failed_events = [
+        event for event in events if event.capture_validation_failure is not None
+    ]
+    if validation_failed_events:
+        reasons.add(PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED)
+    if (
+        payment.status == PaymentStatus.CAPTURED
+        and payment.appointment_id is None
+        and payment.series_id is None
+    ):
         reasons.add(PaymentReconciliationReason.CAPTURED_UNLINKED)
-    else:
+    elif payment.status == PaymentStatus.CREATED and not validation_failed_events:
         reasons.add(PaymentReconciliationReason.STALE_CREATED_NO_CAPTURE_EVIDENCE)
 
     if not payment.provider_order_id:
@@ -51,6 +60,10 @@ def _candidate_reasons(
             reasons.add(PaymentReconciliationReason.EXPIRED_HOLD)
 
     for event in events:
+        if event.capture_validation_failure is not None:
+            reasons.add(PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED)
+        if event.local_payment_state_conflict:
+            reasons.add(PaymentReconciliationReason.LOCAL_PAYMENT_STATE_CONFLICT)
         if event.status == PaymentWebhookEventStatus.RETRYABLE:
             reasons.add(PaymentReconciliationReason.RETRYABLE_WEBHOOK_EVENT)
         elif event.status == PaymentWebhookEventStatus.FAILED:
@@ -99,20 +112,46 @@ def list_payment_reconciliation_candidates(
         )
         .exists()
     )
+    investigation_event = (
+        select(PaymentWebhookEvent.id)
+        .where(
+            or_(
+                PaymentWebhookEvent.capture_validation_failure.is_not(None),
+                PaymentWebhookEvent.local_payment_state_conflict.is_(True),
+            ),
+            or_(
+                and_(
+                    Payment.provider_order_id.is_not(None),
+                    PaymentWebhookEvent.provider_order_id == Payment.provider_order_id,
+                ),
+                and_(
+                    Payment.provider_payment_id.is_not(None),
+                    PaymentWebhookEvent.provider_payment_id
+                    == Payment.provider_payment_id,
+                ),
+            ),
+        )
+        .exists()
+    )
     candidate_query = (
         select(Payment)
         .where(
             Payment.provider == PaymentProvider.RAZORPAY,
-            Payment.appointment_id.is_(None),
-            Payment.series_id.is_(None),
             or_(
-                Payment.status == PaymentStatus.CAPTURED,
                 and_(
-                    Payment.status == PaymentStatus.CREATED,
-                    Payment.provider_order_id.is_not(None),
-                    Payment.created_at <= stale_created_before,
-                    expired_or_released_hold,
+                    Payment.appointment_id.is_(None),
+                    Payment.series_id.is_(None),
+                    or_(
+                        Payment.status == PaymentStatus.CAPTURED,
+                        and_(
+                            Payment.status == PaymentStatus.CREATED,
+                            Payment.provider_order_id.is_not(None),
+                            Payment.created_at <= stale_created_before,
+                            expired_or_released_hold,
+                        ),
+                    ),
                 ),
+                investigation_event,
             ),
         )
         .order_by(Payment.created_at, Payment.id)

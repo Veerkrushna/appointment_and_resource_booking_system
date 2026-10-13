@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
@@ -25,6 +26,7 @@ from app.models.payment import (
     Payment,
     PaymentProvider,
     PaymentStatus,
+    PaymentWebhookCaptureValidationFailure,
     PaymentWebhookEvent,
     PaymentWebhookEventStatus,
 )
@@ -36,8 +38,41 @@ from app.schemas.payment_reconciliation import PaymentReconciliationReason
 from app.services.payment_reconciliation import (
     list_payment_reconciliation_candidates,
 )
+from app.services.payment_webhooks import _capture_observation_value
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, None),
+        (True, True),
+        (False, False),
+        (0, 0),
+        (2**53 - 1, 2**53 - 1),
+        (-(2**53 - 1), -(2**53 - 1)),
+        (1.25, 1.25),
+        (0.0, 0.0),
+        ("x" * 256, "x" * 255),
+    ],
+)
+def test_capture_observation_value_preserves_bounded_values(value, expected):
+    assert _capture_observation_value(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        math.nan,
+        math.inf,
+        -math.inf,
+        2**53,
+        -(2**53),
+    ],
+)
+def test_capture_observation_value_marks_unsupported_numbers(value):
+    assert _capture_observation_value(value) == {"type": type(value).__name__}
 
 
 @pytest.fixture
@@ -354,6 +389,49 @@ def test_unknown_order_is_recorded_without_payment_or_appointment(
     assert events[0].provider_order_id.startswith("order_")
 
 
+def test_conflicting_order_for_known_payment_is_reconciliation_candidate(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.provider_payment_id = records["provider_payment_id"]
+    db.commit()
+    db.close()
+    _mock_signature(monkeypatch)
+
+    response, _ = _post_webhook(
+        records,
+        monkeypatch,
+        _captured_payload(records, order_id=f"order_{uuid4().hex}"),
+    )
+
+    payment, hold, appointments, events = _state(records)
+    assert response.status_code == 200
+    assert response.json()["status"] == PaymentWebhookEventStatus.FAILED
+    assert payment.status == PaymentStatus.CREATED
+    assert payment.provider_payment_id == records["provider_payment_id"]
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointments == []
+    assert (
+        events[0].capture_validation_failure
+        == PaymentWebhookCaptureValidationFailure.PROVIDER_ORDER_ID_MISMATCH
+    )
+
+    db = SessionLocal()
+    candidate = next(
+        item
+        for item in list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=datetime.now(UTC) - timedelta(days=1),
+        )
+        if item.payment_id == records["payment_id"]
+    )
+    db.close()
+    assert PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED in candidate.reasons
+
+
 def test_duplicate_event_id_does_not_repeat_work(webhook_records, monkeypatch):
     records = webhook_records
     _mock_signature(monkeypatch)
@@ -440,14 +518,27 @@ def test_linked_payment_mismatches_are_reconciliation_failures(
     assert hold.status == BookingHoldStatus.CONVERTED
     assert len(appointments) == 1
     assert error_fragment in mismatch_event.error_message
+    assert mismatch_event.capture_validation_failure is not None
+
+    db = SessionLocal()
+    candidate = next(
+        item
+        for item in list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=datetime.now(UTC) - timedelta(days=1),
+        )
+        if item.payment_id == records["payment_id"]
+    )
+    db.close()
+    assert candidate.appointment_id == appointments[0].id
+    assert PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED in candidate.reasons
 
 
-def test_failed_local_payment_preserves_valid_external_capture(
-    webhook_records, monkeypatch
-):
+def test_failed_local_payment_status_is_preserved(webhook_records, monkeypatch):
     records = webhook_records
     db = SessionLocal()
     payment = db.get(Payment, records["payment_id"])
+    expected_provider_payment_id = payment.provider_payment_id
     payment.status = PaymentStatus.FAILED
     hold = db.scalar(
         select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
@@ -458,16 +549,73 @@ def test_failed_local_payment_preserves_valid_external_capture(
     _mock_signature(monkeypatch)
 
     response, _ = _post_webhook(records, monkeypatch)
+    payment, hold, appointments, events = _state(records)
+    assert response.status_code == 200
+    assert response.json()["status"] == PaymentWebhookEventStatus.FAILED
+    assert payment.status == PaymentStatus.FAILED
+    assert payment.provider_payment_id == expected_provider_payment_id
+    assert payment.appointment_id is None
+    assert hold.expires_at <= datetime.now(UTC)
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointments == []
+    assert events[0].status == PaymentWebhookEventStatus.FAILED
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        PaymentStatus.FAILED,
+        PaymentStatus.REFUNDED,
+        PaymentStatus.PARTIALLY_REFUNDED,
+    ],
+)
+def test_conflicting_terminal_payment_status_is_preserved(
+    webhook_records, monkeypatch, status
+):
+    records = webhook_records
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = status
+    original_provider_payment_id = payment.provider_payment_id
+    db.commit()
+    db.close()
+    _mock_signature(monkeypatch)
+
+    response, _ = _post_webhook(records, monkeypatch)
 
     payment, hold, appointments, events = _state(records)
     assert response.status_code == 200
     assert response.json()["status"] == PaymentWebhookEventStatus.FAILED
-    assert payment.status == PaymentStatus.CAPTURED
-    assert payment.provider_payment_id == records["provider_payment_id"]
+    assert payment.status == status
+    assert payment.provider_payment_id == original_provider_payment_id
     assert payment.appointment_id is None
-    assert hold.status == BookingHoldStatus.ACTIVE
     assert appointments == []
+    assert hold.status == BookingHoldStatus.ACTIVE
     assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert events[0].local_payment_state_conflict is True
+    assert "Local payment state conflicts with provider capture" in (
+        events[0].error_message
+    )
+
+    db = SessionLocal()
+    candidate = next(
+        item
+        for item in list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=datetime.now(UTC) - timedelta(days=1),
+        )
+        if item.payment_id == records["payment_id"]
+    )
+    db.close()
+    assert PaymentReconciliationReason.LOCAL_PAYMENT_STATE_CONFLICT in (
+        candidate.reasons
+    )
+    conflict_events = [
+        event
+        for event in candidate.webhook_events
+        if event.local_payment_state_conflict
+    ]
+    assert len(conflict_events) == 1
 
 
 def test_webhook_after_browser_verification_does_not_change_appointment(
@@ -578,15 +726,30 @@ def test_webhook_before_browser_uses_hold_recipient_snapshot(
 
 
 @pytest.mark.parametrize(
-    ("overrides", "reason"),
+    ("overrides", "failure", "expected_amount", "expected_currency"),
     [
-        ({"amount": 1}, "amount or currency"),
-        ({"currency": "USD"}, "amount or currency"),
-        ({"id": f"pay_{uuid4().hex}"}, "payment ID conflicts"),
+        (
+            {"amount": 1},
+            PaymentWebhookCaptureValidationFailure.AMOUNT_MISMATCH,
+            1,
+            "INR",
+        ),
+        (
+            {"currency": "USD"},
+            PaymentWebhookCaptureValidationFailure.CURRENCY_MISMATCH,
+            2510,
+            "USD",
+        ),
+        (
+            {"id": f"pay_{uuid4().hex}"},
+            PaymentWebhookCaptureValidationFailure.PROVIDER_PAYMENT_ID_MISMATCH,
+            2510,
+            "INR",
+        ),
     ],
 )
 def test_captured_payment_mismatches_are_recorded_for_reconciliation(
-    webhook_records, monkeypatch, overrides, reason
+    webhook_records, monkeypatch, overrides, failure, expected_amount, expected_currency
 ):
     records = webhook_records
     if "id" in overrides:
@@ -602,11 +765,78 @@ def test_captured_payment_mismatches_are_recorded_for_reconciliation(
 
     assert response.status_code == 200
     payment, hold, appointments, events = _state(records)
-    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.status == PaymentStatus.CREATED
+    assert payment.appointment_id is None
+    assert payment.provider_payment_id == (
+        "pay_previous" if "id" in overrides else None
+    )
     assert hold.status == BookingHoldStatus.ACTIVE
     assert appointments == []
     assert events[0].status == PaymentWebhookEventStatus.FAILED
-    assert reason in events[0].error_message
+    assert events[0].capture_validation_failure == failure.value
+    assert events[0].capture_validation_details["amount"] == expected_amount
+    assert events[0].capture_validation_details["currency"] == expected_currency
+
+    db = SessionLocal()
+    candidate = next(
+        item
+        for item in list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=datetime.now(UTC) + timedelta(days=1),
+        )
+        if item.payment_id == records["payment_id"]
+    )
+    db.close()
+    assert PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED in candidate.reasons
+    assert candidate.webhook_events[0].capture_validation_failure == failure.value
+
+
+@pytest.mark.parametrize(
+    ("overrides", "failure"),
+    [
+        (
+            {"id": None},
+            PaymentWebhookCaptureValidationFailure.INVALID_PAYMENT_ID,
+        ),
+        (
+            {"captured": False},
+            PaymentWebhookCaptureValidationFailure.INVALID_CAPTURE_STATUS,
+        ),
+        (
+            {"status": "authorized"},
+            PaymentWebhookCaptureValidationFailure.INVALID_CAPTURE_STATUS,
+        ),
+    ],
+)
+def test_invalid_capture_data_is_not_persisted_as_capture(
+    webhook_records, monkeypatch, overrides, failure
+):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+
+    response, _ = _post_webhook(
+        records, monkeypatch, _captured_payload(records, **overrides)
+    )
+
+    payment, hold, appointments, events = _state(records)
+    assert response.status_code == 200
+    assert payment.status == PaymentStatus.CREATED
+    assert payment.provider_payment_id is None
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointments == []
+    assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert events[0].capture_validation_failure == failure.value
+    assert events[0].capture_validation_details is not None
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.close()
+    candidate = next(item for item in candidates if item.payment_id == payment.id)
+    assert PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED in candidate.reasons
 
 
 def test_expired_hold_records_captured_payment_without_appointment(

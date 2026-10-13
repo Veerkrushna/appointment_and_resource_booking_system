@@ -1,3 +1,4 @@
+import math
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from app.models.payment import (
     Payment,
     PaymentProvider,
     PaymentStatus,
+    PaymentWebhookCaptureValidationFailure,
     PaymentWebhookEvent,
     PaymentWebhookEventStatus,
 )
@@ -59,6 +61,31 @@ def _persist_external_capture(payment: Payment, provider_payment_id: str) -> Non
     payment.status = PaymentStatus.CAPTURED
     if payment.provider_payment_id is None:
         payment.provider_payment_id = provider_payment_id
+
+
+def _capture_observation_value(value: object) -> object:
+    if value is None or type(value) is bool:
+        return value
+    if type(value) is int and abs(value) <= (2**53 - 1):
+        return value
+    if type(value) is float and math.isfinite(value):
+        return value
+    if isinstance(value, str):
+        return value[:255]
+    return {"type": type(value).__name__}
+
+
+def _record_capture_validation_failure(
+    event: PaymentWebhookEvent,
+    entity: dict,
+    failure: PaymentWebhookCaptureValidationFailure,
+) -> None:
+    event.capture_validation_failure = failure.value
+    event.capture_validation_details = {
+        key: _capture_observation_value(entity[key])
+        for key in ("id", "order_id", "status", "captured", "amount", "currency")
+        if key in entity
+    }
 
 
 def _recover_verified_capture(
@@ -263,6 +290,33 @@ def process_payment_webhook(
                 .with_for_update()
             )
         if payment is None:
+            if (
+                isinstance(provider_payment_id, str)
+                and provider_payment_id
+                and len(provider_payment_id) <= 255
+            ):
+                possible_matches = db.scalars(
+                    select(Payment)
+                    .where(Payment.provider_payment_id == provider_payment_id)
+                    .with_for_update()
+                    .limit(2)
+                ).all()
+                if (
+                    len(possible_matches) == 1
+                    and possible_matches[0].provider == PaymentProvider.RAZORPAY
+                ):
+                    _record_capture_validation_failure(
+                        event,
+                        event_entity,
+                        PaymentWebhookCaptureValidationFailure.PROVIDER_ORDER_ID_MISMATCH,
+                    )
+                    _finish_event(
+                        event,
+                        PaymentWebhookEventStatus.FAILED,
+                        error_message="Provider order ID conflicts with the local payment",
+                    )
+                    db.commit()
+                    return event.status
             _finish_event(
                 event,
                 PaymentWebhookEventStatus.IGNORED,
@@ -290,6 +344,12 @@ def process_payment_webhook(
             and event_entity.get("captured") is True
         )
         if not valid_payment_id or not captured:
+            failure = (
+                PaymentWebhookCaptureValidationFailure.INVALID_PAYMENT_ID
+                if not valid_payment_id
+                else PaymentWebhookCaptureValidationFailure.INVALID_CAPTURE_STATUS
+            )
+            _record_capture_validation_failure(event, event_entity, failure)
             _finish_event(
                 event,
                 PaymentWebhookEventStatus.FAILED,
@@ -302,7 +362,11 @@ def process_payment_webhook(
             payment.provider_payment_id is not None
             and payment.provider_payment_id != provider_payment_id
         ):
-            _persist_external_capture(payment, provider_payment_id)
+            _record_capture_validation_failure(
+                event,
+                event_entity,
+                PaymentWebhookCaptureValidationFailure.PROVIDER_PAYMENT_ID_MISMATCH,
+            )
             _finish_event(
                 event,
                 PaymentWebhookEventStatus.FAILED,
@@ -313,13 +377,20 @@ def process_payment_webhook(
 
         amount = event_entity.get("amount")
         currency = event_entity.get("currency")
-        if (
-            isinstance(amount, bool)
-            or not isinstance(amount, int)
-            or amount != payment.amount
-            or currency != payment.currency
-        ):
-            _persist_external_capture(payment, provider_payment_id)
+        amount_failure = (
+            PaymentWebhookCaptureValidationFailure.INVALID_AMOUNT
+            if isinstance(amount, bool) or not isinstance(amount, int)
+            else (
+                PaymentWebhookCaptureValidationFailure.AMOUNT_MISMATCH
+                if amount != payment.amount
+                else None
+            )
+        )
+        if amount_failure is not None or currency != payment.currency:
+            failure = amount_failure or (
+                PaymentWebhookCaptureValidationFailure.CURRENCY_MISMATCH
+            )
+            _record_capture_validation_failure(event, event_entity, failure)
             _finish_event(
                 event,
                 PaymentWebhookEventStatus.FAILED,
@@ -351,7 +422,7 @@ def process_payment_webhook(
             PaymentStatus.PENDING,
             PaymentStatus.CAPTURED,
         }:
-            _persist_external_capture(payment, provider_payment_id)
+            event.local_payment_state_conflict = True
             _finish_event(
                 event,
                 PaymentWebhookEventStatus.FAILED,

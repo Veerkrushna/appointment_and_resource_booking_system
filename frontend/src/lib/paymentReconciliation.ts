@@ -14,6 +14,9 @@ export type PaymentReconciliationEvent = {
   event_type: string;
   provider_order_id: string | null;
   provider_payment_id: string | null;
+  capture_validation_failure: string | null;
+  capture_validation_details: Record<string, unknown> | null;
+  local_payment_state_conflict: boolean;
   status: string;
   error_message: string | null;
   created_at: string;

@@ -92,6 +92,18 @@ function CandidateDetails({
                   {event.provider_payment_id &&
                     ` · Payment ${event.provider_payment_id}`}
                 </small>
+                {event.capture_validation_failure && (
+                  <p className="reconciliation-event-error">
+                    Capture validation: {event.capture_validation_failure}
+                    {event.capture_validation_details &&
+                      ` · ${JSON.stringify(event.capture_validation_details)}`}
+                  </p>
+                )}
+                {event.local_payment_state_conflict && (
+                  <p className="reconciliation-event-error">
+                    Local payment state conflicts with provider capture.
+                  </p>
+                )}
                 {event.error_message && (
                   <p className="reconciliation-event-error">
                     {event.error_message}

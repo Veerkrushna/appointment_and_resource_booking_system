@@ -11,6 +11,8 @@ from app.models.payment import PaymentStatus, PaymentWebhookEventStatus
 
 class PaymentReconciliationReason(enum.StrEnum):
     CAPTURED_UNLINKED = "captured_unlinked"
+    CAPTURE_VALIDATION_FAILED = "capture_validation_failed"
+    LOCAL_PAYMENT_STATE_CONFLICT = "local_payment_state_conflict"
     RETRYABLE_WEBHOOK_EVENT = "retryable_webhook_event"
     FAILED_WEBHOOK_EVENT = "failed_webhook_event"
     EXPIRED_HOLD = "expired_hold"
@@ -42,6 +44,9 @@ class PaymentReconciliationEvent(BaseModel):
     event_type: str
     provider_order_id: str | None
     provider_payment_id: str | None
+    capture_validation_failure: str | None
+    capture_validation_details: dict[str, object] | None
+    local_payment_state_conflict: bool = False
     status: PaymentWebhookEventStatus
     error_message: str | None
     created_at: datetime
