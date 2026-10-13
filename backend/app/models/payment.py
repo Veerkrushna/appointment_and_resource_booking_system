@@ -44,6 +44,7 @@ class PaymentWebhookEventStatus(enum.StrEnum):
     RECEIVED = "RECEIVED"
     PROCESSED = "PROCESSED"
     IGNORED = "IGNORED"
+    RETRYABLE = "RETRYABLE"
     FAILED = "FAILED"
 
 

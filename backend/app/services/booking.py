@@ -47,7 +47,10 @@ MODIFICATION_CUTOFF_HOURS = 2
 
 
 def get_booking_status(
-    appointment_start: datetime, duration_minutes: int, status: str | AppointmentStatus, now_utc: datetime
+    appointment_start: datetime,
+    duration_minutes: int,
+    status: str | AppointmentStatus,
+    now_utc: datetime,
 ) -> str:
     if status in (AppointmentStatus.CANCELLED, "CANCELLED", "cancelled"):
         return "cancelled"

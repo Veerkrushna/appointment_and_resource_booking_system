@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import require_role
 from app.db.database import get_db
+from app.models.payment import PaymentWebhookEventStatus
 from app.models.user import User, UserRole
 from app.schemas.payment import (
     AppointmentPaymentOrderCreate,
@@ -179,4 +180,9 @@ async def razorpay_webhook_endpoint(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Webhook processing will be retried",
         ) from error
+    if event_status == PaymentWebhookEventStatus.RETRYABLE:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Captured payment booking could not be completed; webhook processing will be retried",
+        )
     return {"status": event_status.value}

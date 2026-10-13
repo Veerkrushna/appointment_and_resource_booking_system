@@ -160,13 +160,32 @@ def verification_records():
         cleanup.close()
 
 
-def _stub_verification(monkeypatch, result=True):
+def _stub_verification(
+    monkeypatch,
+    result=True,
+    provider_amount=2510,
+    provider_currency="INR",
+):
     calls = []
 
     class MockRazorpayService:
-        def verify_payment(self, order_id, payment_id, signature):
-            calls.append((order_id, payment_id, signature))
-            return result
+        def verify_payment(
+            self, order_id, payment_id, signature, expected_amount, expected_currency
+        ):
+            calls.append(
+                (
+                    order_id,
+                    payment_id,
+                    signature,
+                    expected_amount,
+                    expected_currency,
+                )
+            )
+            return (
+                result
+                and provider_amount == expected_amount
+                and provider_currency == expected_currency
+            )
 
     monkeypatch.setattr(
         "app.services.payment_verification.RazorpayService", MockRazorpayService
@@ -223,6 +242,8 @@ def test_valid_signature_captures_payment_and_converts_hold(
             records["order_id"],
             records["payment_provider_id"],
             records["signature"],
+            2510,
+            "INR",
         )
     ]
     assert str(records["payment_id"]) not in [call[1] for call in calls]
@@ -250,6 +271,42 @@ def test_invalid_signature_does_not_capture_payment(verification_records, monkey
     response = _verify_request(records)
 
     assert response.status_code == 400
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CREATED
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointment_count == 0
+
+
+@pytest.mark.parametrize(
+    ("provider_amount", "provider_currency"),
+    [
+        pytest.param(2511, "INR", id="amount-mismatch"),
+        pytest.param(2510, "USD", id="currency-mismatch"),
+    ],
+)
+def test_provider_amount_or_currency_mismatch_does_not_capture_payment(
+    verification_records, monkeypatch, provider_amount, provider_currency
+):
+    records = verification_records
+    calls = _stub_verification(
+        monkeypatch,
+        provider_amount=provider_amount,
+        provider_currency=provider_currency,
+    )
+
+    response = _verify_request(records)
+
+    assert response.status_code == 400
+    assert calls == [
+        (
+            records["order_id"],
+            records["payment_provider_id"],
+            records["signature"],
+            2510,
+            "INR",
+        )
+    ]
     payment, hold, appointment_count = _read_payment_state(records)
     assert payment.status == PaymentStatus.CREATED
     assert payment.appointment_id is None

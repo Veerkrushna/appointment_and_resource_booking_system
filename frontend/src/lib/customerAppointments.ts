@@ -9,6 +9,7 @@ export type CustomerAppointment = {
   notes: string | null;
   series_id: string | null;
   occurrence_number: number | null;
+  payment_status: string | null;
 };
 
 export type CustomerAppointmentsResponse = {

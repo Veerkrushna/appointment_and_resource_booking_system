@@ -149,9 +149,11 @@ def verify_appointment_payment(
             payment.provider_order_id,
             payload.provider_payment_id,
             payload.signature,
+            payment.amount,
+            payment.currency,
         ):
             raise InvalidPaymentVerificationError(
-                "Payment signature or status is invalid"
+                "Payment signature, status, amount, or currency is invalid"
             )
 
         hold = _load_payment_hold(db, payment.id)

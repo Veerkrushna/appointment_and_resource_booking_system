@@ -55,6 +55,19 @@ function formatStatusLabel(value: string) {
   return labels[value] ?? value;
 }
 
+function formatPaymentStatus(value: string) {
+  const labels: Record<string, string> = {
+    created: "Payment created",
+    pending: "Payment pending",
+    captured: "Paid",
+    failed: "Payment failed",
+    refunded: "Refunded",
+    partially_refunded: "Partially refunded",
+  };
+
+  return labels[value.toLowerCase()] ?? value.replaceAll("_", " ");
+}
+
 function formatSeriesRule(series: AppointmentSeriesDetail) {
   const unit = series.frequency === "monthly" ? "month" : "week";
   const frequency =
@@ -421,6 +434,17 @@ function AppointmentsPage() {
           <h2>{services[appointment.service_id] || "Booked service"}</h2>
           <p>with {providers[appointment.provider_id] || "your provider"}</p>
 
+          {appointment.payment_status && (
+            <div className="appointment-detail">
+              <span>Payment: </span>
+              <span
+                className={`appointment-payment-status appointment-payment-status--${appointment.payment_status.toLowerCase()}`}
+              >
+                {formatPaymentStatus(appointment.payment_status)}
+              </span>
+            </div>
+          )}
+
           {appointment.notes && (
             <div className="appointment-detail">
               <span>Note: {appointment.notes}</span>
@@ -567,7 +591,9 @@ function AppointmentsPage() {
                         aria-controls={`appointment-series-details-${group.seriesId}`}
                         onClick={() => toggleSeries(group.seriesId!)}
                       >
-                        <span className="appointment-series-badge">Recurring</span>
+                        <span className="appointment-series-badge">
+                          Recurring
+                        </span>
                         <span className="appointment-series-group__summary">
                           {seriesDetails[group.seriesId]
                             ? formatSeriesRule(seriesDetails[group.seriesId])
@@ -595,7 +621,9 @@ function AppointmentsPage() {
                       </button>
                     ) : (
                       <h2 className="appointment-series-group__heading">
-                        <span className="appointment-series-badge">Recurring</span>
+                        <span className="appointment-series-badge">
+                          Recurring
+                        </span>
                         <span>Recurring appointment</span>
                       </h2>
                     )}
@@ -651,15 +679,16 @@ function AppointmentsPage() {
                                 <div>
                                   <dt>Starts</dt>
                                   <dd>
-                                    {seriesDetails[group.seriesId].start_date} at{" "}
+                                    {seriesDetails[group.seriesId].start_date}{" "}
+                                    at{" "}
                                     {seriesDetails[
                                       group.seriesId
                                     ].local_start_time.slice(0, 5)}{" "}
                                     (
-                                      {
-                                        seriesDetails[group.seriesId]
-                                          .provider_timezone
-                                      }
+                                    {
+                                      seriesDetails[group.seriesId]
+                                        .provider_timezone
+                                    }
                                     )
                                   </dd>
                                 </div>
