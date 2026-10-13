@@ -164,8 +164,24 @@ def _stub_verification(monkeypatch, result=True):
     calls = []
 
     class MockRazorpayService:
-        def verify_payment(self, order_id, payment_id, signature):
-            calls.append((order_id, payment_id, signature))
+        def verify_payment(
+            self,
+            order_id,
+            payment_id,
+            signature,
+            *,
+            expected_amount,
+            expected_currency,
+        ):
+            calls.append(
+                (
+                    order_id,
+                    payment_id,
+                    signature,
+                    expected_amount,
+                    expected_currency,
+                )
+            )
             return result
 
     monkeypatch.setattr(
@@ -223,6 +239,8 @@ def test_valid_signature_captures_payment_and_converts_hold(
             records["order_id"],
             records["payment_provider_id"],
             records["signature"],
+            2510,
+            "INR",
         )
     ]
     assert str(records["payment_id"]) not in [call[1] for call in calls]
