@@ -140,6 +140,7 @@ def webhook_records(monkeypatch):
         "test_event_ids": [],
         "test_payment_ids": [payment.id],
         "test_series_ids": [],
+        "test_user_ids": [],
     }
     db.close()
     try:
@@ -164,6 +165,7 @@ def webhook_records(monkeypatch):
                 AppointmentSeries.id.in_(records["test_series_ids"])
             )
         )
+        cleanup.execute(delete(User).where(User.id.in_(records["test_user_ids"])))
         cleanup.execute(
             delete(Appointment).where(Appointment.provider_id == records["provider_id"])
         )
@@ -222,6 +224,22 @@ def _post_webhook(records, monkeypatch, payload=None, *, event_id=None, signatur
         "Content-Type": "application/json",
     }
     return client.post("/api/payments/webhook", content=body, headers=headers), body
+
+
+def _create_test_role_token(records, role):
+    db = SessionLocal()
+    user = User(
+        name=f"Reconciliation {role.value}",
+        email=f"reconciliation-{role.value.lower()}-{uuid4()}@example.com",
+        password_hash="test",
+        role=role,
+    )
+    db.add(user)
+    db.commit()
+    user_id = user.id
+    db.close()
+    records["test_user_ids"].append(user_id)
+    return create_access_token(user_id, role)
 
 
 def _state(records):
@@ -1329,3 +1347,204 @@ def test_reconciliation_flags_missing_provider_ids_and_validates_arguments(
         in candidate.reasons
     )
     assert candidate.webhook_events == []
+
+
+def test_admin_payment_reconciliation_returns_candidates_without_mutation(
+    webhook_records,
+):
+    records = webhook_records
+    admin_token = _create_test_role_token(records, UserRole.ADMIN)
+    now = datetime.now(UTC)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CAPTURED
+    payment.provider_payment_id = records["provider_payment_id"]
+    holds = db.scalars(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    ).all()
+    cutoff = now - timedelta(days=1)
+    stale_created_payment = Payment(
+        customer_id=records["customer_id"],
+        amount=2510,
+        currency="INR",
+        status=PaymentStatus.CREATED,
+        provider=PaymentProvider.RAZORPAY,
+        provider_order_id=f"order_{uuid4().hex}",
+        created_at=cutoff - timedelta(days=1),
+    )
+    recent_created_payment = Payment(
+        customer_id=records["customer_id"],
+        amount=2510,
+        currency="INR",
+        status=PaymentStatus.CREATED,
+        provider=PaymentProvider.RAZORPAY,
+        provider_order_id=f"order_{uuid4().hex}",
+        created_at=now,
+    )
+    db.add_all([stale_created_payment, recent_created_payment])
+    db.flush()
+    stale_created_payment_id = stale_created_payment.id
+    recent_created_payment_id = recent_created_payment.id
+    records["test_payment_ids"].extend(
+        [stale_created_payment_id, recent_created_payment_id]
+    )
+    for candidate_payment in [stale_created_payment, recent_created_payment]:
+        db.add(
+            BookingHold(
+                customer_id=records["customer_id"],
+                service_id=records["service_id"],
+                provider_id=records["provider_id"],
+                user_name="Webhook Recipient",
+                user_email="webhook-recipient@example.com",
+                user_phone="+15550003333",
+                appointment_start=records["appointment_start"],
+                appointment_end=records["appointment_start"] + timedelta(minutes=30),
+                expires_at=now - timedelta(hours=1),
+                status=BookingHoldStatus.EXPIRED,
+                payment_id=candidate_payment.id,
+            )
+        )
+    event_records = [
+        PaymentWebhookEvent(
+            provider_event_id=f"evt_{uuid4().hex}",
+            event_type="payment.captured",
+            provider_order_id=records["order_id"],
+            provider_payment_id=records["provider_payment_id"],
+            status=PaymentWebhookEventStatus.RETRYABLE,
+            error_message="First investigation detail",
+            created_at=now - timedelta(minutes=2),
+            processed_at=now - timedelta(minutes=2),
+        ),
+        PaymentWebhookEvent(
+            provider_event_id=f"evt_{uuid4().hex}",
+            event_type="payment.captured",
+            provider_order_id=f"order_{uuid4().hex}",
+            provider_payment_id=records["provider_payment_id"],
+            status=PaymentWebhookEventStatus.FAILED,
+            error_message="Second investigation detail",
+            created_at=now - timedelta(minutes=1),
+            processed_at=now - timedelta(minutes=1),
+        ),
+    ]
+    db.add_all(event_records)
+    records["test_event_ids"].extend(event.provider_event_id for event in event_records)
+    db.commit()
+    hold_id = holds[0].id
+    original_payment_state = (
+        payment.status,
+        payment.provider_payment_id,
+        payment.appointment_id,
+    )
+    original_hold_state = (holds[0].status, holds[0].updated_at)
+    original_event_state = {
+        event.provider_event_id: (event.status, event.error_message)
+        for event in event_records
+    }
+    db.close()
+
+    response = client.get(
+        "/api/admin/payment-reconciliation",
+        params={
+            "stale_created_before": cutoff.isoformat(),
+            "limit": 17,
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 200
+    candidates = response.json()
+    candidate_payment_ids = {item["payment_id"] for item in candidates}
+    assert str(records["payment_id"]) in candidate_payment_ids
+    assert str(stale_created_payment_id) in candidate_payment_ids
+    assert str(recent_created_payment_id) not in candidate_payment_ids
+    candidate = next(
+        item for item in candidates if item["payment_id"] == str(records["payment_id"])
+    )
+    assert candidate["provider_verification_required"] is True
+    assert candidate["booking_holds"][0]["id"] == str(hold_id)
+    assert len(candidate["webhook_events"]) == 2
+    assert {event["provider_event_id"] for event in candidate["webhook_events"]} == set(
+        original_event_state
+    )
+    assert {event["error_message"] for event in candidate["webhook_events"]} == {
+        "First investigation detail",
+        "Second investigation detail",
+    }
+
+    db = SessionLocal()
+    payment_after = db.get(Payment, records["payment_id"])
+    hold_after = db.get(BookingHold, hold_id)
+    event_after = db.scalars(
+        select(PaymentWebhookEvent).where(
+            PaymentWebhookEvent.provider_event_id.in_(records["test_event_ids"])
+        )
+    ).all()
+    appointments_after = db.scalars(
+        select(Appointment).where(Appointment.provider_id == records["provider_id"])
+    ).all()
+    assert (
+        payment_after.status,
+        payment_after.provider_payment_id,
+        payment_after.appointment_id,
+    ) == original_payment_state
+    assert (hold_after.status, hold_after.updated_at) == original_hold_state
+    assert {
+        event.provider_event_id: (event.status, event.error_message)
+        for event in event_after
+    } == original_event_state
+    assert appointments_after == []
+    db.close()
+
+
+@pytest.mark.parametrize("role", [UserRole.CUSTOMER, UserRole.PROVIDER])
+def test_admin_payment_reconciliation_denies_non_admin_roles(webhook_records, role):
+    token = _create_test_role_token(webhook_records, role)
+    response = client.get(
+        "/api/admin/payment-reconciliation",
+        params={"stale_created_before": datetime.now(UTC).isoformat()},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+
+
+def test_admin_payment_reconciliation_requires_authentication(webhook_records):
+    response = client.get(
+        "/api/admin/payment-reconciliation",
+        params={"stale_created_before": datetime.now(UTC).isoformat()},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("params", "expected_detail"),
+    [
+        ({}, None),
+        ({"stale_created_before": "2026-10-01T00:00:00"}, "timezone"),
+        (
+            {
+                "stale_created_before": "2026-10-01T00:00:00Z",
+                "limit": 0,
+            },
+            None,
+        ),
+        (
+            {
+                "stale_created_before": "2026-10-01T00:00:00Z",
+                "limit": 501,
+            },
+            None,
+        ),
+    ],
+)
+def test_admin_payment_reconciliation_validates_cutoff_and_limit(
+    webhook_records, params, expected_detail
+):
+    token = _create_test_role_token(webhook_records, UserRole.ADMIN)
+    response = client.get(
+        "/api/admin/payment-reconciliation",
+        params=params,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+    if expected_detail:
+        assert expected_detail in response.text

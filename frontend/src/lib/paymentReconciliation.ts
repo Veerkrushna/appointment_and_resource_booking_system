@@ -1,0 +1,108 @@
+export type PaymentReconciliationHold = {
+  id: string;
+  status: string;
+  expires_at: string;
+  appointment_start: string;
+  appointment_end: string;
+  provider_id: string;
+  service_id: string;
+};
+
+export type PaymentReconciliationEvent = {
+  id: string;
+  provider_event_id: string;
+  event_type: string;
+  provider_order_id: string | null;
+  provider_payment_id: string | null;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  processed_at: string | null;
+};
+
+export type PaymentReconciliationCandidate = {
+  payment_id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  provider_order_id: string | null;
+  provider_payment_id: string | null;
+  appointment_id: string | null;
+  series_id: string | null;
+  created_at: string;
+  updated_at: string;
+  reasons: string[];
+  provider_verification_required: true;
+  booking_holds: PaymentReconciliationHold[];
+  webhook_events: PaymentReconciliationEvent[];
+};
+
+export class PaymentReconciliationApiError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "PaymentReconciliationApiError";
+    this.status = status;
+  }
+}
+
+export async function fetchPaymentReconciliationCandidates(
+  token: string,
+  staleCreatedBefore: string,
+  limit: number,
+): Promise<PaymentReconciliationCandidate[]> {
+  const params = new URLSearchParams({
+    stale_created_before: staleCreatedBefore,
+    limit: String(limit),
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/admin/payment-reconciliation?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw new PaymentReconciliationApiError(
+      "Unable to reach the reconciliation service.",
+      null,
+    );
+  }
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body: unknown = await response.json();
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        "detail" in body &&
+        typeof body.detail === "string"
+      ) {
+        detail = body.detail;
+      }
+    } catch {
+      detail = "";
+    }
+    throw new PaymentReconciliationApiError(
+      detail || `Reconciliation request failed (${response.status}).`,
+      response.status,
+    );
+  }
+
+  try {
+    const result: unknown = await response.json();
+    if (!Array.isArray(result)) {
+      throw new Error("Expected a candidate list.");
+    }
+    return result as PaymentReconciliationCandidate[];
+  } catch (error) {
+    throw new PaymentReconciliationApiError(
+      error instanceof Error
+        ? error.message
+        : "Unable to read reconciliation candidates.",
+      response.status,
+    );
+  }
+}
