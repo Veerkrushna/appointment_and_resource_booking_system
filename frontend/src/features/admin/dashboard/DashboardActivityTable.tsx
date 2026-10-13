@@ -1,3 +1,5 @@
+import DataTable, { type ColumnDef } from "../../../components/common/DataTable";
+import { formatDateTime } from "../../../utils/dateUtils";
 
 type AdminAppointment = {
   id: string;
@@ -15,14 +17,42 @@ type Props = {
   appointments: AdminAppointment[];
 };
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+const activityColumns: ColumnDef<AdminAppointment>[] = [
+  {
+    header: "Customer",
+    key: "customer",
+    render: (apt) => (
+      <div>
+        <strong>{apt.user_name}</strong>
+        <small style={{ display: "block" }}>{apt.user_email}</small>
+      </div>
+    ),
+  },
+  {
+    header: "Service",
+    key: "service_name",
+    accessor: "service_name",
+  },
+  {
+    header: "Provider",
+    key: "provider_name",
+    accessor: "provider_name",
+  },
+  {
+    header: "When",
+    key: "appointment_start",
+    render: (apt) => formatDateTime(apt.appointment_start),
+  },
+  {
+    header: "Status",
+    key: "status",
+    render: (apt) => (
+      <span className={`dashboard-status dashboard-status--${apt.status}`}>
+        {apt.status}
+      </span>
+    ),
+  },
+];
 
 export default function DashboardActivityTable({ appointments }: Props) {
   return (
@@ -32,49 +62,16 @@ export default function DashboardActivityTable({ appointments }: Props) {
           <p className="panel-kicker">Latest activity</p>
           <h2>Appointments this month</h2>
         </div>
-        <span className="dashboard-total">
-          {appointments.length} bookings
-        </span>
+        <span className="dashboard-total">{appointments.length} bookings</span>
       </div>
-      {appointments.length === 0 ? (
-        <p className="dashboard-note">
-          No appointments have been recorded for this month.
-        </p>
-      ) : (
-        <div className="dashboard-table-wrap">
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Service</th>
-                <th>Provider</th>
-                <th>When</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appointments.slice(0, 8).map((appointment) => (
-                <tr key={appointment.id}>
-                  <td>
-                    <strong>{appointment.user_name}</strong>
-                    <small>{appointment.user_email}</small>
-                  </td>
-                  <td>{appointment.service_name}</td>
-                  <td>{appointment.provider_name}</td>
-                  <td>{formatDate(appointment.appointment_start)}</td>
-                  <td>
-                    <span
-                      className={`dashboard-status dashboard-status--${appointment.status}`}
-                    >
-                      {appointment.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        columns={activityColumns}
+        data={appointments.slice(0, 8)}
+        keyExtractor={(apt) => apt.id}
+        wrapperClassName="dashboard-table-wrap"
+        tableClassName="dashboard-table"
+        emptyMessage="No appointments have been recorded for this month."
+      />
     </section>
   );
 }

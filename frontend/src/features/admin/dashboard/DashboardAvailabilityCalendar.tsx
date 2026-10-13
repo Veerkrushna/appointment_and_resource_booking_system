@@ -1,25 +1,8 @@
 import { useMemo, useState } from "react";
+import { dateKey, getCalendarDays } from "../../../utils/dateUtils";
 
 type CalendarView = "month" | "week";
 type AvailabilityStatus = "available" | "booked" | "unavailable" | "limited";
-
-function dateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function getCalendarDays(date: Date, view: CalendarView) {
-  const start = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    view === "month" ? 1 : date.getDate(),
-  );
-  start.setDate(start.getDate() - start.getDay());
-  return Array.from({ length: view === "month" ? 42 : 7 }, (_, index) => {
-    const day = new Date(start);
-    day.setDate(start.getDate() + index);
-    return day;
-  });
-}
 
 function availabilityStatus(
   date: Date,

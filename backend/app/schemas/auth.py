@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -31,6 +32,7 @@ class CustomerResponse(BaseModel):
     role: UserRole
     is_active: bool
     provider_id: UUID | None = None
+    created_at: datetime | None = None
 
 
 class CustomerProfileUpdate(BaseModel):

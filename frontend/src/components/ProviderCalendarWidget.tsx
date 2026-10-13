@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/useAuth";
+import {
+  dateKey,
+  formatTime,
+  formatMonth,
+  formatSelectedDate,
+  getCalendarDays,
+} from "../utils/dateUtils";
 
 type Appointment = {
   id: string;
@@ -13,51 +20,6 @@ type Appointment = {
 };
 
 type Service = { id: string; name: string };
-
-function dateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatMonth(value: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(value);
-}
-
-function formatSelectedDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  }).format(new Date(`${value}T12:00:00`));
-}
-
-function getCalendarDays(month: Date) {
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
-  const start = new Date(firstDay);
-  start.setDate(firstDay.getDate() - firstDay.getDay());
-
-  const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-  const end = new Date(lastDay);
-  end.setDate(lastDay.getDate() + (6 - lastDay.getDay()));
-
-  const totalDays =
-    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-  return Array.from({ length: totalDays }, (_, index) => {
-    const day = new Date(start);
-    day.setDate(start.getDate() + index);
-    return day;
-  });
-}
 
 async function responseMessage(response: Response, fallback: string) {
   try {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { updateCustomerProfile } from "../lib/customerAppointments";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import UserAvatar from "./common/UserAvatar";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -152,6 +153,13 @@ function Navbar() {
                   >
                     Providers
                   </NavLink>
+                  <NavLink
+                    to="/admin/admins"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Admins
+                  </NavLink>
                 </>
               ) : (
                 <>
@@ -191,37 +199,11 @@ function Navbar() {
                     padding: "0.2rem 0.5rem",
                   }}
                 >
-                  {customer?.photo ? (
-                    <img
-                      src={customer.photo}
-                      alt="Profile"
-                      style={{
-                        width: "32px",
-                        height: "32px",
-                        borderRadius: "50%",
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: "32px",
-                        height: "32px",
-                        borderRadius: "50%",
-                        backgroundColor: "#e2784d",
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: "bold",
-                        fontSize: "1rem",
-                      }}
-                    >
-                      {customer?.name
-                        ? customer.name.charAt(0).toUpperCase()
-                        : "P"}
-                    </div>
-                  )}
+                  <UserAvatar
+                    photo={customer?.photo}
+                    name={customer?.name || "P"}
+                    size={32}
+                  />
                 </button>
 
                 {isProfileOpen && (
@@ -236,39 +218,11 @@ function Navbar() {
                       }}
                     >
                       <div style={{ position: "relative" }}>
-                        {profilePhotoPreview || customer?.photo ? (
-                          <img
-                            src={profilePhotoPreview || customer?.photo || ""}
-                            alt="Profile"
-                            style={{
-                              width: "48px",
-                              height: "48px",
-                              borderRadius: "50%",
-                              objectFit: "cover",
-                              flexShrink: 0,
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: "48px",
-                              height: "48px",
-                              borderRadius: "50%",
-                              backgroundColor: "#e2784d",
-                              color: "white",
-                              flexShrink: 0,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontWeight: "bold",
-                              fontSize: "1.25rem",
-                            }}
-                          >
-                            {customer?.name
-                              ? customer.name.charAt(0).toUpperCase()
-                              : "P"}
-                          </div>
-                        )}
+                        <UserAvatar
+                          photo={profilePhotoPreview || customer?.photo}
+                          name={customer?.name || "P"}
+                          size={48}
+                        />
                         {isEditingProfile && (
                           <label
                             style={{
