@@ -665,6 +665,46 @@ def test_database_failure_returns_retryable_response_and_rolls_back(
     records = webhook_records
     _mock_signature(monkeypatch)
     original_commit = Session.commit
+    commit_count = 0
+
+    def fail_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 1:
+            raise OperationalError("commit", {}, RuntimeError("database unavailable"))
+        original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    response, _ = _post_webhook(records, monkeypatch)
+    monkeypatch.setattr(Session, "commit", original_commit)
+
+    assert response.status_code == 503
+    payment, hold, appointments, events = _state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["provider_payment_id"]
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointments == []
+    assert len(events) == 1
+    assert events[0].status == PaymentWebhookEventStatus.RETRYABLE
+
+    retry, _ = _post_webhook(records, monkeypatch)
+    payment, hold, appointments, events = _state(records)
+    assert retry.status_code == 200
+    assert retry.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(appointments) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
+
+
+def test_database_failure_during_fallback_leaves_fulfillment_retryable(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+    original_commit = Session.commit
 
     def fail_commit(session):
         raise OperationalError("commit", {}, RuntimeError("database unavailable"))
@@ -676,9 +716,86 @@ def test_database_failure_returns_retryable_response_and_rolls_back(
     assert response.status_code == 503
     payment, hold, appointments, events = _state(records)
     assert payment.status == PaymentStatus.CREATED
+    assert payment.appointment_id is None
     assert hold.status == BookingHoldStatus.ACTIVE
     assert appointments == []
     assert events == []
+
+    retry, _ = _post_webhook(records, monkeypatch)
+    payment, hold, appointments, events = _state(records)
+    assert retry.status_code == 200
+    assert retry.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(appointments) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
+
+
+def test_retryable_event_rejects_a_changed_payment_identity(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+    original_commit = Session.commit
+    commit_count = 0
+
+    def fail_fulfillment_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 1:
+            raise OperationalError("commit", {}, RuntimeError("database unavailable"))
+        original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", fail_fulfillment_commit)
+    failed, _ = _post_webhook(records, monkeypatch)
+    monkeypatch.setattr(Session, "commit", original_commit)
+
+    changed_identity, _ = _post_webhook(
+        records,
+        monkeypatch,
+        _captured_payload(records, id=f"pay_{uuid4().hex}"),
+    )
+    payment, hold, appointments, events = _state(records)
+
+    assert failed.status_code == 503
+    assert changed_identity.status_code == 200
+    assert changed_identity.json()["status"] == PaymentWebhookEventStatus.RETRYABLE
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["provider_payment_id"]
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointments == []
+    assert events[0].status == PaymentWebhookEventStatus.RETRYABLE
+
+
+def test_uncertain_commit_preserves_successful_fulfillment(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+    original_commit = Session.commit
+    commit_count = 0
+
+    def commit_then_raise(session):
+        nonlocal commit_count
+        commit_count += 1
+        original_commit(session)
+        if commit_count == 1:
+            raise OperationalError("commit", {}, RuntimeError("connection lost"))
+
+    monkeypatch.setattr(Session, "commit", commit_then_raise)
+    response, _ = _post_webhook(records, monkeypatch)
+    monkeypatch.setattr(Session, "commit", original_commit)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    payment, hold, appointments, events = _state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(appointments) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
 
 
 def test_webhook_requires_no_customer_authentication(webhook_records, monkeypatch):
