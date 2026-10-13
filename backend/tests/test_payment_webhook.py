@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -13,6 +13,12 @@ from app.core.security import create_access_token
 from app.db.database import SessionLocal
 from app.main import app
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment_series import (
+    AppointmentSeries,
+    AppointmentSeriesEndMode,
+    AppointmentSeriesFrequency,
+    AppointmentSeriesStatus,
+)
 from app.models.availability import ProviderAvailability
 from app.models.booking_hold import BookingHold, BookingHoldStatus
 from app.models.payment import (
@@ -26,6 +32,10 @@ from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
 from app.models.user import User, UserRole
+from app.schemas.payment_reconciliation import PaymentReconciliationReason
+from app.services.payment_reconciliation import (
+    list_payment_reconciliation_candidates,
+)
 
 client = TestClient(app)
 
@@ -128,6 +138,8 @@ def webhook_records(monkeypatch):
         "recipient_phone": "+15550003333",
         "recipient_notes": "Webhook recipient notes",
         "test_event_ids": [],
+        "test_payment_ids": [payment.id],
+        "test_series_ids": [],
     }
     db.close()
     try:
@@ -140,9 +152,18 @@ def webhook_records(monkeypatch):
             )
         )
         cleanup.execute(
-            delete(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+            delete(BookingHold).where(
+                BookingHold.payment_id.in_(records["test_payment_ids"])
+            )
         )
-        cleanup.execute(delete(Payment).where(Payment.id == records["payment_id"]))
+        cleanup.execute(
+            delete(Payment).where(Payment.id.in_(records["test_payment_ids"]))
+        )
+        cleanup.execute(
+            delete(AppointmentSeries).where(
+                AppointmentSeries.id.in_(records["test_series_ids"])
+            )
+        )
         cleanup.execute(
             delete(Appointment).where(Appointment.provider_id == records["provider_id"])
         )
@@ -447,7 +468,7 @@ def test_webhook_after_browser_verification_does_not_change_appointment(
     )
 
     class MockBrowserRazorpayService:
-        def verify_payment(self, *_args):
+        def verify_payment(self, *_args, **_kwargs):
             return True
 
     monkeypatch.setattr(
@@ -806,3 +827,505 @@ def test_webhook_requires_no_customer_authentication(webhook_records, monkeypatc
 
     assert response.status_code == 200
     assert len(_state(records)[2]) == 1
+
+
+def test_reconciliation_lists_captured_unlinked_and_all_matching_events(
+    webhook_records,
+):
+    records = webhook_records
+    now = datetime.now(UTC)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CAPTURED
+    payment.provider_payment_id = records["provider_payment_id"]
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    unrelated_payment = Payment(
+        customer_id=records["customer_id"],
+        amount=2510,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        provider=PaymentProvider.RAZORPAY,
+        provider_order_id=f"order_{uuid4().hex}",
+        provider_payment_id=f"pay_{uuid4().hex}",
+    )
+    db.add(unrelated_payment)
+    db.flush()
+    unrelated_payment_id = unrelated_payment.id
+    records["test_payment_ids"].append(unrelated_payment_id)
+
+    matching_events = [
+        PaymentWebhookEvent(
+            provider_event_id=f"evt_{uuid4().hex}",
+            event_type="payment.captured",
+            provider_order_id=records["order_id"],
+            provider_payment_id=records["provider_payment_id"],
+            status=PaymentWebhookEventStatus.RETRYABLE,
+            created_at=now - timedelta(minutes=2),
+            processed_at=now - timedelta(minutes=2),
+        ),
+        PaymentWebhookEvent(
+            provider_event_id=f"evt_{uuid4().hex}",
+            event_type="payment.captured",
+            provider_order_id=records["order_id"],
+            provider_payment_id=f"pay_{uuid4().hex}",
+            status=PaymentWebhookEventStatus.FAILED,
+            error_message="Captured amount or currency does not match the local payment",
+            created_at=now - timedelta(minutes=1),
+            processed_at=now - timedelta(minutes=1),
+        ),
+        PaymentWebhookEvent(
+            provider_event_id=f"evt_{uuid4().hex}",
+            event_type="payment.captured",
+            provider_order_id=f"order_{uuid4().hex}",
+            provider_payment_id=records["provider_payment_id"],
+            status=PaymentWebhookEventStatus.FAILED,
+            error_message="Provider payment ID conflicts with the local payment",
+            created_at=now,
+            processed_at=now,
+        ),
+        PaymentWebhookEvent(
+            provider_event_id=f"evt_{uuid4().hex}",
+            event_type="payment.captured",
+            provider_order_id=records["order_id"],
+            provider_payment_id=records["provider_payment_id"],
+            status=PaymentWebhookEventStatus.FAILED,
+            error_message="Captured amount or currency does not match the local payment",
+            created_at=now,
+            processed_at=now,
+        ),
+    ]
+    unrelated_event = PaymentWebhookEvent(
+        provider_event_id=f"evt_{uuid4().hex}",
+        event_type="payment.captured",
+        provider_order_id=f"order_{uuid4().hex}",
+        provider_payment_id=f"pay_{uuid4().hex}",
+        status=PaymentWebhookEventStatus.FAILED,
+        created_at=now,
+        processed_at=now,
+    )
+    matching_event_ids = {event.provider_event_id for event in matching_events}
+    hold_id = hold.id
+    expected_event_states = {
+        event.provider_event_id: (event.status, event.error_message)
+        for event in [*matching_events, unrelated_event]
+    }
+    db.add_all([*matching_events, unrelated_event])
+    records["test_event_ids"].extend(
+        event.provider_event_id for event in [*matching_events, unrelated_event]
+    )
+    db.commit()
+    before = (
+        payment.status,
+        payment.provider_payment_id,
+        payment.appointment_id,
+        hold.status,
+        hold.updated_at,
+        len(_state(records)[2]),
+    )
+    db.close()
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=now - timedelta(days=1),
+        as_of=now,
+    )
+    db.close()
+    assert all(item.payment_id != unrelated_payment_id for item in candidates)
+
+    candidate = next(
+        item for item in candidates if item.payment_id == records["payment_id"]
+    )
+    assert candidate.status == PaymentStatus.CAPTURED
+    assert candidate.provider_verification_required is True
+    assert candidate.booking_holds[0].id == hold_id
+    assert len(candidate.webhook_events) == 4
+    assert {event.provider_event_id for event in candidate.webhook_events} == (
+        matching_event_ids
+    )
+    assert all(event.status and event.created_at for event in candidate.webhook_events)
+    assert any(event.error_message for event in candidate.webhook_events)
+    assert {
+        PaymentReconciliationReason.CAPTURED_UNLINKED,
+        PaymentReconciliationReason.RETRYABLE_WEBHOOK_EVENT,
+        PaymentReconciliationReason.FAILED_WEBHOOK_EVENT,
+        PaymentReconciliationReason.MISMATCHED_PROVIDER_ORDER_ID,
+        PaymentReconciliationReason.MISMATCHED_PROVIDER_PAYMENT_ID,
+    }.issubset(set(candidate.reasons))
+    assert all(
+        reason.value != "amount_currency_mismatch" for reason in candidate.reasons
+    )
+
+    payment_after, hold_after, appointments, events_after = _state(records)
+    assert (
+        payment_after.status,
+        payment_after.provider_payment_id,
+        payment_after.appointment_id,
+        hold_after.status,
+        hold_after.updated_at,
+        len(appointments),
+    ) == before
+    assert {
+        event.provider_event_id: (event.status, event.error_message)
+        for event in events_after
+    } == expected_event_states
+
+
+def test_reconciliation_retains_events_with_one_conflicting_provider_id(
+    webhook_records,
+):
+    records = webhook_records
+    now = datetime.now(UTC)
+    matching_order = PaymentWebhookEvent(
+        provider_event_id=f"evt_{uuid4().hex}",
+        event_type="payment.captured",
+        provider_order_id=records["order_id"],
+        provider_payment_id=f"pay_{uuid4().hex}",
+        status=PaymentWebhookEventStatus.FAILED,
+        created_at=now,
+        processed_at=now,
+    )
+    matching_payment = PaymentWebhookEvent(
+        provider_event_id=f"evt_{uuid4().hex}",
+        event_type="payment.captured",
+        provider_order_id=f"order_{uuid4().hex}",
+        provider_payment_id=records["provider_payment_id"],
+        status=PaymentWebhookEventStatus.RETRYABLE,
+        created_at=now + timedelta(seconds=1),
+        processed_at=now + timedelta(seconds=1),
+    )
+    matching_order_event_id = matching_order.provider_event_id
+    matching_order_payment_id = matching_order.provider_payment_id
+    matching_payment_event_id = matching_payment.provider_event_id
+    matching_payment_order_id = matching_payment.provider_order_id
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CAPTURED
+    payment.provider_payment_id = records["provider_payment_id"]
+    db.add_all([matching_order, matching_payment])
+    expected_event_ids = {
+        matching_order_event_id,
+        matching_payment_event_id,
+    }
+    records["test_event_ids"].extend(expected_event_ids)
+    db.commit()
+    db.close()
+
+    db = SessionLocal()
+    candidate = next(
+        item
+        for item in list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=now - timedelta(days=1),
+            as_of=now,
+        )
+        if item.payment_id == records["payment_id"]
+    )
+    db.close()
+
+    events_by_id = {
+        event.provider_event_id: event for event in candidate.webhook_events
+    }
+    assert set(events_by_id) == expected_event_ids
+    assert (
+        events_by_id[matching_order_event_id].provider_order_id == records["order_id"]
+    )
+    assert (
+        events_by_id[matching_order_event_id].provider_payment_id
+        == matching_order_payment_id
+    )
+    assert (
+        events_by_id[matching_payment_event_id].provider_order_id
+        == matching_payment_order_id
+    )
+    assert (
+        events_by_id[matching_payment_event_id].provider_payment_id
+        == records["provider_payment_id"]
+    )
+    assert PaymentReconciliationReason.MISMATCHED_PROVIDER_PAYMENT_ID in (
+        candidate.reasons
+    )
+    assert PaymentReconciliationReason.MISMATCHED_PROVIDER_ORDER_ID in (
+        candidate.reasons
+    )
+    assert PaymentReconciliationReason.FAILED_WEBHOOK_EVENT in candidate.reasons
+    assert PaymentReconciliationReason.RETRYABLE_WEBHOOK_EVENT in candidate.reasons
+
+
+@pytest.mark.parametrize(
+    ("hold_status", "hold_expiry"),
+    [
+        (BookingHoldStatus.EXPIRED, timedelta(days=-1)),
+        (BookingHoldStatus.RELEASED, timedelta(days=-1)),
+        (BookingHoldStatus.ACTIVE, timedelta(days=-1)),
+    ],
+)
+def test_reconciliation_lists_stale_created_payment_with_expired_or_released_hold(
+    webhook_records, hold_status, hold_expiry
+):
+    records = webhook_records
+    now = datetime.now(UTC)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.created_at = now - timedelta(days=2)
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    hold.status = hold_status
+    hold.expires_at = now + hold_expiry
+    db.commit()
+    original_payment_state = (
+        payment.status,
+        payment.created_at,
+        payment.appointment_id,
+    )
+    original_hold_state = (hold.status, hold.expires_at, hold.updated_at)
+    db.close()
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=now - timedelta(days=1),
+        as_of=now,
+    )
+    db.close()
+
+    candidate = next(
+        item for item in candidates if item.payment_id == records["payment_id"]
+    )
+    assert candidate.status == PaymentStatus.CREATED
+    assert candidate.provider_verification_required is True
+    assert PaymentReconciliationReason.STALE_CREATED_NO_CAPTURE_EVIDENCE in (
+        candidate.reasons
+    )
+    expected_hold_reason = (
+        PaymentReconciliationReason.RELEASED_HOLD
+        if hold_status == BookingHoldStatus.RELEASED
+        else PaymentReconciliationReason.EXPIRED_HOLD
+    )
+    assert expected_hold_reason in candidate.reasons
+    payment_after, hold_after, appointments, _ = _state(records)
+    assert (
+        payment_after.status,
+        payment_after.created_at,
+        payment_after.appointment_id,
+    ) == original_payment_state
+    assert (hold_after.status, hold_after.expires_at, hold_after.updated_at) == (
+        *original_hold_state,
+    )
+    assert appointments == []
+
+
+def test_reconciliation_requires_explicit_stale_cutoff_and_bounds_results(
+    webhook_records,
+):
+    records = webhook_records
+    now = datetime.now(UTC)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CREATED
+    payment.created_at = now - timedelta(hours=1)
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    hold.status = BookingHoldStatus.EXPIRED
+    hold.expires_at = now - timedelta(minutes=1)
+
+    another_payment = Payment(
+        customer_id=payment.customer_id,
+        amount=2510,
+        currency="INR",
+        status=PaymentStatus.CAPTURED,
+        provider=PaymentProvider.RAZORPAY,
+        provider_order_id=f"order_{uuid4().hex}",
+        provider_payment_id=f"pay_{uuid4().hex}",
+        created_at=now - timedelta(days=3),
+    )
+    db.add(another_payment)
+    db.flush()
+    another_payment_id = another_payment.id
+    records["test_payment_ids"].append(another_payment_id)
+    db.commit()
+    db.close()
+
+    db = SessionLocal()
+    before_cutoff = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=now - timedelta(days=2),
+        as_of=now,
+    )
+    bounded = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=now - timedelta(days=2),
+        as_of=now,
+        limit=1,
+    )
+    db.close()
+
+    assert all(
+        candidate.payment_id != records["payment_id"] for candidate in before_cutoff
+    )
+    assert any(
+        candidate.payment_id == another_payment_id for candidate in before_cutoff
+    )
+    assert len(bounded) == 1
+    assert bounded[0].payment_id != records["payment_id"]
+    assert bounded[0].provider_verification_required is True
+
+
+def test_reconciliation_excludes_stale_created_payments_without_eligible_hold(
+    webhook_records,
+):
+    records = webhook_records
+    now = datetime.now(UTC)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CREATED
+    payment.created_at = now - timedelta(days=3)
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    hold.status = BookingHoldStatus.ACTIVE
+    hold.expires_at = now + timedelta(days=1)
+
+    stale_without_hold = Payment(
+        customer_id=records["customer_id"],
+        amount=2510,
+        currency="INR",
+        status=PaymentStatus.CREATED,
+        provider=PaymentProvider.RAZORPAY,
+        provider_order_id=f"order_{uuid4().hex}",
+        created_at=now - timedelta(days=3),
+    )
+    db.add(stale_without_hold)
+    db.flush()
+    stale_without_hold_id = stale_without_hold.id
+    records["test_payment_ids"].append(stale_without_hold_id)
+
+    stale_with_active_hold = Payment(
+        customer_id=records["customer_id"],
+        amount=2510,
+        currency="INR",
+        status=PaymentStatus.CREATED,
+        provider=PaymentProvider.RAZORPAY,
+        provider_order_id=f"order_{uuid4().hex}",
+        created_at=now - timedelta(days=3),
+    )
+    db.add(stale_with_active_hold)
+    db.flush()
+    stale_with_active_hold_id = stale_with_active_hold.id
+    records["test_payment_ids"].append(stale_with_active_hold_id)
+    active_hold = BookingHold(
+        customer_id=records["customer_id"],
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        user_name="Webhook Recipient",
+        user_email="webhook-recipient@example.com",
+        user_phone="+15550003333",
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        expires_at=now + timedelta(days=1),
+        status=BookingHoldStatus.ACTIVE,
+        payment_id=stale_with_active_hold_id,
+    )
+    db.add(active_hold)
+    db.commit()
+    db.close()
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=now - timedelta(days=1),
+        as_of=now,
+    )
+    db.close()
+
+    candidate_ids = {candidate.payment_id for candidate in candidates}
+    assert records["payment_id"] not in candidate_ids
+    assert stale_without_hold_id not in candidate_ids
+    assert stale_with_active_hold_id not in candidate_ids
+
+
+def test_reconciliation_excludes_captured_payment_linked_to_series(webhook_records):
+    records = webhook_records
+    now = datetime.now(UTC)
+    db = SessionLocal()
+    series = AppointmentSeries(
+        customer_id=records["customer_id"],
+        provider_id=records["provider_id"],
+        service_id=records["service_id"],
+        frequency=AppointmentSeriesFrequency.WEEKLY,
+        interval=1,
+        start_date=date.today() + timedelta(days=7),
+        local_start_time=time(10),
+        timezone="UTC",
+        end_mode=AppointmentSeriesEndMode.COUNT,
+        occurrence_count=2,
+        status=AppointmentSeriesStatus.ACTIVE,
+    )
+    db.add(series)
+    db.flush()
+    series_id = series.id
+    records["test_series_ids"].append(series_id)
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CAPTURED
+    payment.series_id = series_id
+    db.commit()
+    db.close()
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=now - timedelta(days=1),
+        as_of=now,
+    )
+    db.close()
+
+    assert all(
+        candidate.payment_id != records["payment_id"] for candidate in candidates
+    )
+
+
+def test_reconciliation_flags_missing_provider_ids_and_validates_arguments(
+    webhook_records,
+):
+    records = webhook_records
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = PaymentStatus.CAPTURED
+    payment.provider_order_id = None
+    payment.provider_payment_id = None
+    db.commit()
+    db.close()
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=datetime.now(UTC) - timedelta(days=1),
+    )
+    with pytest.raises(ValueError, match="limit"):
+        list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=datetime.now(UTC) - timedelta(days=1),
+            limit=501,
+        )
+    with pytest.raises(ValueError, match="timezone"):
+        list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=datetime.now(),
+        )
+    db.close()
+
+    candidate = next(
+        item for item in candidates if item.payment_id == records["payment_id"]
+    )
+    assert (
+        PaymentReconciliationReason.MISSING_LOCAL_PROVIDER_ORDER_ID in candidate.reasons
+    )
+    assert (
+        PaymentReconciliationReason.MISSING_LOCAL_PROVIDER_PAYMENT_ID
+        in candidate.reasons
+    )
+    assert candidate.webhook_events == []
