@@ -1,0 +1,19 @@
+/* Base Reset & Box Sizing
+   Global box-sizing reset and baseline html/body dimensions.
+*/
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background: #f4f7f2;
+}

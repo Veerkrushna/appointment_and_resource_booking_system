@@ -1,0 +1,28 @@
+/* Base Utilities
+   Accessible screen-reader utilities and universal status feedback messages.
+*/
+
+.status-message,
+.empty-services {
+  padding: 2.5rem;
+  border: 1px dashed #c6d5cb;
+  border-radius: 8px;
+  color: #64736e;
+  text-align: center;
+}
+
+.status-message--error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-color: #d7b5a3;
+  color: #8d4c31;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}

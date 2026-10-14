@@ -1,0 +1,67 @@
+/* Layout Footer
+   Global site footer layout, branding, and legal links.
+*/
+
+.home-footer {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 2.5rem 0 1.5rem;
+  border-top: 1px solid #dbe5dc;
+}
+
+.brand--footer {
+  color: #18312f;
+}
+
+.home-footer p {
+  margin: 0.9rem 0 0;
+  color: #8a9b94;
+  font-size: 0.75rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.footer-links a {
+  color: #64736e;
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  color: #c05d27;
+}
+
+.footer-note {
+  color: #8a9b94;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 800px) {
+.home-section,
+  .benefits-strip,
+  .home-footer,
+  .home-cta {
+    margin-right: 0;
+    margin-left: 0;
+  }.home-footer {
+    flex-wrap: wrap;
+  }}
+
+@media (max-width: 520px) {
+.home-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    margin: 0 1.25rem;
+  }.footer-links {
+    flex-direction: column;
+    gap: 0.8rem;
+  }.footer-note {
+    display: block;
+  }}

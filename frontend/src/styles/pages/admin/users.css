@@ -1,0 +1,87 @@
+/* Page: Admin Users & Providers
+   Admin provider management, administrator accounts table, and provider ratings.
+*/
+
+.admin-provider-rating {
+  color: #1e293b;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-provider-rating--empty {
+  color: #64736e;
+  font-size: 0.85rem;
+}
+
+.admin-provider-rating__star {
+  font-size: 0.95rem;
+}
+
+.provider-avatar {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.provider-avatar--coral {
+  background: #f1c6b2;
+}
+
+.provider-avatar--sage {
+  background: #c7dfc9;
+}
+
+.provider-avatar--gold {
+  background: #e9dfad;
+}
+
+.admin-providers-page,
+.admin-admins-page {
+  padding-top: clamp(2rem, 4vw, 3.5rem);
+  padding-bottom: 3rem;
+  width: 100%;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.admin-providers-page .admin-appointments-card,
+.admin-admins-page .admin-appointments-card {
+  width: 100%;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.15rem;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.admin-table-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e2784d;
+  background-color: #fff;
+  border: 1.5px solid #e2784d;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.admin-table-edit-btn:hover {
+  background-color: #e2784d;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(226, 120, 77, 0.25);
+}
