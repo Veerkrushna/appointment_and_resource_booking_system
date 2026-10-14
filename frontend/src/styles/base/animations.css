@@ -1,0 +1,28 @@
+/* Base Animations & Keyframes
+   Universal UI keyframes for loaders, spinners, and popup animations.
+*/
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.auth-footer {
+  margin: 1.45rem 0 0;
+  color: #8495a6;
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+@keyframes antSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
