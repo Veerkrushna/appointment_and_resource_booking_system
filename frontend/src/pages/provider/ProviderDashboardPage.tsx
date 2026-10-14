@@ -78,6 +78,7 @@ export default function ProviderDashboardPage() {
     let remainingToday = 0;
     let upcomingCount = 0;
     let completedCount = 0;
+    let cancelledCount = 0;
 
     appointments.forEach((apt) => {
       const aptDate = new Date(apt.appointment_start);
@@ -88,6 +89,10 @@ export default function ProviderDashboardPage() {
 
       if (apt.status === "completed") {
         completedCount++;
+      }
+
+      if (apt.status === "cancelled") {
+        cancelledCount++;
       }
 
       if (apt.status !== "cancelled" && apt.status !== "completed") {
@@ -107,6 +112,7 @@ export default function ProviderDashboardPage() {
       today: todayCount,
       upcoming: upcomingCount,
       completed: completedCount,
+      cancelled: cancelledCount,
       remainingToday: remainingToday,
     };
   }, [appointments]);
@@ -160,20 +166,25 @@ export default function ProviderDashboardPage() {
           <strong>{stats.today}</strong>
           <small>Total scheduled today</small>
         </article>
-        <article className="dashboard-stat">
-          <span>remaining today</span>
+        <article className="dashboard-stat dashboard-stat--providers">
+          <span>Remaining today</span>
           <strong>{stats.remainingToday}</strong>
           <small>Appointments left</small>
         </article>
         <article className="dashboard-stat dashboard-stat--upcoming">
-          <span>upcoming appointment</span>
+          <span>Upcoming appointment</span>
           <strong>{stats.upcoming}</strong>
           <small>In the next 7 days</small>
         </article>
         <article className="dashboard-stat dashboard-stat--completed">
-          <span>completed</span>
+          <span>Completed</span>
           <strong>{stats.completed}</strong>
           <small>Total completed</small>
+        </article>
+        <article className="dashboard-stat dashboard-stat--cancelled">
+          <span>Cancelled</span>
+          <strong>{stats.cancelled}</strong>
+          <small>Total cancelled</small>
         </article>
       </div>
 
