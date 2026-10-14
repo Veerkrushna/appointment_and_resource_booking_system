@@ -1,13 +1,13 @@
 import os
-from fastapi import HTTPException, status, BackgroundTasks
+
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.schemas.auth import CustomerProfileUpdate, CustomerRegister
-from app.services.notifications import send_email
+from app.services.notifications import build_branded_email, send_email
 
 
 def register_user(
@@ -30,14 +30,19 @@ def register_user(
     db.commit()
     db.refresh(user)
 
-    subject = f"Welcome to {settings.app_name}!"
-    body = (
-        f"Dear {user.name},\n"
-        f"Welcome to {settings.app_name}.\n"
-        "Your account has been created Successfully !\n"
-        "Avoid last moment rush by booking Appointments at anytime from anywhere !"
+    subject = "Welcome to Appointment Booking System"
+    body, html_body = build_branded_email(
+        subject,
+        user.name,
+        "Your customer account has been created successfully.",
+        closing=(
+            "Sign in to the application whenever you are ready to browse services "
+            "and book an appointment."
+        ),
     )
-    background_tasks.add_task(send_email, user.email, subject, body)
+    background_tasks.add_task(
+        send_email, user.email, subject, body, html_body=html_body
+    )
 
     return user
 

@@ -57,6 +57,13 @@ def test_password_reset_request(reset_user):
             "message": "If this email exists, a code has been sent"
         }
         mock_send.assert_called_once()
+        subject, body = mock_send.call_args.args[1:3]
+        assert subject == "Your password reset code"
+        assert "one-time code" in body
+        assert "Reset code: " in body
+        assert "Expires in: 5 minutes" in body
+        assert "Hello Reset Test User," in body
+        assert "Security details" in mock_send.call_args.kwargs["html_body"]
 
         db = SessionLocal()
         otp = db.query(PasswordResetOtp).filter_by(user_id=reset_user.id).first()
@@ -87,6 +94,8 @@ def test_password_reset_verify_and_confirm(reset_user, monkeypatch):
         )
         assert confirm_response.status_code == 200
         mock_confirm.assert_called_once()
+        assert mock_confirm.call_args.args[1] == "Your password has been changed"
+        assert "changed successfully" in mock_confirm.call_args.args[2]
 
     db = SessionLocal()
     updated_user = db.get(User, reset_user.id)

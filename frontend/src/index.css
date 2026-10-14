@@ -1315,6 +1315,30 @@ main {
   font-size: 0.78rem;
 }
 
+
+.appointment-payment-status {
+  font-weight: 600;
+}
+
+.appointment-payment-status--captured {
+  color: #15803d;
+}
+
+.appointment-payment-status--pending,
+.appointment-payment-status--created {
+  color: #a16207;
+}
+
+.appointment-payment-status--failed {
+  color: #b91c1c;
+}
+
+.appointment-payment-status--refunded,
+.appointment-payment-status--partially_refunded {
+  color: #475569;
+}
+
+
 .reschedule-flow {
   display: grid;
   gap: 1rem;

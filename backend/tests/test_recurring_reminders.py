@@ -141,9 +141,7 @@ def recurring_reminder_records():
                     AppointmentSeries.id == records["series_id"]
                 )
             )
-            db.execute(
-                delete(Provider).where(Provider.id == records["provider_id"])
-            )
+            db.execute(delete(Provider).where(Provider.id == records["provider_id"]))
             db.execute(delete(Service).where(Service.id == records["service_id"]))
             db.execute(delete(User).where(User.id == records["owner_id"]))
             db.commit()
@@ -155,9 +153,7 @@ def test_recurring_occurrences_schedule_individual_utc_24_hour_reminders(
     with SessionLocal() as db:
         appointments = db.scalars(
             select(Appointment)
-            .where(
-                Appointment.id.in_(recurring_reminder_records["appointment_ids"])
-            )
+            .where(Appointment.id.in_(recurring_reminder_records["appointment_ids"]))
             .order_by(Appointment.occurrence_number)
         ).all()
     scheduled_calls = []
@@ -214,7 +210,9 @@ def test_each_recurring_reminder_uses_contact_email_and_sent_retry_is_idempotent
     sent = []
     monkeypatch.setattr(
         "app.services.notifications.send_email",
-        lambda recipient, subject, body: sent.append((recipient, subject, body)),
+        lambda recipient, subject, body, **_kwargs: sent.append(
+            (recipient, subject, body)
+        ),
     )
 
     with SessionLocal() as db:
@@ -226,7 +224,9 @@ def test_each_recurring_reminder_uses_contact_email_and_sent_retry_is_idempotent
             .order_by(Appointment.occurrence_number)
         ).all()
         assert series.customer_id == owner.id
-        assert all(appointment.user_email != owner.email for appointment in appointments)
+        assert all(
+            appointment.user_email != owner.email for appointment in appointments
+        )
         appointment_ids = [str(appointment.id) for appointment in appointments]
         recipient_emails = [appointment.user_email for appointment in appointments]
 
@@ -237,7 +237,9 @@ def test_each_recurring_reminder_uses_contact_email_and_sent_retry_is_idempotent
         send_email_reminder.run(appointment_id)
 
     assert [recipient for recipient, _, _ in sent] == recipient_emails
-    assert all(subject == "Appointment reminder" for _, subject, _ in sent)
+    assert all(
+        subject == "Reminder: your upcoming appointment" for _, subject, _ in sent
+    )
     with SessionLocal() as db:
         reminders = db.scalars(
             select(Notification).where(
@@ -260,7 +262,7 @@ def test_individually_cancelled_occurrence_suppresses_only_its_reminder(
     sent = []
     monkeypatch.setattr(
         "app.services.notifications.send_email",
-        lambda recipient, subject, body: sent.append(recipient),
+        lambda recipient, subject, body, **_kwargs: sent.append(recipient),
     )
 
     with SessionLocal() as db:
@@ -308,7 +310,7 @@ def test_series_cancellation_suppresses_future_reminders_and_preserves_completed
     sent = []
     monkeypatch.setattr(
         "app.services.notifications.send_email",
-        lambda recipient, subject, body: sent.append(recipient),
+        lambda recipient, subject, body, **_kwargs: sent.append(recipient),
     )
     for appointment_id in future_ids:
         with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
@@ -348,7 +350,7 @@ def test_one_time_cancelled_appointment_reminder_remains_suppressed(
     sent = []
     monkeypatch.setattr(
         "app.services.notifications.send_email",
-        lambda recipient, subject, body: sent.append(recipient),
+        lambda recipient, subject, body, **_kwargs: sent.append(recipient),
     )
     with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
         send_email_reminder.run(str(one_time_id))

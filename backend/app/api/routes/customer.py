@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.security import get_current_customer, require_role
 from app.core.timezones import get_timezone
@@ -57,6 +57,7 @@ def list_customer_appointments(
     query = (
         select(Appointment)
         .where(Appointment.customer_id == customer.id)
+        .options(selectinload(Appointment.payment))
         .order_by(Appointment.appointment_start)
     )
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
