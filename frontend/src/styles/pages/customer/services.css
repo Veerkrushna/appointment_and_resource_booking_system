@@ -1,0 +1,140 @@
+/* Page: Services Catalog
+   Customer-facing services listing, service grid, and empty service states.
+*/
+
+.services-page {
+  padding-top: clamp(3.5rem, 8vw, 7rem);
+}
+
+.services-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 2.75rem;
+}
+
+.services-heading h1 {
+  margin: 0;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(2.8rem, 6vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.service-card:hover {
+  border-color: #b1c9bb;
+  box-shadow: 0 16px 34px rgba(24, 49, 47, 0.09);
+  transform: translateY(-3px);
+}
+
+.service-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.service-category {
+  color: #c27045;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.service-arrow {
+  color: #9aaca3;
+  font-size: 1.4rem;
+}
+
+.service-card h2 {
+  margin: 2rem 0 0.7rem;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.service-description {
+  flex: 1;
+  margin: 0;
+  color: #64736e;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.service-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e9e1;
+  color: #18312f;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.service-book-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.25rem;
+  color: #c05d27;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.service-book-link:hover {
+  color: #a85020;
+}
+
+.booking-page {
+  padding-top: clamp(2.5rem, 6vw, 5rem);
+}
+
+.back-link {
+  color: #55706a;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.empty-services__mark {
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: #e2eee3;
+  color: #557b69;
+  font-size: 1.5rem;
+}
+
+.empty-services h2 {
+  margin: 0 0 0.5rem;
+  color: #18312f;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.empty-services p {
+  margin: 0;
+}
+
+@media (max-width: 800px) {
+.services-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1.25rem;
+  }.service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }}
+
+@media (max-width: 520px) {
+.service-grid {
+    grid-template-columns: 1fr;
+  }.service-card {
+    min-height: 240px;
+  }}
