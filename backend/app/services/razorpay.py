@@ -55,7 +55,15 @@ class RazorpayService:
         ):
             raise RazorpayIntegrationError("Razorpay order creation failed") from None
 
-    def verify_payment(self, order_id: str, payment_id: str, signature: str) -> bool:
+    def verify_payment(
+        self,
+        order_id: str,
+        payment_id: str,
+        signature: str,
+        *,
+        expected_amount: int,
+        expected_currency: str,
+    ) -> bool:
         if not self._api_credentials_configured:
             raise RazorpayIntegrationError("Razorpay credentials are not configured")
         try:
@@ -93,8 +101,13 @@ class RazorpayService:
                 "Razorpay payment verification failed"
             ) from None
 
+        amount = payment.get("amount")
         return (
-            payment.get("order_id") == order_id and payment.get("status") == "captured"
+            payment.get("order_id") == order_id
+            and payment.get("status") == "captured"
+            and type(amount) is int
+            and amount == expected_amount
+            and payment.get("currency") == expected_currency
         )
 
     def verify_webhook_signature(self, raw_body: bytes, signature: str) -> bool:

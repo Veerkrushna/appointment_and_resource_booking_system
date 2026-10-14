@@ -140,6 +140,13 @@ function Navbar() {
                     Appointments
                   </NavLink>
                   <NavLink
+                    to="/admin/payment-reconciliation"
+                    className={({ isActive }) => (isActive ? "active" : "")}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Payment reconciliation
+                  </NavLink>
+                  <NavLink
                     to="/admin/services"
                     className={({ isActive }) => (isActive ? "active" : "")}
                     onClick={() => setIsMenuOpen(false)}

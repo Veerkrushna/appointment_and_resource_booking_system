@@ -29,10 +29,18 @@ def test_verify_payment_checks_signature_and_captured_payment_order():
     client.payment.fetch.return_value = {
         "order_id": "order_test",
         "status": "captured",
+        "amount": 2510,
+        "currency": "INR",
     }
     service = RazorpayService(client=client)
 
-    assert service.verify_payment("order_test", "pay_test", "signature_test")
+    assert service.verify_payment(
+        "order_test",
+        "pay_test",
+        "signature_test",
+        expected_amount=2510,
+        expected_currency="INR",
+    )
     client.utility.verify_payment_signature.assert_called_once_with(
         {
             "razorpay_order_id": "order_test",
@@ -48,15 +56,43 @@ def test_verify_payment_rejects_invalid_signature_without_fetching_payment():
     client.utility.verify_payment_signature.return_value = False
     service = RazorpayService(client=client)
 
-    assert not service.verify_payment("order_test", "pay_test", "invalid")
+    assert not service.verify_payment(
+        "order_test",
+        "pay_test",
+        "invalid",
+        expected_amount=2510,
+        expected_currency="INR",
+    )
     client.payment.fetch.assert_not_called()
 
 
 @pytest.mark.parametrize(
     "payment_response",
     [
-        {"order_id": "different_order", "status": "captured"},
-        {"order_id": "order_test", "status": "authorized"},
+        {
+            "order_id": "different_order",
+            "status": "captured",
+            "amount": 2510,
+            "currency": "INR",
+        },
+        {
+            "order_id": "order_test",
+            "status": "authorized",
+            "amount": 2510,
+            "currency": "INR",
+        },
+        {
+            "order_id": "order_test",
+            "status": "captured",
+            "amount": 2500,
+            "currency": "INR",
+        },
+        {
+            "order_id": "order_test",
+            "status": "captured",
+            "amount": 2510,
+            "currency": "USD",
+        },
     ],
 )
 def test_verify_payment_rejects_non_captured_or_mismatched_payment(payment_response):
@@ -65,7 +101,34 @@ def test_verify_payment_rejects_non_captured_or_mismatched_payment(payment_respo
     client.payment.fetch.return_value = payment_response
     service = RazorpayService(client=client)
 
-    assert not service.verify_payment("order_test", "pay_test", "signature_test")
+    assert not service.verify_payment(
+        "order_test",
+        "pay_test",
+        "signature_test",
+        expected_amount=2510,
+        expected_currency="INR",
+    )
+
+
+@pytest.mark.parametrize("amount", [True, 2510.0, "2510", None])
+def test_verify_payment_rejects_amount_that_is_not_an_exact_integer(amount):
+    client = MagicMock()
+    client.utility.verify_payment_signature.return_value = True
+    client.payment.fetch.return_value = {
+        "order_id": "order_test",
+        "status": "captured",
+        "amount": amount,
+        "currency": "INR",
+    }
+    service = RazorpayService(client=client)
+
+    assert not service.verify_payment(
+        "order_test",
+        "pay_test",
+        "signature_test",
+        expected_amount=2510,
+        expected_currency="INR",
+    )
 
 
 def test_webhook_signature_uses_raw_body_and_separate_webhook_secret(monkeypatch):
