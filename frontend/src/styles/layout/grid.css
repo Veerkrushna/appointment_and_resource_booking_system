@@ -1,0 +1,9 @@
+/* Layout Grid & Main Container
+   Page layout shell and main container sizing constraints.
+*/
+
+main {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 5vw, 5rem) 4rem;
+}
