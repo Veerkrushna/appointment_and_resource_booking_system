@@ -217,13 +217,14 @@ def send_series_confirmation_notification(series_id: str) -> None:
             db.add(notification)
             db.commit()
 
-        subject, body = build_series_confirmation_email(series, appointments)
+        subject, body, html_body = build_series_confirmation_email(series, appointments)
         delivered = deliver_email_notification(
             db,
             notification,
             first_appointment.user_email,
             subject,
             body,
+            html_body=html_body,
         )
         if not delivered:
             raise RuntimeError("Recurring series confirmation delivery failed")
@@ -259,7 +260,11 @@ def send_cancellation_notification(appointment_id: str) -> None:
     retry_backoff_max=300,
     retry_kwargs={"max_retries": 3},
 )
-def send_reschedule_notification(appointment_id: str) -> None:
+def send_reschedule_notification(
+    appointment_id: str,
+    previous_start: str | None = None,
+    previous_end: str | None = None,
+) -> None:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
         if appointment is None:
@@ -272,7 +277,15 @@ def send_reschedule_notification(appointment_id: str) -> None:
         )
         db.add(notification)
         db.commit()
-        deliver_notification(db, notification, appointment)
+        deliver_notification(
+            db,
+            notification,
+            appointment,
+            previous_start=(
+                datetime.fromisoformat(previous_start) if previous_start else None
+            ),
+            previous_end=datetime.fromisoformat(previous_end) if previous_end else None,
+        )
 
 
 @celery_app.task(

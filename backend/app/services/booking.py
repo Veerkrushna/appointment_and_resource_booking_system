@@ -254,6 +254,8 @@ def update_appointment(
 ) -> Appointment:
     changes = payload.model_dump(exclude_unset=True)
     rescheduled = "appointment_start" in changes
+    previous_start = appointment.appointment_start if rescheduled else None
+    previous_end = appointment.appointment_end if rescheduled else None
     confirmed = changes.get("status") == AppointmentStatus.CONFIRMED
     if changes.get("status") == AppointmentStatus.CANCELLED:
         raise BookingValidationError(
@@ -288,7 +290,11 @@ def update_appointment(
         send_confirmation_status_notification.delay(str(appointment.id))
     if rescheduled:
         db.refresh(appointment)
-        send_reschedule_notification.delay(str(appointment.id))
+        send_reschedule_notification.delay(
+            str(appointment.id),
+            previous_start.isoformat() if previous_start else None,
+            previous_end.isoformat() if previous_end else None,
+        )
     return appointment
 
 
@@ -379,6 +385,8 @@ def reschedule_appointment(
             f"Cannot reschedule appointment with status {current_status}"
         )
 
+    previous_start = appointment.appointment_start
+    previous_end = appointment.appointment_end
     from app.models.user import UserRole
 
     if user_role == UserRole.CUSTOMER or user_role is None:
@@ -411,5 +419,9 @@ def reschedule_appointment(
     appointment.appointment_end = end_utc
     db.commit()
     db.refresh(appointment)
-    send_reschedule_notification.delay(str(appointment.id))
+    send_reschedule_notification.delay(
+        str(appointment.id),
+        previous_start.isoformat(),
+        previous_end.isoformat(),
+    )
     return appointment
