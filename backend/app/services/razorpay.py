@@ -60,6 +60,7 @@ class RazorpayService:
         order_id: str,
         payment_id: str,
         signature: str,
+        *,
         expected_amount: int,
         expected_currency: str,
     ) -> bool:
@@ -100,12 +101,12 @@ class RazorpayService:
                 "Razorpay payment verification failed"
             ) from None
 
+        amount = payment.get("amount")
         return (
             payment.get("order_id") == order_id
             and payment.get("status") == "captured"
-            and isinstance(payment.get("amount"), int)
-            and not isinstance(payment.get("amount"), bool)
-            and payment.get("amount") == expected_amount
+            and type(amount) is int
+            and amount == expected_amount
             and payment.get("currency") == expected_currency
         )
 

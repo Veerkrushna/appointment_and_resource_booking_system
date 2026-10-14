@@ -20,7 +20,12 @@ from app.schemas.admin import (
     AppointmentStatusCount,
     ProviderScheduleResponse,
 )
+from app.schemas.payment_reconciliation import PaymentReconciliationCandidate
 from app.schemas.providers import AvailabilityWindow, BlackoutResponse, BreakWindow
+from app.services.payment_reconciliation import (
+    MAX_RECONCILIATION_CANDIDATES,
+    list_payment_reconciliation_candidates,
+)
 
 router = APIRouter(
     prefix="/api/admin",
@@ -50,6 +55,38 @@ def _appointment_response(appointment: Appointment, timezone: str):
         appointment.service.name,
         timezone,
     )
+
+
+@router.get(
+    "/payment-reconciliation",
+    response_model=list[PaymentReconciliationCandidate],
+)
+def admin_payment_reconciliation(
+    db: Annotated[Session, Depends(get_db)],
+    stale_created_before: Annotated[
+        datetime,
+        Query(
+            description=(
+                "Required timezone-aware cutoff for stale CREATED payments; "
+                "the caller chooses the investigation age threshold."
+            )
+        ),
+    ],
+    limit: int = Query(default=100, ge=1, le=MAX_RECONCILIATION_CANDIDATES),
+):
+    """Return captured-unlinked payments of any age and stale CREATED payments.
+
+    The caller-supplied cutoff applies only to CREATED payments. The limit
+    applies to the combined candidate list.
+    """
+    try:
+        return list_payment_reconciliation_candidates(
+            db,
+            stale_created_before=stale_created_before,
+            limit=limit,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)

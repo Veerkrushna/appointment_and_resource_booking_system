@@ -1,5 +1,0 @@
-backend task for Nikhil:
-1) Schemas (ServiceCreate, ServiceUpdate, ServiceRead)
-2) Service layer functions
-3) CRUD routes for /services
-4) Pytest tests

@@ -170,7 +170,13 @@ def _stub_verification(
 
     class MockRazorpayService:
         def verify_payment(
-            self, order_id, payment_id, signature, expected_amount, expected_currency
+            self,
+            order_id,
+            payment_id,
+            signature,
+            *,
+            expected_amount,
+            expected_currency,
         ):
             calls.append(
                 (

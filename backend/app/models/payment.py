@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -42,10 +44,20 @@ class PaymentProvider(enum.StrEnum):
 
 class PaymentWebhookEventStatus(enum.StrEnum):
     RECEIVED = "RECEIVED"
+    RETRYABLE = "RETRYABLE"
     PROCESSED = "PROCESSED"
     IGNORED = "IGNORED"
-    RETRYABLE = "RETRYABLE"
     FAILED = "FAILED"
+
+
+class PaymentWebhookCaptureValidationFailure(enum.StrEnum):
+    INVALID_PAYMENT_ID = "invalid_payment_id"
+    INVALID_CAPTURE_STATUS = "invalid_capture_status"
+    PROVIDER_ORDER_ID_MISMATCH = "provider_order_id_mismatch"
+    PROVIDER_PAYMENT_ID_MISMATCH = "provider_payment_id_mismatch"
+    INVALID_AMOUNT = "invalid_amount"
+    AMOUNT_MISMATCH = "amount_mismatch"
+    CURRENCY_MISMATCH = "currency_mismatch"
 
 
 class Payment(Base):
@@ -122,6 +134,15 @@ class PaymentWebhookEvent(Base):
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    capture_validation_failure: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
+    capture_validation_details: Mapped[dict[str, object] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    local_payment_state_conflict: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     status: Mapped[PaymentWebhookEventStatus] = mapped_column(
         SQLEnum(PaymentWebhookEventStatus, name="payment_webhook_event_status"),
         nullable=False,

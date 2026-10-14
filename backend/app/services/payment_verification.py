@@ -149,8 +149,8 @@ def verify_appointment_payment(
             payment.provider_order_id,
             payload.provider_payment_id,
             payload.signature,
-            payment.amount,
-            payment.currency,
+            expected_amount=payment.amount,
+            expected_currency=payment.currency,
         ):
             raise InvalidPaymentVerificationError(
                 "Payment signature, status, amount, or currency is invalid"

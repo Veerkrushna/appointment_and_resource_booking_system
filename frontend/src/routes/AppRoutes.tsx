@@ -6,6 +6,8 @@ import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
 import AdminAppointmentsPage from "../pages/admin/AdminAppointmentsPage";
 import AdminServicesPage from "../pages/admin/AdminServicesPage";
 import AdminProvidersPage from "../pages/admin/AdminProvidersPage";
+import AdminAdminsPage from "../pages/admin/AdminAdminsPage";
+import AdminPaymentReconciliationPage from "../pages/admin/AdminPaymentReconciliationPage";
 import ProviderDashboardPage from "../pages/provider/ProviderDashboardPage";
 import ProviderAvailabilityPage from "../pages/provider/ProviderAvailabilityPage";
 import ProviderServicesPage from "../pages/provider/ProviderServicesPage";
@@ -122,6 +124,14 @@ function AppRoutes() {
             </AdminRoute>
           }
         />
+        <Route
+          path="/admin/payment-reconciliation"
+          element={
+            <AdminRoute>
+              <AdminPaymentReconciliationPage />
+            </AdminRoute>
+          }
+        />
         <Route path="/" element={<HomeRoute />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route
@@ -139,6 +149,14 @@ function AppRoutes() {
           element={
             <AdminRoute>
               <AdminProvidersPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/admins"
+          element={
+            <AdminRoute>
+              <AdminAdminsPage />
             </AdminRoute>
           }
         />
