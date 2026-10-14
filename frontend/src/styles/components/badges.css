@@ -207,3 +207,25 @@
   color: var(--color-blue-900);
   border: 1px solid var(--color-blue-200);
 }
+
+.appointment-payment-status {
+  font-weight: 600;
+}
+
+.appointment-payment-status--captured {
+  color: #15803d;
+}
+
+.appointment-payment-status--pending,
+.appointment-payment-status--created {
+  color: #a16207;
+}
+
+.appointment-payment-status--failed {
+  color: #b91c1c;
+}
+
+.appointment-payment-status--refunded,
+.appointment-payment-status--partially_refunded {
+  color: #475569;
+}

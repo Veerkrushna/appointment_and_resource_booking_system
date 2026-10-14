@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -54,13 +54,6 @@ class AppointmentRescheduleCreate(BaseModel):
 AppointmentCancellationRequest = AppointmentCancellationCreate
 
 
-class AppointmentRescheduleCreate(BaseModel):
-    appointment_start: datetime
-    cancelled_by: str = Field(min_length=1, max_length=100)
-    reason: str | None = None
-    refund_status: RefundStatus = RefundStatus.NOT_ELIGIBLE
-
-
 class AppointmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,12 +70,10 @@ class AppointmentResponse(BaseModel):
     status: str
 
     @classmethod
-    def from_appointment(cls, appointment, timezone: str) -> "AppointmentResponse":
-        response = cls.model_validate(appointment)
-
-        from datetime import UTC, datetime
-
+    def from_appointment(cls, appointment, timezone: str):
         from app.services.booking import get_booking_status
+
+        response = cls.model_validate(appointment)
 
         now_utc = datetime.now(UTC)
         response.status = get_booking_status(
@@ -94,6 +85,7 @@ class AppointmentResponse(BaseModel):
 
         response.appointment_start = to_local(response.appointment_start, timezone)
         response.appointment_end = to_local(response.appointment_end, timezone)
+
         return response
 
 
@@ -108,6 +100,24 @@ class AppointmentListResponse(BaseModel):
 class CustomerAppointmentResponse(AppointmentResponse):
     series_id: UUID | None = None
     occurrence_number: int | None = None
+    payment_status: str | None = None
+
+    @classmethod
+    def from_appointment(cls, appointment, timezone: str):
+        response = AppointmentResponse.from_appointment(appointment, timezone)
+
+        return cls.model_validate(
+            {
+                **response.model_dump(),
+                "series_id": appointment.series_id,
+                "occurrence_number": appointment.occurrence_number,
+                "payment_status": (
+                    appointment.payment.status.value
+                    if appointment.payment is not None
+                    else None
+                ),
+            }
+        )
 
 
 class CustomerAppointmentListResponse(AppointmentListResponse):

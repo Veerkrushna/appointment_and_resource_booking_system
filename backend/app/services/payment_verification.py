@@ -153,7 +153,7 @@ def verify_appointment_payment(
             expected_currency=payment.currency,
         ):
             raise InvalidPaymentVerificationError(
-                "Payment signature or status is invalid"
+                "Payment signature, status, amount, or currency is invalid"
             )
 
         hold = _load_payment_hold(db, payment.id)
