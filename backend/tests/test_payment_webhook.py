@@ -1,7 +1,9 @@
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -511,8 +513,8 @@ def test_linked_payment_mismatches_are_reconciliation_failures(
 
     payment, hold, appointments, events = _state(records)
     mismatch_event = next(event for event in events if event.status != "PROCESSED")
-    assert first.status_code == second.status_code == 200
-    assert second.json()["status"] == PaymentWebhookEventStatus.FAILED
+    assert first.status_code == 200
+    assert second.status_code == 200
     assert payment.status == PaymentStatus.CAPTURED
     assert payment.appointment_id == appointments[0].id
     assert hold.status == BookingHoldStatus.CONVERTED
@@ -532,6 +534,20 @@ def test_linked_payment_mismatches_are_reconciliation_failures(
     db.close()
     assert candidate.appointment_id == appointments[0].id
     assert PaymentReconciliationReason.CAPTURE_VALIDATION_FAILED in candidate.reasons
+
+    repeated, _ = _post_webhook(
+        records,
+        monkeypatch,
+        _captured_payload(records, **overrides),
+        event_id=mismatch_event.provider_event_id,
+    )
+    assert repeated.status_code == 200
+    repeated_event = next(
+        event
+        for event in _state(records)[3]
+        if event.provider_event_id == mismatch_event.provider_event_id
+    )
+    assert repeated_event.status == PaymentWebhookEventStatus.FAILED
 
 
 def test_failed_local_payment_status_is_preserved(webhook_records, monkeypatch):
@@ -726,32 +742,48 @@ def test_webhook_before_browser_uses_hold_recipient_snapshot(
 
 
 @pytest.mark.parametrize(
-    ("overrides", "failure", "expected_amount", "expected_currency"),
+    (
+        "overrides",
+        "failure",
+        "expected_amount",
+        "expected_currency",
+        "error_fragment",
+    ),
     [
         (
             {"amount": 1},
             PaymentWebhookCaptureValidationFailure.AMOUNT_MISMATCH,
             1,
             "INR",
+            "Captured amount or currency does not match the local payment",
         ),
         (
             {"currency": "USD"},
             PaymentWebhookCaptureValidationFailure.CURRENCY_MISMATCH,
             2510,
             "USD",
+            "Captured amount or currency does not match the local payment",
         ),
         (
             {"id": f"pay_{uuid4().hex}"},
             PaymentWebhookCaptureValidationFailure.PROVIDER_PAYMENT_ID_MISMATCH,
             2510,
             "INR",
+            "Provider payment ID conflicts with the local payment",
         ),
     ],
 )
 def test_captured_payment_mismatches_are_recorded_for_reconciliation(
-    webhook_records, monkeypatch, overrides, failure, expected_amount, expected_currency
+    webhook_records,
+    monkeypatch,
+    overrides,
+    failure,
+    expected_amount,
+    expected_currency,
+    error_fragment,
 ):
     records = webhook_records
+    event_id = records["event_id"]
     if "id" in overrides:
         db = SessionLocal()
         db.get(Payment, records["payment_id"]).provider_payment_id = "pay_previous"
@@ -760,7 +792,7 @@ def test_captured_payment_mismatches_are_recorded_for_reconciliation(
     _mock_signature(monkeypatch)
 
     response, _ = _post_webhook(
-        records, monkeypatch, _captured_payload(records, **overrides)
+        records, monkeypatch, _captured_payload(records, **overrides), event_id=event_id
     )
 
     assert response.status_code == 200
@@ -773,9 +805,22 @@ def test_captured_payment_mismatches_are_recorded_for_reconciliation(
     assert hold.status == BookingHoldStatus.ACTIVE
     assert appointments == []
     assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert error_fragment in events[0].error_message
     assert events[0].capture_validation_failure == failure.value
     assert events[0].capture_validation_details["amount"] == expected_amount
     assert events[0].capture_validation_details["currency"] == expected_currency
+    failure_message = events[0].error_message
+
+    repeated, _ = _post_webhook(
+        records, monkeypatch, _captured_payload(records, **overrides), event_id=event_id
+    )
+
+    payment, hold, appointments, events = _state(records)
+    assert repeated.status_code == 200
+    assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert events[0].error_message == failure_message
+    assert payment.appointment_id is None
+    assert appointments == []
 
     db = SessionLocal()
     candidate = next(
@@ -843,27 +888,98 @@ def test_expired_hold_records_captured_payment_without_appointment(
     webhook_records, monkeypatch
 ):
     records = webhook_records
+    existing = Appointment(
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        user_name="Existing booking",
+        user_email="existing-expired-webhook@example.com",
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_time_minutes=10,
+        status=AppointmentStatus.CONFIRMED,
+    )
     db = SessionLocal()
+    db.add(existing)
     hold = db.scalar(
         select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
     )
     hold.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     db.commit()
+    existing_id = existing.id
     db.close()
     _mock_signature(monkeypatch)
 
     response, _ = _post_webhook(records, monkeypatch)
 
-    assert response.status_code == 200
+    assert response.status_code == 503
     payment, hold, appointments, events = _state(records)
     assert payment.status == PaymentStatus.CAPTURED
     assert payment.provider_payment_id == records["provider_payment_id"]
     assert hold.status == BookingHoldStatus.EXPIRED
-    assert appointments == []
-    assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert len(appointments) == 1
+    assert appointments[0].id == existing_id
+    assert events[0].status == PaymentWebhookEventStatus.RETRYABLE
 
 
-def test_unavailable_slot_is_recorded_for_reconciliation(webhook_records, monkeypatch):
+def test_failed_webhook_retries_after_expired_hold_slot_becomes_available(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    existing = Appointment(
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        user_name="Existing booking",
+        user_email="existing-webhook@example.com",
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_time_minutes=10,
+        status=AppointmentStatus.CONFIRMED,
+    )
+    db = SessionLocal()
+    db.add(existing)
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    hold.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    existing_id = existing.id
+    db.close()
+    _mock_signature(monkeypatch)
+
+    response, _ = _post_webhook(records, monkeypatch)
+
+    assert response.status_code == 503
+    payment, hold, appointments, events = _state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert hold.status == BookingHoldStatus.EXPIRED
+    assert len(appointments) == 1
+    assert appointments[0].id == existing_id
+    assert events[0].status == PaymentWebhookEventStatus.RETRYABLE
+    assert events[0].error_message is not None
+
+    db = SessionLocal()
+    db.delete(db.get(Appointment, existing_id))
+    db.commit()
+    db.close()
+
+    retry, _ = _post_webhook(records, monkeypatch)
+
+    payment, hold, appointments, events = _state(records)
+    assert retry.status_code == 200
+    assert retry.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(appointments) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
+    assert events[0].error_message is None
+
+
+def test_failed_webhook_remains_retryable_until_slot_is_available(
+    webhook_records, monkeypatch
+):
     records = webhook_records
     existing = Appointment(
         service_id=records["service_id"],
@@ -883,15 +999,205 @@ def test_unavailable_slot_is_recorded_for_reconciliation(webhook_records, monkey
     db.close()
     _mock_signature(monkeypatch)
 
-    response, _ = _post_webhook(records, monkeypatch)
-
-    assert response.status_code == 200
+    first, _ = _post_webhook(records, monkeypatch)
+    second, _ = _post_webhook(records, monkeypatch)
     payment, hold, appointments, events = _state(records)
+    assert first.status_code == second.status_code == 503
     assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id is None
     assert hold.status == BookingHoldStatus.ACTIVE
     assert len(appointments) == 1
-    assert appointments[0].id == existing_id
+    assert events[0].status == PaymentWebhookEventStatus.RETRYABLE
+    assert events[0].error_message is not None
+
+    db = SessionLocal()
+    db.delete(db.get(Appointment, existing_id))
+    db.commit()
+    db.close()
+
+    recovered, _ = _post_webhook(records, monkeypatch)
+
+    payment, hold, appointments, events = _state(records)
+    assert recovered.status_code == 200
+    assert recovered.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(appointments) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
+
+
+def test_retryable_webhook_requires_exact_nonempty_provider_identity(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    existing = Appointment(
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        user_name="Existing webhook booking",
+        user_email="existing-retry-guard@example.com",
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_time_minutes=10,
+        status=AppointmentStatus.CONFIRMED,
+    )
+    db = SessionLocal()
+    db.add(existing)
+    db.commit()
+    existing_id = existing.id
+    db.close()
+    _mock_signature(monkeypatch)
+
+    first, _ = _post_webhook(records, monkeypatch)
+    assert first.status_code == 503
+    assert _state(records)[3][0].status == PaymentWebhookEventStatus.RETRYABLE
+
+    invalid_retries = [
+        _captured_payload(records) | {"event": "payment.authorized"},
+        _captured_payload(records, order_id="order_mismatch"),
+        _captured_payload(records, id="pay_mismatch"),
+        _captured_payload(records, order_id=None),
+        _captured_payload(records, id=None),
+        _captured_payload(records, order_id=""),
+        _captured_payload(records, id=""),
+    ]
+    for invalid_payload in invalid_retries:
+        response, _ = _post_webhook(
+            records, monkeypatch, invalid_payload, event_id=records["event_id"]
+        )
+        payment, _hold, appointments, events = _state(records)
+        assert response.status_code == 503
+        assert events[0].status == PaymentWebhookEventStatus.RETRYABLE
+        assert events[0].provider_order_id == records["order_id"]
+        assert events[0].provider_payment_id == records["provider_payment_id"]
+        assert payment.appointment_id is None
+        assert len(appointments) == 1
+        assert appointments[0].id == existing_id
+
+    db = SessionLocal()
+    db.delete(db.get(Appointment, existing_id))
+    db.commit()
+    db.close()
+
+    recovered, _ = _post_webhook(records, monkeypatch)
+
+    assert recovered.status_code == 200
+    assert recovered.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert len(_state(records)[2]) == 1
+
+
+def test_permanent_provider_validation_failure_is_not_retried(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    db = SessionLocal()
+    provider = db.get(Provider, records["provider_id"])
+    provider.availability_status = AvailabilityStatus.INACTIVE
+    db.commit()
+    db.close()
+    _mock_signature(monkeypatch)
+
+    first, _ = _post_webhook(records, monkeypatch)
+    payment, hold, appointments, events = _state(records)
+    assert first.status_code == 200
     assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointments == []
+
+    repeated, _ = _post_webhook(records, monkeypatch)
+    payment, _hold, appointments, events = _state(records)
+    assert repeated.status_code == 200
+    assert events[0].status == PaymentWebhookEventStatus.FAILED
+    assert payment.appointment_id is None
+    assert appointments == []
+
+
+def test_already_linked_inconsistency_is_terminal(webhook_records, monkeypatch):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+    initial, _ = _post_webhook(records, monkeypatch)
+    assert initial.status_code == 200
+    appointment_id = _state(records)[0].appointment_id
+    inconsistent_event_id = f"evt_{uuid4().hex}"
+    records["test_event_ids"].append(inconsistent_event_id)
+    original_get = Session.get
+    calls = []
+
+    def hide_linked_appointment(session, entity, ident, **kwargs):
+        if entity is Appointment and ident == appointment_id:
+            calls.append(ident)
+            return None
+        return original_get(session, entity, ident, **kwargs)
+
+    monkeypatch.setattr(Session, "get", hide_linked_appointment)
+    response, _ = _post_webhook(records, monkeypatch, event_id=inconsistent_event_id)
+    assert response.status_code == 200
+    failed_event = next(
+        event
+        for event in _state(records)[3]
+        if event.provider_event_id == inconsistent_event_id
+    )
+    assert failed_event.status == PaymentWebhookEventStatus.FAILED
+    assert calls == [appointment_id]
+
+    repeated, _ = _post_webhook(records, monkeypatch, event_id=inconsistent_event_id)
+    assert repeated.status_code == 200
+    assert calls == [appointment_id]
+
+
+def test_expired_hold_is_confirmed_only_after_fresh_availability_check(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    db = SessionLocal()
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    hold.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    db.close()
+    _mock_signature(monkeypatch)
+
+    response, _ = _post_webhook(records, monkeypatch)
+
+    payment, hold, appointments, events = _state(records)
+    assert response.status_code == 200
+    assert response.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(appointments) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
+
+
+def test_concurrent_duplicate_webhooks_create_one_appointment(
+    webhook_records, monkeypatch
+):
+    records = webhook_records
+    _mock_signature(monkeypatch)
+    barrier = Barrier(2)
+
+    def post_duplicate():
+        barrier.wait(timeout=5)
+        return _post_webhook(records, monkeypatch)[0]
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _index: post_duplicate(), range(2)))
+
+    payment, hold, appointments, events = _state(records)
+    assert [response.status_code for response in responses] == [200, 200]
+    assert all(
+        response.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+        for response in responses
+    )
+    assert len(appointments) == 1
+    assert payment.appointment_id == appointments[0].id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert len(events) == 1
+    assert events[0].status == PaymentWebhookEventStatus.PROCESSED
 
 
 def test_notifications_are_queued_only_after_commit(webhook_records, monkeypatch):
@@ -1028,8 +1334,10 @@ def test_retryable_event_rejects_a_changed_payment_identity(
     payment, hold, appointments, events = _state(records)
 
     assert failed.status_code == 503
-    assert changed_identity.status_code == 200
-    assert changed_identity.json()["status"] == PaymentWebhookEventStatus.RETRYABLE
+    assert changed_identity.status_code == 503
+    assert "webhook processing will be retried" in (
+        changed_identity.json()["detail"].lower()
+    )
     assert payment.status == PaymentStatus.CAPTURED
     assert payment.provider_payment_id == records["provider_payment_id"]
     assert payment.appointment_id is None

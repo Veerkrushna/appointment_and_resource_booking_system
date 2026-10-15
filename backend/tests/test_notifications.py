@@ -1,20 +1,33 @@
 from datetime import UTC, datetime, time, timedelta
-from unittest.mock import patch
+from email.parser import BytesParser
+from email.policy import default
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import BackgroundTasks
 from sqlalchemy import delete, select
 
 from app.db.database import SessionLocal
 from app.models.appointment import Appointment
+from app.models.appointment_series import AppointmentSeriesFrequency
 from app.models.availability import ProviderAvailability
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
 from app.schemas.appointment import AppointmentCreate
+from app.schemas.auth import CustomerRegister
+from app.services.auth_service import register_user
 from app.services.booking import create_appointment
-from app.services.notifications import send_booking_confirmation
+from app.services.notifications import (
+    _appointment_email,
+    build_branded_email,
+    build_series_confirmation_email,
+    send_booking_confirmation,
+    send_email,
+)
 from app.tasks.notification_tasks import (
     schedule_appointment_notifications,
     send_confirmation_notification,
@@ -277,3 +290,212 @@ def test_email_reminder_has_retry_configuration():
     assert Exception in send_email_reminder.autoretry_for
     assert send_email_reminder.retry_backoff is True
     assert send_email_reminder.retry_kwargs["max_retries"] == 3
+
+
+def _email_appointment(**overrides):
+    appointment = {
+        "user_name": '<Alex & "Co">',
+        "appointment_start": datetime(2026, 10, 19, 4, 30, tzinfo=UTC),
+        "appointment_end": datetime(2026, 10, 19, 5, 0, tzinfo=UTC),
+        "duration_minutes": 30,
+        "provider": SimpleNamespace(name="<Dr. Example>", timezone="Asia/Kolkata"),
+        "service": SimpleNamespace(name="General Consultation"),
+    }
+    appointment.update(overrides)
+    return SimpleNamespace(**appointment)
+
+
+@pytest.mark.parametrize(
+    ("notification_type", "expected_subject", "expected_phrase"),
+    [
+        (
+            NotificationType.CONFIRMATION,
+            "Your appointment is confirmed",
+            "successfully booked and confirmed",
+        ),
+        (
+            NotificationType.REMINDER,
+            "Reminder: your upcoming appointment",
+            "reminder that your appointment is coming up",
+        ),
+        (
+            NotificationType.CANCELLATION,
+            "Your appointment has been cancelled",
+            "cancelled as requested",
+        ),
+        (
+            NotificationType.RESCHEDULE,
+            "Your appointment schedule has changed",
+            "rescheduled",
+        ),
+        (
+            NotificationType.FEEDBACK_REQUEST,
+            "Thank you for your visit — share your feedback",
+            "Thank you for attending your appointment",
+        ),
+    ],
+)
+def test_event_emails_include_local_appointment_details(
+    notification_type, expected_subject, expected_phrase
+):
+    subject, body, html_body, _ = _appointment_email(
+        notification_type, _email_appointment()
+    )
+
+    assert subject == expected_subject
+    assert expected_phrase in body
+    assert "Monday, 19 October 2026" in body
+    assert "10:00 AM – 10:30 AM IST" in body
+    assert "30 minutes" in body
+    assert "General Consultation" in body
+    assert "<Dr. Example>" in body
+    assert "Appointment Booking System" in body
+    assert "<h1" in html_body
+    assert "General Consultation" in html_body
+    assert "&lt;Dr. Example&gt;" in html_body
+    assert "2026-10-19T04:30:00" not in body
+
+
+def test_reschedule_email_includes_old_and_new_schedules():
+    previous_start = datetime(2026, 10, 18, 4, 30, tzinfo=UTC)
+    previous_end = datetime(2026, 10, 18, 5, 0, tzinfo=UTC)
+
+    _, body, _, _ = _appointment_email(
+        NotificationType.RESCHEDULE,
+        _email_appointment(),
+        previous_start=previous_start,
+        previous_end=previous_end,
+    )
+
+    assert "Previous appointment Date: Sunday, 18 October 2026" in body
+    assert "New appointment Date: Monday, 19 October 2026" in body
+    assert "follow the updated schedule" in body
+
+
+def test_cancellation_email_does_not_claim_a_refund():
+    _, body, _, _ = _appointment_email(
+        NotificationType.CANCELLATION, _email_appointment()
+    )
+
+    assert "does not confirm a refund" in body
+    assert "refund has been processed" not in body.lower()
+
+
+def test_missing_provider_details_are_omitted_from_email():
+    appointment = _email_appointment(provider=None, service=None)
+    _, body, html_body, _ = _appointment_email(NotificationType.REMINDER, appointment)
+
+    assert "Provider:" not in body
+    assert "Service:" not in body
+    assert "Location:" not in body
+    assert "Appointment date: Monday, 19 October 2026" in body
+    assert "General Consultation" not in html_body
+
+
+def test_dynamic_email_content_is_html_escaped():
+    body, html_body = build_branded_email(
+        "Welcome <customer>",
+        '<img src=x onerror="alert(1)">',
+        "Your account is ready for <booking>.",
+        [("Service", "<script>danger</script>")],
+    )
+
+    assert "<img" not in html_body
+    assert "<script>" not in html_body
+    assert "&lt;img" in html_body
+    assert "&lt;script&gt;" in html_body
+    assert "<customer>" not in body
+
+
+def test_series_confirmation_contains_recurrence_and_each_local_schedule():
+    first = _email_appointment(occurrence_number=1)
+    second = _email_appointment(
+        occurrence_number=2,
+        appointment_start=datetime(2026, 10, 26, 4, 30, tzinfo=UTC),
+        appointment_end=datetime(2026, 10, 26, 5, 0, tzinfo=UTC),
+    )
+    series = SimpleNamespace(
+        frequency=AppointmentSeriesFrequency.WEEKLY,
+        interval=2,
+        service=SimpleNamespace(name="General Consultation"),
+        provider=SimpleNamespace(name="Dr. Example"),
+        timezone="Asia/Kolkata",
+    )
+
+    subject, body, html_body = build_series_confirmation_email(series, [first, second])
+
+    assert subject == "Your recurring appointments are confirmed"
+    assert "Recurrence: Every two weeks" in body
+    assert "Number of appointments: 2" in body
+    assert "1. Monday, 19 October 2026 — 10:00 AM – 10:30 AM IST (30 minutes)" in body
+    assert "2. Monday, 26 October 2026 — 10:00 AM – 10:30 AM IST (30 minutes)" in body
+    assert "<table" in html_body
+
+
+def test_send_email_provides_plain_text_and_html_alternatives(monkeypatch):
+    monkeypatch.setattr("app.services.notifications.settings.smtp_host", "smtp.example")
+    monkeypatch.setattr(
+        "app.services.notifications.settings.smtp_from", "from@example.com"
+    )
+    smtp_client = MagicMock()
+    smtp_client.__enter__.return_value = smtp_client
+    monkeypatch.setattr(
+        "app.services.notifications.smtplib.SMTP", lambda *_args: smtp_client
+    )
+
+    send_email(
+        "customer@example.com",
+        "Appointment confirmed",
+        "Plain-text appointment details",
+        html_body="<html><body>HTML appointment details</body></html>",
+    )
+
+    message = smtp_client.send_message.call_args.args[0]
+    parsed = BytesParser(policy=default).parsebytes(message.as_bytes())
+    assert parsed.is_multipart()
+    assert parsed.get_body(preferencelist=("plain",)).get_content().strip() == (
+        "Plain-text appointment details"
+    )
+    assert (
+        "HTML appointment details"
+        in parsed.get_body(preferencelist=("html",)).get_content()
+    )
+
+
+def test_registration_email_is_welcome_only_and_personalized(monkeypatch):
+    class InMemorySession:
+        added = None
+
+        def scalar(self, _query):
+            return None
+
+        def add(self, instance):
+            self.added = instance
+
+        def commit(self):
+            pass
+
+        def refresh(self, _instance):
+            pass
+
+    monkeypatch.setattr(
+        "app.services.auth_service.hash_password", lambda _password: "hash"
+    )
+    background_tasks = BackgroundTasks()
+    user = register_user(
+        InMemorySession(),
+        CustomerRegister(
+            name="<Alex>",
+            email="alex@example.com",
+            password="a-long-test-password",
+        ),
+        background_tasks,
+    )
+
+    task = background_tasks.tasks[0]
+    assert user.name == "<Alex>"
+    assert task.args[1] == "Welcome to Appointment Booking System"
+    assert "Hello <Alex>," in task.args[2]
+    assert "account has been created successfully" in task.args[2]
+    assert "appointment date" not in task.args[2].lower()
+    assert "&lt;Alex&gt;" in task.kwargs["html_body"]

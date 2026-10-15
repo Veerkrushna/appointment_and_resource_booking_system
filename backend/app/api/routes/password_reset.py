@@ -3,7 +3,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,7 @@ from app.schemas.auth import (
     PasswordResetVerify,
     PasswordResetVerifyResponse,
 )
-from app.services.notifications import send_email
+from app.services.notifications import build_branded_email, send_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/password-reset", tags=["Password Reset"])
@@ -38,14 +38,18 @@ def request_password_reset(
     user = db.scalar(select(User).where(User.email == email))
 
     if not user:
-        subject = "Password Reset Request"
-        body = (
-            "Someone requested a password reset for this email address, "
-            "but no account is associated with it in our system.\n\n"
-            "If you did not request this, you can safely ignore this email."
+        subject = "Password reset request"
+        body, html_body = build_branded_email(
+            subject,
+            None,
+            "Someone requested a password reset for this email address, but we "
+            "could not find an account associated with it.",
+            closing="If you did not make this request, you can safely ignore this email.",
         )
         try:
-            background_tasks.add_task(send_email, email, subject, body)
+            background_tasks.add_task(
+                send_email, email, subject, body, html_body=html_body
+            )
         except Exception:
             logger.exception("Failed to queue 'no account' email")
         return {"message": "If this email exists, a code has been sent"}
@@ -98,14 +102,22 @@ def request_password_reset(
     db.commit()
 
     # Send email
-    subject = "Password Reset Code"
-    body = (
-        f"Your password reset code is: {pin}\n\n"
-        "This code will expire in 5 minutes.\n"
-        "If you didn't request this, you can safely ignore this email."
+    subject = "Your password reset code"
+    body, html_body = build_branded_email(
+        subject,
+        user.name,
+        "Use this one-time code to continue resetting your password.",
+        details=[("Reset code", pin), ("Expires in", "5 minutes")],
+        closing=(
+            "If you did not request a password reset, you can safely ignore this "
+            "email. Do not share this code with anyone."
+        ),
+        details_heading="Security details",
     )
     try:
-        background_tasks.add_task(send_email, user.email, subject, body)
+        background_tasks.add_task(
+            send_email, user.email, subject, body, html_body=html_body
+        )
     except Exception:
         logger.exception("Failed to queue password reset email")
 
@@ -198,14 +210,20 @@ def confirm_password_reset(
     db.commit()
 
     # Send confirmation email
-    subject = "Your password was just changed"
-    body = (
-        f"Hello {user.name},\n\n"
-        "Your password was successfully changed. If you did not perform this action, "
-        "please contact support immediately."
+    subject = "Your password has been changed"
+    body, html_body = build_branded_email(
+        subject,
+        user.name,
+        "Your account password was changed successfully.",
+        closing=(
+            "If you did not make this change, contact the application support team "
+            "as soon as possible."
+        ),
     )
     try:
-        background_tasks.add_task(send_email, user.email, subject, body)
+        background_tasks.add_task(
+            send_email, user.email, subject, body, html_body=html_body
+        )
     except Exception:
         logger.exception("Failed to queue password reset confirmation email")
 

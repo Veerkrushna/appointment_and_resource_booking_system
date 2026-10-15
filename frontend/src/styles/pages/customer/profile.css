@@ -1,0 +1,35 @@
+/* Page: Customer Profile
+   Customer user profile page layout and account details.
+*/
+
+.profile-page {
+  padding-top: clamp(3rem, 7vw, 6rem);
+}
+
+.profile-details {
+  display: grid;
+  max-width: 38rem;
+  margin: 2rem 0 0;
+  border-top: 1px solid #dbe5dc;
+}
+
+.profile-details div {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid #dbe5dc;
+}
+
+.profile-details dt {
+  color: #8a9b94;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.profile-details dd {
+  margin: 0;
+  color: #18312f;
+  font-size: 0.9rem;
+}

@@ -110,15 +110,26 @@ def test_verify_payment_rejects_non_captured_or_mismatched_payment(payment_respo
     )
 
 
-@pytest.mark.parametrize("amount", [True, 2510.0, "2510", None])
-def test_verify_payment_rejects_amount_that_is_not_an_exact_integer(amount):
+@pytest.mark.parametrize(
+    "payment_changes",
+    [
+        {"amount": 2500},
+        {"currency": "USD"},
+        {"amount": True},
+        {"amount": 2510.0},
+        {"amount": "2510"},
+        {"amount": None},
+    ],
+)
+def test_verify_payment_rejects_amount_or_currency_mismatch(payment_changes):
     client = MagicMock()
     client.utility.verify_payment_signature.return_value = True
     client.payment.fetch.return_value = {
         "order_id": "order_test",
         "status": "captured",
-        "amount": amount,
+        "amount": 2510,
         "currency": "INR",
+        **payment_changes,
     }
     service = RazorpayService(client=client)
 

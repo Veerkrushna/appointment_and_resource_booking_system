@@ -1,0 +1,358 @@
+/* Component: Buttons
+   Primary, secondary, accent, text, and admin action buttons.
+*/
+
+.text-button {
+  border: 0;
+  padding: 0.8rem 0.25rem;
+  background: transparent;
+  color: #a15c44;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.back-link:hover {
+  color: #18312f;
+}
+
+.primary-button {
+  border: 1px solid #0b0302;
+  background: #c05d27;
+  color: #f6f4ec;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #a85020;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.booking-panel>div>.primary-button,
+.booking-panel form>.booking-actions {
+  margin-top: 2rem;
+}
+
+/* Common Action Button */
+.btn-accent {
+  background-color: #e2784d;
+  color: white;
+  border: 1px solid black;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-accent:hover {
+  background-color: #cf6740;
+}
+
+.btn-accent--full {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.75rem;
+}
+
+.btn-accent--inline {
+  padding: 0.75rem 1.5rem;
+}
+
+.admin-clear-filters {
+  border: 1px solid #cbd8cf;
+  border-radius: 999px;
+  padding: 0.65rem 1.1rem;
+  background: transparent;
+  color: #557b69;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+  justify-self: start;
+  grid-column: 1 / -1;
+}
+
+.admin-clear-filters:hover {
+  border-color: #18312f;
+  background: #18312f;
+  color: #ffffff;
+}
+
+.admin-clear-filters:focus-visible {
+  outline: 3px solid rgba(192, 93, 39, 0.3);
+  outline-offset: 3px;
+}
+
+.admin-table-edit-btn:active {
+  transform: translateY(0);
+}
+
+.admin-table-edit-btn--danger {
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+  background-color: #fee2e2 !important;
+}
+
+.admin-table-edit-btn--danger:hover {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+}
+
+.admin-table-edit-btn--success {
+  color: #16a34a !important;
+  border-color: #86efac !important;
+  background-color: #dcfce7 !important;
+}
+
+.admin-table-edit-btn--success:hover {
+  background-color: #16a34a !important;
+  color: #ffffff !important;
+  border-color: #16a34a !important;
+}
+
+.admin-table-name-btn {
+  background-color: #fff4ed;
+  color: #e2784d;
+  border: 1px solid #fdba74;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.admin-table-name-btn:hover {
+  background-color: #ffedd5;
+  border-color: #fb923c;
+}
+
+.admin-table-tag {
+  background-color: #fff4ed;
+  color: #e2784d;
+  border: 1px solid #fdba74;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.admin-appointments-card__content form label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+.admin-appointments-card__content form input,
+.admin-appointments-card__content form select,
+.admin-appointments-card__content form textarea {
+  border: 1px solid #e2784d;
+  border-radius: 8px;
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.admin-appointments-card__content form input:focus,
+.admin-appointments-card__content form select:focus,
+.admin-appointments-card__content form textarea:focus {
+  outline: none;
+  border-color: #e2784d;
+  box-shadow: 0 0 0 3px rgba(226, 120, 77, 0.15);
+  background-color: #fff;
+}
+
+.orange-action-btn {
+  background-color: #e2784d !important;
+  color: white !important;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(226, 120, 77, 0.2);
+}
+
+.orange-action-btn:hover {
+  background-color: #cf6740 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 10px rgba(226, 120, 77, 0.25);
+}
+
+/* ---------- Shared Buttons (Admin) ---------- */
+.admin-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.4rem;
+  border: 1px solid #e2784d;
+  border-radius: 8px;
+  background: #e2784d;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(226, 120, 77, 0.22);
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.15s ease,
+    box-shadow 0.18s ease;
+  white-space: nowrap;
+}
+
+.admin-primary-button:hover {
+  background: #c2410c;
+  border-color: #c2410c;
+  box-shadow: 0 4px 10px rgba(194, 65, 12, 0.28);
+  transform: translateY(-1px);
+}
+
+.admin-primary-button:active {
+  transform: translateY(0);
+  background: #9a3412;
+  box-shadow: 0 1px 3px rgba(154, 52, 18, 0.3);
+}
+
+.admin-primary-button:focus-visible {
+  outline: 3px solid rgba(234, 88, 12, 0.35);
+  outline-offset: 2px;
+}
+
+.admin-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+  white-space: nowrap;
+}
+
+.admin-secondary-button:hover {
+  background: #f8fafc;
+  border-color: #0f172a;
+  color: #000000;
+}
+
+.admin-secondary-button:focus-visible {
+  outline: 3px solid rgba(15, 23, 42, 0.2);
+  outline-offset: 2px;
+}
+
+/* ---------- Action Button ---------- */
+.admin-service-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.admin-service-action-button:hover:not(:disabled) {
+  border-color: #ea580c;
+  color: #ea580c;
+  background: #fff7ed;
+}
+
+.admin-service-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: #f8fafc;
+}
+
+.admin-service-provider-count {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c2410c;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-service-provider-count:hover {
+  color: #9a3412;
+  text-decoration: underline;
+}
+
+.admin-service-provider-count:focus-visible,
+.admin-service-providers-dialog__close:focus-visible {
+  outline: 2px solid #ea580c;
+  outline-offset: 2px;
+}
+
+.admin-service-providers-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.admin-service-providers-dialog {
+  width: min(100%, 26rem);
+  padding: 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+}
+
+.admin-service-providers-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #e2e8f0;
+}

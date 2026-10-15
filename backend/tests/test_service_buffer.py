@@ -33,7 +33,7 @@ def buffer_records(monkeypatch):
     )
     monkeypatch.setattr(
         "app.services.booking.send_reschedule_notification.delay",
-        lambda _appointment_id: None,
+        lambda *_args: None,
     )
 
     db = SessionLocal()
@@ -400,4 +400,41 @@ def test_reschedule_preserves_existing_buffer_snapshot(buffer_records):
 
     assert rescheduled.buffer_time_minutes == 10
     assert rescheduled.appointment_start == start + timedelta(hours=1)
+    db.close()
+
+
+def test_reschedule_notification_receives_previous_schedule(
+    buffer_records, monkeypatch
+):
+    (provider_id, service_id, _service_b_id), monday = buffer_records
+    calls = []
+    monkeypatch.setattr(
+        "app.services.booking.send_reschedule_notification.delay",
+        lambda *args: calls.append(args),
+    )
+    db = SessionLocal()
+    previous_start = monday + timedelta(hours=10)
+    appointment = create_appointment(
+        db,
+        appointment_payload(provider_id, service_id, previous_start),
+    )
+    persisted_previous_start = appointment.appointment_start
+    persisted_previous_end = appointment.appointment_end
+
+    reschedule_appointment(
+        db,
+        appointment.id,
+        AppointmentRescheduleCreate(
+            appointment_start=previous_start + timedelta(hours=1),
+            cancelled_by="customer",
+        ),
+    )
+
+    assert calls == [
+        (
+            str(appointment.id),
+            persisted_previous_start.isoformat(),
+            persisted_previous_end.isoformat(),
+        )
+    ]
     db.close()

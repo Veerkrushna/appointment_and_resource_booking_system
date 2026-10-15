@@ -451,7 +451,10 @@ def process_payment_webhook(
             )
             db.commit()
             return event.status
-        if hold.status != BookingHoldStatus.ACTIVE:
+        if hold.status not in {
+            BookingHoldStatus.ACTIVE,
+            BookingHoldStatus.EXPIRED,
+        }:
             _persist_external_capture(payment, provider_payment_id)
             _finish_event(
                 event,
@@ -462,16 +465,8 @@ def process_payment_webhook(
             return event.status
 
         now_utc = datetime.now(UTC)
-        if hold.expires_at <= now_utc:
+        if hold.status == BookingHoldStatus.ACTIVE and hold.expires_at <= now_utc:
             hold.status = BookingHoldStatus.EXPIRED
-            _persist_external_capture(payment, provider_payment_id)
-            _finish_event(
-                event,
-                PaymentWebhookEventStatus.FAILED,
-                error_message="Captured payment booking hold has expired",
-            )
-            db.commit()
-            return event.status
 
         try:
             provider, service = _lock_provider_and_get_service(
@@ -497,7 +492,16 @@ def process_payment_webhook(
                 now_utc,
                 exclude_hold_id=hold.id,
             )
-        except (BookingConflictError, BookingValidationError):
+        except BookingConflictError:
+            _persist_external_capture(payment, provider_payment_id)
+            _finish_event(
+                event,
+                PaymentWebhookEventStatus.RETRYABLE,
+                error_message="Captured payment slot is temporarily unavailable",
+            )
+            db.commit()
+            return event.status
+        except BookingValidationError:
             _persist_external_capture(payment, provider_payment_id)
             _finish_event(
                 event,

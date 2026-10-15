@@ -1,0 +1,49 @@
+/* ==========================================================================
+   Main Stylesheet Entrypoint - Cascade-Preserving Modular Imports
+   Order: variables -> reset -> typography -> utilities -> layout -> components -> pages
+   ========================================================================== */
+
+/* 1. Base */
+@import "./base/variables.css";
+@import "./base/reset.css";
+@import "./base/typography.css";
+@import "./base/utilities.css";
+@import "./base/animations.css";
+
+/* 2. Layout */
+@import "./layout/grid.css";
+@import "./layout/header.css";
+@import "./layout/footer.css";
+
+/* 3. Components */
+@import "./components/buttons.css";
+@import "./components/forms.css";
+@import "./components/modal.css";
+@import "./components/table.css";
+@import "./components/calendar.css";
+@import "./components/time-slots.css";
+@import "./components/badges.css";
+@import "./components/cards.css";
+
+/* 4. Pages - Auth */
+@import "./pages/auth/login.css";
+@import "./pages/auth/terms.css";
+
+/* 4. Pages - Customer */
+@import "./pages/customer/home.css";
+@import "./pages/customer/services.css";
+@import "./pages/customer/booking.css";
+@import "./pages/customer/my-appointments.css";
+@import "./pages/customer/profile.css";
+
+/* 4. Pages - Provider */
+@import "./pages/provider/dashboard.css";
+@import "./pages/provider/availability.css";
+@import "./pages/provider/schedule.css";
+
+/* 4. Pages - Admin */
+@import "./pages/admin/dashboard.css";
+@import "./pages/admin/appointments.css";
+@import "./pages/admin/services.css";
+@import "./pages/admin/users.css";
+@import "./pages/admin/reports.css";

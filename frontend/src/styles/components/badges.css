@@ -1,0 +1,231 @@
+/* Component: Badges & Status Indicators
+   Status pill badges, status indicator bars, and progress markers.
+*/
+
+.status-bars {
+  display: grid;
+  gap: 1rem;
+}
+
+.status-bar>div:first-child {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+  color: #64736e;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+
+.status-bar strong {
+  color: #18312f;
+}
+
+.status-bar__track {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfe7de;
+}
+
+.status-bar__track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #557b69;
+}
+
+.dashboard-status {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  background-color: #e5e7eb;
+  color: #374151;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-status--completed {
+  background-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.dashboard-status--cancelled {
+  background-color: #fca5a5;
+  color: #991b1b;
+}
+
+.dashboard-status--upcoming {
+  background-color: #fde047;
+  color: #854d0e;
+}
+
+.dashboard-status--confirmed {
+  background-color: #27f56c;
+  color: #064e3b;
+}
+
+.appointment-status {
+  color: #557b69;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.appointment-status--cancelled {
+  color: #a15c44;
+}
+
+.admin-appointment-status {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+}
+
+.admin-appointment-status--completed {
+  background: #e2eaf4;
+  color: #3d6089;
+}
+
+.admin-appointment-status--confirmed {
+  background: #e1f0e5;
+  color: #2c7052;
+}
+
+.admin-appointment-status--cancelled {
+  background: #f6dfdc;
+  color: #b04d43;
+}
+
+/* ---------- Status Pill Badge ---------- */
+.service-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.service-status--active {
+  background: #ecfdf3;
+  border-color: #b7e4c7;
+  color: #16803c;
+}
+
+.service-status--inactive {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.admin-service-provider-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-width: 18rem;
+}
+
+.admin-service-provider-chip {
+  max-width: 9rem;
+  overflow: hidden;
+  padding: 0.2rem 0.42rem;
+  border: 1px solid #fdba74;
+  border-radius: 4px;
+  background: #fff4ed;
+  color: #e2784d;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-service-provider-chip:hover {
+  border-color: #e2784d;
+  background: #ffede2;
+}
+
+.admin-service-provider-chip:focus-visible {
+  outline: 2px solid #e2784d;
+  outline-offset: 2px;
+}
+
+.admin-service-no-providers {
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.admin-services-page .admin-table-edit-btn {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.admin-services-page .admin-services-table td:last-child {
+  white-space: nowrap;
+}
+
+.admin-services-page .admin-services-table td:last-child button+button {
+  margin-left: 0.35rem;
+}
+
+.admin-services-page .admin-services-table td:last-child button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.appointment-status--in_progress {
+  background-color: var(--color-blue-100);
+  color: var(--color-blue-900);
+  border-color: var(--color-blue-200);
+}
+
+.dashboard-status--in_progress {
+  background-color: var(--color-blue-100);
+  color: var(--color-blue-900);
+}
+
+.status-badge--in_progress {
+  background-color: var(--color-blue-100);
+  color: var(--color-blue-900);
+  border: 1px solid var(--color-blue-200);
+}
+
+.appointment-payment-status {
+  font-weight: 600;
+}
+
+.appointment-payment-status--captured {
+  color: #15803d;
+}
+
+.appointment-payment-status--pending,
+.appointment-payment-status--created {
+  color: #a16207;
+}
+
+.appointment-payment-status--failed {
+  color: #b91c1c;
+}
+
+.appointment-payment-status--refunded,
+.appointment-payment-status--partially_refunded {
+  color: #475569;
+}

@@ -363,7 +363,7 @@ def test_series_confirmation_email_uses_contact_email_and_provider_timezone(
     email_messages = []
     monkeypatch.setattr(
         "app.services.notifications.send_email",
-        lambda recipient, subject, body: email_messages.append(
+        lambda recipient, subject, body, **_kwargs: email_messages.append(
             (recipient, subject, body)
         ),
     )
@@ -376,11 +376,11 @@ def test_series_confirmation_email_uses_contact_email_and_provider_timezone(
     assert len(email_messages) == 1
     recipient, subject, body = email_messages[0]
     assert recipient == recipient_email
-    assert subject == "Recurring appointments confirmed"
+    assert subject == "Your recurring appointments are confirmed"
     assert "Service: Series Service" in body
     assert "Provider: Series Provider" in body
-    assert "Schedule: Every week" in body
-    assert "Appointments: 3" in body
+    assert "Recurrence: Every week" in body
+    assert "Number of appointments: 3" in body
     assert "Timezone: Asia/Kolkata" in body
 
     expected_occurrences = []
@@ -391,10 +391,11 @@ def test_series_confirmation_email_uses_contact_email_and_provider_timezone(
             tzinfo=ZoneInfo("Asia/Kolkata"),
         )
         expected_date = (
-            f"{local_start:%A}, {local_start:%B} {local_start.day}, {local_start:%Y}"
+            f"{local_start:%A}, {local_start.day:02d} {local_start:%B} {local_start:%Y}"
         )
         expected_occurrences.append(
-            f"{occurrence_number + 1}. {expected_date} — 10:00 AM"
+            f"{occurrence_number + 1}. {expected_date} — "
+            "10:00 AM – 10:30 AM IST (30 minutes)"
         )
 
     assert all(occurrence in body for occurrence in expected_occurrences)
