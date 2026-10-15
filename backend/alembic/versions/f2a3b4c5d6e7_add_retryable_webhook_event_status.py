@@ -16,14 +16,14 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.execute(
-        "ALTER TYPE payment_webhook_event_status ADD VALUE 'RETRYABLE' BEFORE 'FAILED'"
+        "ALTER TYPE payment_webhook_event_status "
+        "ADD VALUE IF NOT EXISTS 'RETRYABLE' BEFORE 'FAILED'"
     )
 
 
 def downgrade() -> None:
     op.execute(
-        "UPDATE payment_webhook_events SET status = 'FAILED' "
-        "WHERE status = 'RETRYABLE'"
+        "UPDATE payment_webhook_events SET status = 'FAILED' WHERE status = 'RETRYABLE'"
     )
     op.execute(
         "ALTER TYPE payment_webhook_event_status "

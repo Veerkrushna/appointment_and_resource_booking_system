@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.appointment import Appointment, AppointmentStatus
@@ -90,70 +91,100 @@ def _build_held_appointment(
     return appointment
 
 
-def _notify_after_commit(appointment: Appointment) -> None:
-    try:
-        enqueue_confirmation_notification(appointment)
-    except Exception:
-        logger.exception(
-            "Unable to enqueue confirmation notification for appointment %s",
-            appointment.id,
-        )
-    try:
-        schedule_appointment_notifications(appointment)
-    except Exception:
-        logger.exception(
-            "Unable to schedule notifications for appointment %s", appointment.id
-        )
+def _appointment_matches_hold(
+    payment: Payment,
+    hold: BookingHold | None,
+    appointment: Appointment | None,
+) -> bool:
+    return bool(
+        hold is not None
+        and appointment is not None
+        and payment.status == PaymentStatus.CAPTURED
+        and payment.provider_payment_id
+        and payment.appointment_id == appointment.id
+        and payment.series_id is None
+        and hold.payment_id == payment.id
+        and hold.customer_id == payment.customer_id
+        and hold.status == BookingHoldStatus.CONVERTED
+        and appointment.customer_id == payment.customer_id
+        and appointment.service_id == hold.service_id
+        and appointment.provider_id == hold.provider_id
+    )
 
 
-def verify_appointment_payment(
+def _load_existing_appointment(db: Session, payment: Payment) -> Appointment | None:
+    if payment.appointment_id is None:
+        return None
+    appointment = db.get(Appointment, payment.appointment_id)
+    hold = _load_payment_hold(db, payment.id)
+    if not _appointment_matches_hold(payment, hold, appointment):
+        raise PaymentStateConflictError("Payment has an inconsistent appointment link")
+    return appointment
+
+
+def _persist_verified_capture(
     db: Session,
     customer: User,
-    payload: PaymentVerificationRequest,
+    payment: Payment,
+    provider_payment_id: str,
+    signature: str,
 ) -> Payment:
+    payment.status = PaymentStatus.CAPTURED
+    payment.provider_payment_id = provider_payment_id
+    payment.provider_signature = signature
     try:
-        payment = _load_payment(db, customer, payload.payment_id)
-        if payment is None or payment.provider != PaymentProvider.RAZORPAY:
-            raise PaymentNotFoundError("Payment was not found")
-        if not payment.provider_order_id:
-            raise PaymentStateConflictError("Payment has no provider order ID")
-        if payload.order_id != payment.provider_order_id:
-            raise PaymentStateConflictError("Payment order ID does not match")
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        persisted_payment = _load_payment(db, customer, payment.id)
         if (
-            payment.provider_payment_id is not None
-            and payment.provider_payment_id != payload.provider_payment_id
+            persisted_payment is None
+            or persisted_payment.status != PaymentStatus.CAPTURED
+            or persisted_payment.provider_payment_id != provider_payment_id
+            or persisted_payment.provider_order_id != payment.provider_order_id
+            or persisted_payment.amount != payment.amount
+            or persisted_payment.currency != payment.currency
         ):
-            raise PaymentStateConflictError("Provider payment ID does not match")
+            raise
+        return persisted_payment
 
-        if payment.status not in {
-            PaymentStatus.CREATED,
-            PaymentStatus.PENDING,
-            PaymentStatus.CAPTURED,
-        }:
+    persisted_payment = _load_payment(db, customer, payment.id)
+    if (
+        persisted_payment is None
+        or persisted_payment.status != PaymentStatus.CAPTURED
+        or persisted_payment.provider_payment_id != provider_payment_id
+    ):
+        raise PaymentStateConflictError(
+            "Verified capture could not be confirmed in local storage"
+        )
+    return persisted_payment
+
+
+def _fulfill_captured_payment(
+    db: Session, customer: User, payment: Payment
+) -> tuple[Payment, Appointment, bool]:
+    try:
+        payment = _load_payment(db, customer, payment.id)
+        if (
+            payment is None
+            or payment.provider != PaymentProvider.RAZORPAY
+            or payment.status != PaymentStatus.CAPTURED
+        ):
             raise PaymentStateConflictError(
-                "Payment cannot be verified in its current state"
+                "Captured payment is no longer available for fulfillment"
             )
 
-        if payment.status == PaymentStatus.CAPTURED:
-            if (
-                payment.appointment_id is None
-                or payment.appointment is None
-                or payment.provider_payment_id != payload.provider_payment_id
-            ):
+        if payment.appointment_id is not None:
+            appointment = _load_existing_appointment(db, payment)
+            if appointment is None:
                 raise PaymentStateConflictError(
-                    "Captured payment does not match this verification request"
+                    "Payment has an inconsistent appointment link"
                 )
-            return payment
+            return payment, appointment, False
 
-        if not RazorpayService().verify_payment(
-            payment.provider_order_id,
-            payload.provider_payment_id,
-            payload.signature,
-            expected_amount=payment.amount,
-            expected_currency=payment.currency,
-        ):
-            raise InvalidPaymentVerificationError(
-                "Payment signature, status, amount, or currency is invalid"
+        if payment.series_id is not None or not payment.provider_payment_id:
+            raise PaymentStateConflictError(
+                "Captured payment has inconsistent fulfillment evidence"
             )
 
         hold = _load_payment_hold(db, payment.id)
@@ -197,20 +228,108 @@ def verify_appointment_payment(
         )
         db.add(appointment)
         db.flush()
-
-        payment.status = PaymentStatus.CAPTURED
-        payment.provider_payment_id = payload.provider_payment_id
-        payment.provider_signature = payload.signature
         payment.appointment_id = appointment.id
         hold.status = BookingHoldStatus.CONVERTED
-        # Razorpay capture is external to this transaction; webhook/reconciliation
-        # will recover any provider-captured payment if this database commit fails.
-        db.commit()
-        db.refresh(payment)
-        db.refresh(appointment)
+        try:
+            db.commit()
+        except SQLAlchemyError as error:
+            db.rollback()
+            persisted_payment = _load_payment(db, customer, payment.id)
+            if persisted_payment is None or persisted_payment.appointment_id is None:
+                raise
+            persisted_appointment = _load_existing_appointment(db, persisted_payment)
+            if persisted_appointment is None:
+                raise PaymentStateConflictError(
+                    "Payment has an inconsistent appointment link"
+                ) from error
+            return persisted_payment, persisted_appointment, True
+
+        persisted_payment = _load_payment(db, customer, payment.id)
+        if persisted_payment is None or persisted_payment.appointment is None:
+            raise PaymentStateConflictError(
+                "Fulfilled payment has no persisted appointment"
+            )
+        return persisted_payment, persisted_payment.appointment, True
     except Exception:
         db.rollback()
         raise
 
-    _notify_after_commit(appointment)
+
+def _notify_after_commit(appointment: Appointment) -> None:
+    try:
+        enqueue_confirmation_notification(appointment)
+    except Exception:
+        logger.exception(
+            "Unable to enqueue confirmation notification for appointment %s",
+            appointment.id,
+        )
+    try:
+        schedule_appointment_notifications(appointment)
+    except Exception:
+        logger.exception(
+            "Unable to schedule notifications for appointment %s", appointment.id
+        )
+
+
+def verify_appointment_payment(
+    db: Session,
+    customer: User,
+    payload: PaymentVerificationRequest,
+) -> Payment:
+    payment = _load_payment(db, customer, payload.payment_id)
+    if payment is None or payment.provider != PaymentProvider.RAZORPAY:
+        raise PaymentNotFoundError("Payment was not found")
+    if not payment.provider_order_id:
+        raise PaymentStateConflictError("Payment has no provider order ID")
+    if payload.order_id != payment.provider_order_id:
+        raise PaymentStateConflictError("Payment order ID does not match")
+    if (
+        payment.provider_payment_id is not None
+        and payment.provider_payment_id != payload.provider_payment_id
+    ):
+        raise PaymentStateConflictError("Provider payment ID does not match")
+    if payment.status not in {
+        PaymentStatus.CREATED,
+        PaymentStatus.PENDING,
+        PaymentStatus.CAPTURED,
+    }:
+        raise PaymentStateConflictError(
+            "Payment cannot be verified in its current state"
+        )
+
+    if payment.appointment_id is not None:
+        appointment = _load_existing_appointment(db, payment)
+        if appointment is None:
+            raise PaymentStateConflictError(
+                "Payment has an inconsistent appointment link"
+            )
+        return payment
+
+    if payment.status == PaymentStatus.CAPTURED:
+        if payment.provider_payment_id != payload.provider_payment_id:
+            raise PaymentStateConflictError(
+                "Captured payment does not match this verification request"
+            )
+    else:
+        if not RazorpayService().verify_payment(
+            payment.provider_order_id,
+            payload.provider_payment_id,
+            payload.signature,
+            expected_amount=payment.amount,
+            expected_currency=payment.currency,
+        ):
+            raise InvalidPaymentVerificationError(
+                "Payment signature or status is invalid"
+            )
+        payment = _persist_verified_capture(
+            db,
+            customer,
+            payment,
+            payload.provider_payment_id,
+            payload.signature,
+        )
+
+    payment, appointment, created = _fulfill_captured_payment(db, customer, payment)
+    if created:
+        _notify_after_commit(appointment)
     return payment

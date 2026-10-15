@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, not_, or_, select
+from sqlalchemy.orm import Session, aliased
 
+from app.models.appointment import Appointment
 from app.models.booking_hold import BookingHold, BookingHoldStatus
 from app.models.payment import (
     Payment,
@@ -18,6 +19,7 @@ from app.schemas.payment_reconciliation import (
     PaymentReconciliationHold,
     PaymentReconciliationReason,
 )
+from app.services.payment_verification import _appointment_matches_hold
 
 MAX_RECONCILIATION_CANDIDATES = 500
 
@@ -32,6 +34,8 @@ def _candidate_reasons(
     holds: list[BookingHold],
     events: list[PaymentWebhookEvent],
     as_of: datetime,
+    *,
+    inconsistent_appointment_link: bool = False,
 ) -> list[PaymentReconciliationReason]:
     reasons: set[PaymentReconciliationReason] = set()
     validation_failed_events = [
@@ -47,6 +51,9 @@ def _candidate_reasons(
         reasons.add(PaymentReconciliationReason.CAPTURED_UNLINKED)
     elif payment.status == PaymentStatus.CREATED and not validation_failed_events:
         reasons.add(PaymentReconciliationReason.STALE_CREATED_NO_CAPTURE_EVIDENCE)
+
+    if inconsistent_appointment_link:
+        reasons.add(PaymentReconciliationReason.INCONSISTENT_APPOINTMENT_LINK)
 
     if not payment.provider_order_id:
         reasons.add(PaymentReconciliationReason.MISSING_LOCAL_PROVIDER_ORDER_ID)
@@ -133,6 +140,26 @@ def list_payment_reconciliation_candidates(
         )
         .exists()
     )
+    all_payment_holds = aliased(BookingHold)
+    consistent_appointment_link = (
+        select(Appointment.id)
+        .join(BookingHold, BookingHold.payment_id == Payment.id)
+        .where(
+            Appointment.id == Payment.appointment_id,
+            Appointment.customer_id == Payment.customer_id,
+            Appointment.service_id == BookingHold.service_id,
+            Appointment.provider_id == BookingHold.provider_id,
+            BookingHold.status == BookingHoldStatus.CONVERTED,
+            Payment.status == PaymentStatus.CAPTURED,
+            Payment.provider_payment_id.is_not(None),
+            Payment.series_id.is_(None),
+            select(func.count(all_payment_holds.id))
+            .where(all_payment_holds.payment_id == Payment.id)
+            .scalar_subquery()
+            == 1,
+        )
+        .exists()
+    )
     candidate_query = (
         select(Payment)
         .where(
@@ -152,6 +179,10 @@ def list_payment_reconciliation_candidates(
                     ),
                 ),
                 investigation_event,
+                and_(
+                    Payment.appointment_id.is_not(None),
+                    not_(consistent_appointment_link),
+                ),
             ),
         )
         .order_by(Payment.created_at, Payment.id)
@@ -227,7 +258,23 @@ def list_payment_reconciliation_candidates(
                 series_id=payment.series_id,
                 created_at=payment.created_at,
                 updated_at=payment.updated_at,
-                reasons=_candidate_reasons(payment, holds, events, as_of),
+                reasons=_candidate_reasons(
+                    payment,
+                    holds,
+                    events,
+                    as_of,
+                    inconsistent_appointment_link=(
+                        payment.appointment_id is not None
+                        and (
+                            len(holds) != 1
+                            or not _appointment_matches_hold(
+                                payment,
+                                holds[0],
+                                db.get(Appointment, payment.appointment_id),
+                            )
+                        )
+                    ),
+                ),
                 booking_holds=[
                     PaymentReconciliationHold.model_validate(hold) for hold in holds
                 ],

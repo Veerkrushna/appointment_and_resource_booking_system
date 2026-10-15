@@ -1334,8 +1334,10 @@ def test_retryable_event_rejects_a_changed_payment_identity(
     payment, hold, appointments, events = _state(records)
 
     assert failed.status_code == 503
-    assert changed_identity.status_code == 200
-    assert changed_identity.json()["status"] == PaymentWebhookEventStatus.RETRYABLE
+    assert changed_identity.status_code == 503
+    assert "webhook processing will be retried" in (
+        changed_identity.json()["detail"].lower()
+    )
     assert payment.status == PaymentStatus.CAPTURED
     assert payment.provider_payment_id == records["provider_payment_id"]
     assert payment.appointment_id is None

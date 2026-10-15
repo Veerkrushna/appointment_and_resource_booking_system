@@ -22,6 +22,7 @@ class PaymentReconciliationReason(enum.StrEnum):
     MISSING_LOCAL_PROVIDER_PAYMENT_ID = "missing_local_provider_payment_id"
     MISMATCHED_PROVIDER_ORDER_ID = "mismatched_provider_order_id"
     MISMATCHED_PROVIDER_PAYMENT_ID = "mismatched_provider_payment_id"
+    INCONSISTENT_APPOINTMENT_LINK = "inconsistent_appointment_link"
 
 
 class PaymentReconciliationHold(BaseModel):

@@ -95,6 +95,11 @@ def verify_payment_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to verify payment",
         ) from error
+    except SQLAlchemyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment processing could not be confirmed; retry verification",
+        ) from error
 
     appointment = payment.appointment
     if (
