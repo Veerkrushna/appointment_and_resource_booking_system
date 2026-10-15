@@ -1,10 +1,11 @@
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token
@@ -18,6 +19,11 @@ from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
 from app.models.service import Service, ServiceStatus
 from app.models.user import User, UserRole
+from app.schemas.payment_reconciliation import PaymentReconciliationReason
+from app.services import payment_verification
+from app.services.payment_reconciliation import (
+    list_payment_reconciliation_candidates,
+)
 
 client = TestClient(app)
 
@@ -426,7 +432,33 @@ def test_duplicate_verification_returns_existing_appointment(
     assert _read_payment_state(records)[2] == 1
 
 
-def test_expired_hold_is_marked_expired_without_capturing_payment(
+def test_verification_keeps_valid_link_after_appointment_update(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    first = _verify_request(records)
+    assert first.status_code == 200
+
+    db = SessionLocal()
+    appointment = db.get(Appointment, first.json()["appointment_id"])
+    appointment.appointment_start += timedelta(hours=1)
+    appointment.appointment_end += timedelta(hours=1)
+    appointment.user_email = "updated-recipient@example.com"
+    appointment.notes = "Updated appointment notes"
+    db.commit()
+    db.close()
+
+    retry = _verify_request(records)
+
+    assert retry.status_code == 200
+    assert retry.json()["appointment_id"] == first.json()["appointment_id"]
+    assert retry.json()["appointment_start"] != first.json()["appointment_start"]
+    assert len(calls) == 1
+    assert _read_payment_state(records)[2] == 1
+
+
+def test_expired_hold_is_marked_expired_and_capture_is_preserved(
     verification_records, monkeypatch
 ):
     records = verification_records
@@ -443,12 +475,13 @@ def test_expired_hold_is_marked_expired_without_capturing_payment(
 
     assert response.status_code == 409
     payment, hold, appointment_count = _read_payment_state(records)
-    assert payment.status == PaymentStatus.CREATED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["payment_provider_id"]
     assert hold.status == BookingHoldStatus.EXPIRED
     assert appointment_count == 0
 
 
-def test_missing_hold_does_not_capture_payment(verification_records, monkeypatch):
+def test_missing_hold_does_not_lose_verified_capture(verification_records, monkeypatch):
     records = verification_records
     _stub_verification(monkeypatch)
     db = SessionLocal()
@@ -462,16 +495,67 @@ def test_missing_hold_does_not_capture_payment(verification_records, monkeypatch
 
     assert response.status_code == 409
     payment, hold, appointment_count = _read_payment_state(records)
-    assert payment.status == PaymentStatus.CREATED
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["payment_provider_id"]
     assert hold is None
     assert appointment_count == 0
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=datetime.now(UTC) - timedelta(days=1),
+    )
+    db.close()
+    candidate = next(item for item in candidates if item.payment_id == payment.id)
+    assert PaymentReconciliationReason.CAPTURED_UNLINKED in candidate.reasons
 
 
-def test_appointment_creation_failure_rolls_back_payment_and_hold(
+def test_unavailable_original_slot_preserves_capture_for_reconciliation(
     verification_records, monkeypatch
 ):
     records = verification_records
     _stub_verification(monkeypatch)
+    db = SessionLocal()
+    existing = Appointment(
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        user_name="Existing appointment",
+        user_email="existing-verification@example.com",
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_time_minutes=10,
+        status=AppointmentStatus.CONFIRMED,
+    )
+    db.add(existing)
+    db.commit()
+    db.close()
+
+    response = _verify_request(records)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Appointment slot is already booked"
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["payment_provider_id"]
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointment_count == 1
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=datetime.now(UTC) - timedelta(days=1),
+    )
+    db.close()
+    candidate = next(item for item in candidates if item.payment_id == payment.id)
+    assert PaymentReconciliationReason.CAPTURED_UNLINKED in candidate.reasons
+
+
+def test_appointment_creation_failure_preserves_capture_for_retry(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    original_build = payment_verification._build_held_appointment
 
     def fail_appointment_build(*_args, **_kwargs):
         raise RuntimeError("appointment build failed")
@@ -484,7 +568,267 @@ def test_appointment_creation_failure_rolls_back_payment_and_hold(
         _verify_request(records)
 
     payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["payment_provider_id"]
+    assert payment.provider_signature == records["signature"]
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointment_count == 0
+
+    monkeypatch.setattr(
+        "app.services.payment_verification._build_held_appointment",
+        original_build,
+    )
+    response = _verify_request(records)
+    assert response.status_code == 200
+    assert len(calls) == 1
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == UUID(response.json()["appointment_id"])
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert appointment_count == 1
+
+
+def test_capture_evidence_commit_failure_is_retried_safely(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    original_commit = Session.commit
+    commit_count = 0
+
+    def fail_capture_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 1:
+            raise OperationalError("commit", {}, RuntimeError("database unavailable"))
+        original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", fail_capture_commit)
+    failed = _verify_request(records)
+    monkeypatch.setattr(Session, "commit", original_commit)
+
+    assert failed.status_code == 503
+    payment, hold, appointment_count = _read_payment_state(records)
     assert payment.status == PaymentStatus.CREATED
+    assert payment.provider_payment_id is None
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointment_count == 0
+
+    retry = _verify_request(records)
+    assert retry.status_code == 200
+    assert len(calls) == 2
+    assert _read_payment_state(records)[2] == 1
+
+
+def test_uncertain_capture_evidence_commit_is_reused_for_fulfillment(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    original_commit = Session.commit
+    commit_count = 0
+
+    def commit_then_raise_on_capture(session):
+        nonlocal commit_count
+        commit_count += 1
+        original_commit(session)
+        if commit_count == 1:
+            raise OperationalError("commit", {}, RuntimeError("connection lost"))
+
+    monkeypatch.setattr(Session, "commit", commit_then_raise_on_capture)
+    response = _verify_request(records)
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["payment_provider_id"]
+    assert payment.appointment_id == UUID(response.json()["appointment_id"])
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert appointment_count == 1
+
+
+def test_fulfillment_commit_failure_preserves_capture_for_retry(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    original_commit = Session.commit
+    commit_count = 0
+
+    def fail_fulfillment_commit(session):
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 2:
+            raise OperationalError("commit", {}, RuntimeError("database unavailable"))
+        original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", fail_fulfillment_commit)
+    failed = _verify_request(records)
+    monkeypatch.setattr(Session, "commit", original_commit)
+
+    assert failed.status_code == 503
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.provider_payment_id == records["payment_provider_id"]
+    assert payment.appointment_id is None
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointment_count == 0
+
+    retry = _verify_request(records)
+    assert retry.status_code == 200
+    assert len(calls) == 1
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.appointment_id == UUID(retry.json()["appointment_id"])
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert appointment_count == 1
+
+
+def test_uncertain_fulfillment_commit_returns_existing_appointment(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    _stub_verification(monkeypatch)
+    original_commit = Session.commit
+    commit_count = 0
+
+    def commit_then_raise_on_fulfillment(session):
+        nonlocal commit_count
+        commit_count += 1
+        original_commit(session)
+        if commit_count == 2:
+            raise OperationalError("commit", {}, RuntimeError("connection lost"))
+
+    monkeypatch.setattr(Session, "commit", commit_then_raise_on_fulfillment)
+    response = _verify_request(records)
+
+    assert response.status_code == 200
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.appointment_id == UUID(response.json()["appointment_id"])
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert appointment_count == 1
+
+
+def test_nonterminal_payment_with_appointment_link_is_not_overwritten(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    appointment = Appointment(
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        customer_id=records["customer_id"],
+        user_name=records["recipient_name"],
+        user_email=records["recipient_email"],
+        user_phone=records["recipient_phone"],
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_time_minutes=10,
+        notes=records["recipient_notes"],
+        status=AppointmentStatus.CONFIRMED,
+    )
+    db.add(appointment)
+    db.flush()
+    original_appointment_id = appointment.id
+    payment.appointment_id = original_appointment_id
+    db.commit()
+    db.close()
+
+    response = _verify_request(records)
+
+    assert response.status_code == 409
+    assert calls == []
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CREATED
+    assert payment.appointment_id == original_appointment_id
+    assert hold.status == BookingHoldStatus.ACTIVE
+    assert appointment_count == 1
+
+
+def test_captured_payment_with_inconsistent_appointment_link_is_not_overwritten(
+    verification_records, monkeypatch
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    hold = db.scalar(
+        select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
+    )
+    appointment = Appointment(
+        service_id=records["service_id"],
+        provider_id=records["provider_id"],
+        customer_id=None,
+        user_name="Different recipient",
+        user_email="different@example.com",
+        appointment_start=records["appointment_start"],
+        appointment_end=records["appointment_start"] + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_time_minutes=10,
+        status=AppointmentStatus.CONFIRMED,
+    )
+    db.add(appointment)
+    db.flush()
+    original_appointment_id = appointment.id
+    payment.status = PaymentStatus.CAPTURED
+    payment.provider_payment_id = records["payment_provider_id"]
+    payment.appointment_id = original_appointment_id
+    hold.status = BookingHoldStatus.CONVERTED
+    db.commit()
+    db.close()
+
+    response = _verify_request(records)
+
+    assert response.status_code == 409
+    assert calls == []
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == PaymentStatus.CAPTURED
+    assert payment.appointment_id == original_appointment_id
+    assert hold.status == BookingHoldStatus.CONVERTED
+    assert appointment_count == 1
+
+    db = SessionLocal()
+    candidates = list_payment_reconciliation_candidates(
+        db,
+        stale_created_before=datetime.now(UTC) - timedelta(days=1),
+    )
+    db.close()
+    candidate = next(item for item in candidates if item.payment_id == payment.id)
+    assert (
+        PaymentReconciliationReason.INCONSISTENT_APPOINTMENT_LINK in candidate.reasons
+    )
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        PaymentStatus.FAILED,
+        PaymentStatus.REFUNDED,
+        PaymentStatus.PARTIALLY_REFUNDED,
+    ],
+)
+def test_verification_preserves_terminal_payment_states(
+    verification_records, monkeypatch, status
+):
+    records = verification_records
+    calls = _stub_verification(monkeypatch)
+    db = SessionLocal()
+    payment = db.get(Payment, records["payment_id"])
+    payment.status = status
+    db.commit()
+    db.close()
+
+    response = _verify_request(records)
+
+    assert response.status_code == 409
+    assert calls == []
+    payment, hold, appointment_count = _read_payment_state(records)
+    assert payment.status == status
     assert payment.appointment_id is None
     assert hold.status == BookingHoldStatus.ACTIVE
     assert appointment_count == 0
