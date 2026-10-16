@@ -27,6 +27,7 @@ from app.services.booking import (
 from app.services.payment_orders import (
     _ensure_no_active_hold,
 )
+from app.services.payment_refunds import process_refund_webhook
 from app.services.payment_verification import (
     PaymentStateConflictError,
     _build_held_appointment,
@@ -210,6 +211,7 @@ def process_payment_webhook(
     provider_event_id: str,
     event_type: str,
     payload: dict,
+    razorpay_service=None,
 ) -> PaymentWebhookEventStatus:
     appointment = None
     capture_verified = False
@@ -243,6 +245,21 @@ def process_payment_webhook(
         retrying = event.status == PaymentWebhookEventStatus.RETRYABLE
         if not retrying:
             event.event_type = event_type
+        if event_type in {
+            "refund.created",
+            "refund.processed",
+            "refund.failed",
+        }:
+            from app.services.razorpay import RazorpayService
+
+            return process_refund_webhook(
+                db,
+                event,
+                event_type,
+                payload,
+                razorpay_service or RazorpayService(),
+            )
+
         event_entity = (
             _captured_entity(payload) if event_type == "payment.captured" else None
         )

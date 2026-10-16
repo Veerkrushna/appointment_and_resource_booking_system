@@ -4,13 +4,22 @@ from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.appointment import Appointment, AppointmentStatus
-from app.models.appointment_cancellation import AppointmentCancellation
+from app.models.appointment_cancellation import (
+    AppointmentCancellation,
+)
+from app.models.appointment_cancellation import (
+    RefundStatus as CancellationRefundStatus,
+)
+from app.models.booking_hold import BookingHold, BookingHoldStatus
 from app.models.customer import Customer
+from app.models.payment import Payment, PaymentProvider, PaymentStatus
 from app.models.provider_service import ProviderService
 from app.models.providers import AvailabilityStatus, Provider
+from app.models.refund import PaymentRefundStatus
 from app.models.service import Service, ServiceStatus
 from app.models.user import UserRole
 from app.schemas.appointment import (
@@ -20,6 +29,15 @@ from app.schemas.appointment import (
     AppointmentUpdate,
 )
 from app.services.appointment_intervals import appointment_blocked_interval
+from app.services.payment_refunds import (
+    RefundConflictError,
+    RefundNotFoundError,
+    RefundOutcomeUnknownError,
+    RefundPersistenceError,
+    RefundValidationError,
+    create_full_refund,
+)
+from app.services.razorpay import RazorpayIntegrationError, RazorpayService
 from app.tasks.notification_tasks import (
     enqueue_confirmation_notification,
     schedule_appointment_notifications,
@@ -66,6 +84,127 @@ def get_booking_status(
 def can_modify_booking(appointment_start: datetime, now_utc: datetime) -> bool:
     cutoff_time = appointment_start - timedelta(hours=MODIFICATION_CUTOFF_HOURS)
     return now_utc < cutoff_time
+
+
+def _eligible_cancellation_payment(
+    db: Session,
+    appointment: Appointment,
+    customer_id,
+    cancelled_at: datetime,
+) -> Payment | None:
+    if (
+        customer_id is None
+        or appointment.customer_id != customer_id
+        or appointment.series_id is not None
+        or not can_modify_booking(appointment.appointment_start, cancelled_at)
+    ):
+        return None
+
+    payment = db.scalar(
+        select(Payment)
+        .where(Payment.appointment_id == appointment.id)
+        .with_for_update()
+    )
+    if (
+        payment is None
+        or payment.customer_id != customer_id
+        or payment.series_id is not None
+        or payment.provider != PaymentProvider.RAZORPAY
+        or payment.status != PaymentStatus.CAPTURED
+        or not payment.provider_order_id
+        or not payment.provider_payment_id
+    ):
+        return None
+
+    holds = db.scalars(
+        select(BookingHold)
+        .where(BookingHold.payment_id == payment.id)
+        .with_for_update()
+    ).all()
+    if len(holds) != 1:
+        return None
+    hold = holds[0]
+    if (
+        hold.status != BookingHoldStatus.CONVERTED
+        or hold.customer_id != customer_id
+        or hold.service_id != appointment.service_id
+        or hold.provider_id != appointment.provider_id
+        or hold.appointment_start != appointment.appointment_start
+        or hold.appointment_end != appointment.appointment_end
+    ):
+        return None
+    return payment
+
+
+def _mark_cancellation_refunded(db: Session, cancellation_id) -> None:
+    try:
+        cancellation = db.get(AppointmentCancellation, cancellation_id)
+        if (
+            cancellation is not None
+            and cancellation.refund_status == CancellationRefundStatus.PENDING
+        ):
+            cancellation.refund_status = CancellationRefundStatus.REFUNDED
+            db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception(
+            "Unable to record completed refund for cancellation %s",
+            cancellation_id,
+        )
+
+
+def _process_cancellation_refund(
+    db: Session,
+    payment: Payment | None,
+    cancellation: AppointmentCancellation,
+    razorpay_service: RazorpayService | None,
+) -> None:
+    if payment is None:
+        return
+    idempotency_key = f"appointment-cancel-{cancellation.appointment_id}"
+    try:
+        refund = create_full_refund(
+            db,
+            payment.id,
+            idempotency_key,
+            cancellation.reason or "Appointment cancelled",
+            razorpay_service=razorpay_service,
+        )
+    except RefundValidationError:
+        db.rollback()
+        cancellation.refund_status = CancellationRefundStatus.NOT_ELIGIBLE
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception(
+                "Unable to persist ineligible refund outcome for cancellation %s",
+                cancellation.id,
+            )
+        logger.info(
+            "Appointment cancellation %s was not eligible for a verified refund",
+            cancellation.id,
+        )
+        return
+    except (
+        RefundConflictError,
+        RefundNotFoundError,
+        RefundOutcomeUnknownError,
+        RefundPersistenceError,
+        RazorpayIntegrationError,
+        SQLAlchemyError,
+    ):
+        db.rollback()
+        db.refresh(cancellation)
+        logger.exception(
+            "Refund processing did not complete for cancellation %s; cancellation remains committed",
+            cancellation.id,
+        )
+        return
+
+    if refund.status == PaymentRefundStatus.PROCESSED:
+        _mark_cancellation_refunded(db, cancellation.id)
+    db.refresh(cancellation)
 
 
 def _utc(value: datetime) -> datetime:
@@ -303,6 +442,9 @@ def cancel_appointment(
     appointment_id,
     payload: AppointmentCancellationCreate | None = None,
     user_role: UserRole | None = None,
+    customer_id=None,
+    *,
+    razorpay_service: RazorpayService | None = None,
 ) -> AppointmentCancellation:
     payload = payload or AppointmentCancellationCreate()
     appointment_snapshot = db.scalar(
@@ -321,40 +463,77 @@ def cancel_appointment(
     )
     if appointment is None:
         raise CancellationValidationError("Appointment not found")
-    if appointment.status == AppointmentStatus.CANCELLED:
+    if user_role == UserRole.CUSTOMER and customer_id != appointment.customer_id:
+        raise CancellationValidationError("Appointment not found")
+
+    cancellation = db.scalar(
+        select(AppointmentCancellation)
+        .where(AppointmentCancellation.appointment_id == appointment.id)
+        .order_by(AppointmentCancellation.cancelled_at)
+        .with_for_update()
+    )
+    already_cancelled = appointment.status == AppointmentStatus.CANCELLED
+    if already_cancelled and cancellation is None:
         raise CancellationValidationError("Appointment is already cancelled")
 
     now_utc = datetime.now(UTC)
-    current_status = get_booking_status(
-        appointment.appointment_start,
-        appointment.duration_minutes,
-        appointment.status,
-        now_utc,
-    )
-
-    if current_status in ("in_progress", "completed", "cancelled"):
-        raise CancellationValidationError(
-            f"Cannot cancel appointment with status {current_status}"
+    if not already_cancelled:
+        current_status = get_booking_status(
+            appointment.appointment_start,
+            appointment.duration_minutes,
+            appointment.status,
+            now_utc,
         )
-
-    from app.models.user import UserRole
-
-    if user_role == UserRole.CUSTOMER or user_role is None:
-        if not can_modify_booking(appointment.appointment_start, now_utc):
+        if appointment.status == AppointmentStatus.COMPLETED:
             raise CancellationValidationError(
-                f"Bookings cannot be cancelled or rescheduled within {MODIFICATION_CUTOFF_HOURS} hours of the start time."
+                "Cannot cancel appointment with status completed"
+            )
+        if current_status in ("in_progress", "completed", "cancelled"):
+            raise CancellationValidationError(
+                f"Cannot cancel appointment with status {current_status}"
             )
 
-    appointment.status = AppointmentStatus.CANCELLED
-    cancellation = AppointmentCancellation(
-        appointment_id=appointment.id,
-        **payload.model_dump(),
-    )
-    db.add(cancellation)
-    db.commit()
-    db.refresh(cancellation)
-    db.refresh(appointment)
-    send_cancellation_notification.delay(str(appointment.id))
+        if user_role == UserRole.CUSTOMER or user_role is None:
+            if not can_modify_booking(appointment.appointment_start, now_utc):
+                raise CancellationValidationError(
+                    f"Bookings cannot be cancelled or rescheduled within {MODIFICATION_CUTOFF_HOURS} hours of the start time."
+                )
+
+        eligible_payment = _eligible_cancellation_payment(
+            db, appointment, customer_id, now_utc
+        )
+        appointment.status = AppointmentStatus.CANCELLED
+        cancellation = AppointmentCancellation(
+            appointment_id=appointment.id,
+            refund_status=(
+                CancellationRefundStatus.PENDING
+                if eligible_payment is not None
+                else CancellationRefundStatus.NOT_ELIGIBLE
+            ),
+            **payload.model_dump(),
+        )
+        db.add(cancellation)
+        db.commit()
+        db.refresh(cancellation)
+        db.refresh(appointment)
+        if eligible_payment is not None:
+            _process_cancellation_refund(
+                db, eligible_payment, cancellation, razorpay_service
+            )
+        send_cancellation_notification.delay(str(appointment.id))
+    elif (
+        cancellation.refund_status == CancellationRefundStatus.PENDING
+        and user_role == UserRole.CUSTOMER
+        and customer_id == appointment.customer_id
+    ):
+        eligible_payment = _eligible_cancellation_payment(
+            db, appointment, customer_id, cancellation.cancelled_at
+        )
+        db.commit()
+        _process_cancellation_refund(
+            db, eligible_payment, cancellation, razorpay_service
+        )
+        db.refresh(cancellation)
     return cancellation
 
 

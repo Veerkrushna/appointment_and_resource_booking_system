@@ -3,10 +3,16 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from pydantic import SecretStr
-from razorpay.errors import ServerError, SignatureVerificationError
+from razorpay.errors import BadRequestError, ServerError, SignatureVerificationError
 
 from app.core.config import Settings
-from app.services.razorpay import RazorpayIntegrationError, RazorpayService
+from app.services.razorpay import (
+    RazorpayIntegrationError,
+    RazorpayRefundNotSubmittedError,
+    RazorpayRefundOutcomeUnknownError,
+    RazorpayRefundRejectedError,
+    RazorpayService,
+)
 
 
 def test_create_order_sends_amount_currency_and_receipt():
@@ -64,6 +70,107 @@ def test_verify_payment_rejects_invalid_signature_without_fetching_payment():
         expected_currency="INR",
     )
     client.payment.fetch.assert_not_called()
+
+
+def test_fetch_payment_returns_authenticated_client_payment():
+    client = MagicMock()
+    payment = {"id": "pay_test", "status": "captured"}
+    client.payment.fetch.return_value = payment
+    service = RazorpayService(client=client)
+
+    assert service.fetch_payment("pay_test") == payment
+    client.payment.fetch.assert_called_once_with("pay_test")
+
+
+def test_create_full_refund_uses_sdk_payment_refund_api():
+    client = MagicMock()
+    refund = {"id": "rfnd_test"}
+    client.payment.refund.return_value = refund
+    service = RazorpayService(client=client)
+
+    assert service.create_full_refund("pay_test", 2510, "refund-key-123") == refund
+    client.payment.refund.assert_called_once_with(
+        "pay_test",
+        2510,
+        headers={"X-Refund-Idempotency": "refund-key-123"},
+    )
+
+
+def test_create_full_refund_without_credentials_fails_before_request(monkeypatch):
+    client = MagicMock()
+    service = RazorpayService(client=client)
+    service._api_credentials_configured = False
+
+    with pytest.raises(RazorpayRefundNotSubmittedError):
+        service.create_full_refund("pay_test", 2510, "refund-key-123")
+
+    client.payment.refund.assert_not_called()
+
+
+def test_refund_lookup_methods_use_payment_scoped_sdk_apis():
+    client = MagicMock()
+    refund = {"id": "rfnd_test", "payment_id": "pay_test"}
+    refunds = {"items": [refund]}
+    client.payment.fetch_refund_id.return_value = refund
+    client.payment.fetch_multiple_refund.return_value = refunds
+    service = RazorpayService(client=client)
+
+    assert service.fetch_refund("pay_test", "rfnd_test") == refund
+    assert service.fetch_payment_refunds("pay_test") == refunds
+    client.payment.fetch_refund_id.assert_called_once_with("pay_test", "rfnd_test")
+    client.payment.fetch_multiple_refund.assert_called_once_with("pay_test")
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        BadRequestError("private provider details"),
+        ServerError("private provider details"),
+        requests.exceptions.Timeout("private provider details"),
+    ],
+)
+def test_refund_lookup_failures_are_translated(failure):
+    client = MagicMock()
+    client.payment.fetch_refund_id.side_effect = failure
+    service = RazorpayService(client=client)
+
+    with pytest.raises(RazorpayIntegrationError) as error:
+        service.fetch_refund("pay_test", "rfnd_test")
+
+    assert str(error.value) == "Razorpay refund lookup failed"
+    assert "private provider details" not in str(error.value)
+
+
+def test_create_full_refund_marks_provider_rejection_as_definitive():
+    client = MagicMock()
+    client.payment.refund.side_effect = BadRequestError("private provider details")
+    service = RazorpayService(client=client)
+
+    with pytest.raises(RazorpayRefundRejectedError) as error:
+        service.create_full_refund("pay_test", 2510, "refund-key-123")
+
+    assert str(error.value) == "Razorpay refund request was rejected"
+    assert "private provider details" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ServerError("private provider details"),
+        requests.exceptions.Timeout("private provider details"),
+        requests.exceptions.ConnectionError("private provider details"),
+    ],
+)
+def test_create_full_refund_marks_transport_failures_as_uncertain(failure):
+    client = MagicMock()
+    client.payment.refund.side_effect = failure
+    service = RazorpayService(client=client)
+
+    with pytest.raises(RazorpayRefundOutcomeUnknownError) as error:
+        service.create_full_refund("pay_test", 2510, "refund-key-123")
+
+    assert str(error.value) == "Razorpay refund outcome is unknown"
+    assert "private provider details" not in str(error.value)
 
 
 @pytest.mark.parametrize(

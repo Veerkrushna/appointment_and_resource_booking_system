@@ -28,9 +28,10 @@ class AppointmentUpdate(BaseModel):
 
 
 class AppointmentCancellationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     cancelled_by: str = Field(default="customer", min_length=1, max_length=100)
     reason: str | None = None
-    refund_status: RefundStatus = RefundStatus.PENDING
 
 
 class AppointmentCancellationResponse(BaseModel):

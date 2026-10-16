@@ -98,7 +98,13 @@ def cancel_customer_appointment(
 ):
     _owned(db, appointment_id, customer)
     try:
-        return cancel_appointment(db, appointment_id, payload)
+        return cancel_appointment(
+            db,
+            appointment_id,
+            payload,
+            user_role=customer.role,
+            customer_id=customer.id,
+        )
     except BookingValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)

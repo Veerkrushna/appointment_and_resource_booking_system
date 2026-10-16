@@ -1,10 +1,8 @@
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date
 from typing import Annotated
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.security import get_optional_customer, get_optional_user
@@ -13,8 +11,7 @@ from app.crud.appointments import get_appointments_list
 from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.customer import Customer
-from app.models.user import User
-from app.models.providers import Provider
+from app.models.user import User, UserRole
 from app.schemas.appointment import (
     AppointmentCancellationCreate,
     AppointmentCancellationResponse,
@@ -176,7 +173,13 @@ def cancel_appointment_endpoint(
 ):
     try:
         user_role = user.role if user else None
-        cancel_appointment(db, appointment_id, payload, user_role=user_role)
+        cancel_appointment(
+            db,
+            appointment_id,
+            payload,
+            user_role=user_role,
+            customer_id=user.id if user_role == UserRole.CUSTOMER else None,
+        )
     except CancellationValidationError as error:
         status_code = (
             status.HTTP_404_NOT_FOUND
@@ -199,7 +202,13 @@ def cancel_appointment_post_endpoint(
 ):
     try:
         user_role = user.role if user else None
-        return cancel_appointment(db, appointment_id, payload, user_role=user_role)
+        return cancel_appointment(
+            db,
+            appointment_id,
+            payload,
+            user_role=user_role,
+            customer_id=user.id if user_role == UserRole.CUSTOMER else None,
+        )
     except BookingValidationError as error:
         status_code = (
             status.HTTP_404_NOT_FOUND
