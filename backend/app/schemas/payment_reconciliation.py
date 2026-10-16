@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.booking_hold import BookingHoldStatus
 from app.models.payment import PaymentStatus, PaymentWebhookEventStatus
+from app.models.refund import PaymentRefundStatus
 
 
 class PaymentReconciliationReason(enum.StrEnum):
@@ -70,3 +71,41 @@ class PaymentReconciliationCandidate(BaseModel):
     provider_verification_required: Literal[True] = True
     booking_holds: list[PaymentReconciliationHold]
     webhook_events: list[PaymentReconciliationEvent]
+
+
+class RefundReconciliationReason(enum.StrEnum):
+    REFUND_PENDING = "refund_pending"
+    REFUND_PROCESSING = "refund_processing"
+    REFUND_RESERVATIONS_EXCEED_PAYMENT = "refund_reservations_exceed_payment"
+    MISSING_PAYMENT = "missing_payment"
+    INVALID_REFUND_AMOUNT = "invalid_refund_amount"
+    REFUND_CURRENCY_MISMATCH = "refund_currency_mismatch"
+    MISSING_PROVIDER_REFUND_ID = "missing_provider_refund_id"
+    MISSING_PROVIDER_PAYMENT_ID = "missing_provider_payment_id"
+    MISSING_PROVIDER_ORDER_ID = "missing_provider_order_id"
+    NON_RAZORPAY_PAYMENT = "non_razorpay_payment"
+    MISMATCHED_WEBHOOK_PAYMENT_ID = "mismatched_webhook_payment_id"
+    MISMATCHED_WEBHOOK_ORDER_ID = "mismatched_webhook_order_id"
+    PENDING_CANCELLATION_REFUND = "pending_cancellation_refund"
+
+
+class RefundReconciliationCandidate(BaseModel):
+    refund_id: UUID
+    status: PaymentRefundStatus
+    amount: int
+    currency: str
+    razorpay_refund_id: str | None
+    refund_reason: str
+    payment_id: UUID
+    provider_payment_id: str | None
+    provider_order_id: str | None
+    created_at: datetime
+    updated_at: datetime
+    investigation_reasons: list[RefundReconciliationReason]
+
+
+class RefundReconciliationResult(BaseModel):
+    refund_id: UUID
+    previous_status: PaymentRefundStatus
+    status: PaymentRefundStatus
+    outcome: Literal["updated", "unchanged"]

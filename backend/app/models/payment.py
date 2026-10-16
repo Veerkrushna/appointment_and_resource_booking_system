@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.models.appointment import Appointment
     from app.models.appointment_series import AppointmentSeries
     from app.models.booking_hold import BookingHold
+    from app.models.refund import Refund
     from app.models.user import User
 
 
@@ -114,6 +115,7 @@ class Payment(Base):
     appointment: Mapped["Appointment | None"] = relationship(back_populates="payment")
     series: Mapped["AppointmentSeries | None"] = relationship(back_populates="payment")
     booking_holds: Mapped[list["BookingHold"]] = relationship(back_populates="payment")
+    refunds: Mapped[list["Refund"]] = relationship(back_populates="payment")
 
 
 class PaymentWebhookEvent(Base):
@@ -134,6 +136,7 @@ class PaymentWebhookEvent(Base):
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_refund_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     capture_validation_failure: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )

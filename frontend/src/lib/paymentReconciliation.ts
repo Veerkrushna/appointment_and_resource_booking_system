@@ -41,12 +41,44 @@ export type PaymentReconciliationCandidate = {
   webhook_events: PaymentReconciliationEvent[];
 };
 
+export type RefundReconciliationCandidate = {
+  refund_id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  razorpay_refund_id: string | null;
+  refund_reason: string;
+  payment_id: string;
+  provider_payment_id: string | null;
+  provider_order_id: string | null;
+  created_at: string;
+  updated_at: string;
+  investigation_reasons: string[];
+};
+
+export type RefundReconciliationResult = {
+  refund_id: string;
+  previous_status: string;
+  status: string;
+  outcome: "updated" | "unchanged";
+};
+
 export class PaymentReconciliationApiError extends Error {
   readonly status: number | null;
 
   constructor(message: string, status: number | null) {
     super(message);
     this.name = "PaymentReconciliationApiError";
+    this.status = status;
+  }
+}
+
+export class RefundReconciliationApiError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = "RefundReconciliationApiError";
     this.status = status;
   }
 }
@@ -108,4 +140,140 @@ export async function fetchPaymentReconciliationCandidates(
       response.status,
     );
   }
+}
+
+export async function fetchRefundReconciliationCandidates(
+  token: string,
+  limit = 100,
+): Promise<RefundReconciliationCandidate[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/admin/payment-reconciliation/refunds?${params}`,
+      {
+        headers: { Authorization: "Bearer " + token },
+      },
+    );
+  } catch {
+    throw new RefundReconciliationApiError(
+      "Unable to reach the refund reconciliation service.",
+      null,
+    );
+  }
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body: unknown = await response.json();
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        "detail" in body &&
+        typeof body.detail === "string"
+      ) {
+        detail = body.detail;
+      }
+    } catch {
+      detail = "";
+    }
+    throw new RefundReconciliationApiError(
+      detail || `Refund reconciliation request failed (${response.status}).`,
+      response.status,
+    );
+  }
+
+  try {
+    const result: unknown = await response.json();
+    if (!Array.isArray(result)) {
+      throw new Error("Expected a refund candidate list.");
+    }
+    return result as RefundReconciliationCandidate[];
+  } catch (error) {
+    throw new RefundReconciliationApiError(
+      error instanceof Error
+        ? error.message
+        : "Unable to read refund reconciliation candidates.",
+      response.status,
+    );
+  }
+}
+
+export async function reconcileRefundCandidate(
+  token: string,
+  refundId: string,
+): Promise<RefundReconciliationResult> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/admin/payment-reconciliation/refunds/${encodeURIComponent(refundId)}/reconcile`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+      },
+    );
+  } catch {
+    throw new RefundReconciliationApiError(
+      "Unable to reach the refund reconciliation service.",
+      null,
+    );
+  }
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body: unknown = await response.json();
+      if (
+        typeof body === "object" &&
+        body !== null &&
+        "detail" in body &&
+        typeof body.detail === "string"
+      ) {
+        detail = body.detail;
+      }
+    } catch {
+      detail = "";
+    }
+    throw new RefundReconciliationApiError(
+      detail || `Refund reconciliation request failed (${response.status}).`,
+      response.status,
+    );
+  }
+
+  try {
+    const result: unknown = await response.json();
+    if (
+      typeof result !== "object" ||
+      result === null ||
+      !("refund_id" in result) ||
+      typeof result.refund_id !== "string" ||
+      !("previous_status" in result) ||
+      typeof result.previous_status !== "string" ||
+      !("status" in result) ||
+      typeof result.status !== "string" ||
+      !("outcome" in result) ||
+      (result.outcome !== "updated" && result.outcome !== "unchanged")
+    ) {
+      throw new Error("Invalid refund reconciliation response.");
+    }
+    return result as RefundReconciliationResult;
+  } catch (error) {
+    throw new RefundReconciliationApiError(
+      error instanceof Error
+        ? error.message
+        : "Unable to read refund reconciliation result.",
+      response.status,
+    );
+  }
+}
+
+export async function reconcileRefundCandidateAndRefresh(
+  token: string,
+  refundId: string,
+  refreshCandidates: () => Promise<void>,
+): Promise<RefundReconciliationResult> {
+  const result = await reconcileRefundCandidate(token, refundId);
+  await refreshCandidates();
+  return result;
 }

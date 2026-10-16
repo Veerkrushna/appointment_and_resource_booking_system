@@ -186,8 +186,13 @@ async def razorpay_webhook_endpoint(
             detail="Webhook processing will be retried",
         ) from error
     if event_status == PaymentWebhookEventStatus.RETRYABLE:
+        detail = (
+            "Payment webhook processing will be retried"
+            if event_type.startswith("payment.")
+            else "Refund webhook processing will be retried"
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Captured payment booking could not be completed; webhook processing will be retried",
+            detail=detail,
         )
     return {"status": event_status.value}

@@ -28,7 +28,15 @@ from app.services.booking import (
 
 
 @pytest.fixture
-def cancellation_records():
+def cancellation_records(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.booking.send_cancellation_notification.delay",
+        lambda _appointment_id: None,
+    )
+    monkeypatch.setattr(
+        "app.services.booking.send_reschedule_notification.delay",
+        lambda *_args: None,
+    )
     db = SessionLocal()
     provider = Provider(
         name=f"Cancellation Provider {uuid4()}",
@@ -128,6 +136,7 @@ def test_cancellation_releases_slot_and_records_history(cancellation_records):
     cancel_appointment_endpoint(
         appointment.id,
         db,
+        None,
         AppointmentCancellationRequest(
             cancelled_by="customer",
             reason="No longer needed",
@@ -229,8 +238,8 @@ def test_cancellation_enforces_grace_period(cancellation_records, monkeypatch):
     db.close()
 
     db = SessionLocal()
-    with pytest.raises(HTTPException, match="grace period"):
-        cancel_appointment_endpoint(appointment_id, db)
+    with pytest.raises(HTTPException, match="within 2 hours"):
+        cancel_appointment_endpoint(appointment_id, db, None)
     db.rollback()
     db.close()
     monkeypatch.undo()
@@ -320,12 +329,11 @@ def test_completed_appointment_cannot_be_cancelled(cancellation_records):
 
     db = SessionLocal()
 
-    with pytest.raises(
-        HTTPException, match="Completed appointments cannot be cancelled"
-    ):
+    with pytest.raises(HTTPException, match="status completed"):
         cancel_appointment_endpoint(
             appointment_id,
             db,
+            None,
             AppointmentCancellationRequest(
                 cancelled_by="customer",
                 reason="Testing completed cancellation",

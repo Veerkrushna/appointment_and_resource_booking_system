@@ -5,6 +5,10 @@ from sqlalchemy import and_, func, not_, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.appointment import Appointment
+from app.models.appointment_cancellation import AppointmentCancellation
+from app.models.appointment_cancellation import (
+    RefundStatus as AppointmentCancellationRefundStatus,
+)
 from app.models.booking_hold import BookingHold, BookingHoldStatus
 from app.models.payment import (
     Payment,
@@ -13,15 +17,22 @@ from app.models.payment import (
     PaymentWebhookEvent,
     PaymentWebhookEventStatus,
 )
+from app.models.refund import PaymentRefundStatus, Refund
 from app.schemas.payment_reconciliation import (
     PaymentReconciliationCandidate,
     PaymentReconciliationEvent,
     PaymentReconciliationHold,
     PaymentReconciliationReason,
+    RefundReconciliationCandidate,
+    RefundReconciliationReason,
 )
 from app.services.payment_verification import _appointment_matches_hold
 
 MAX_RECONCILIATION_CANDIDATES = 500
+_UNRESOLVED_REFUND_STATUSES = {
+    PaymentRefundStatus.PENDING,
+    PaymentRefundStatus.PROCESSING,
+}
 
 
 def _require_aware(value: datetime, name: str) -> None:
@@ -284,3 +295,173 @@ def list_payment_reconciliation_candidates(
             )
         )
     return results
+
+
+def list_refund_reconciliation_candidates(
+    db: Session,
+    *,
+    limit: int = 100,
+) -> list[RefundReconciliationCandidate]:
+    """List bounded local refund intents that need investigation.
+
+    Pending/processing intents are unresolved. Other statuses are included
+    only when persisted payment or webhook records reveal an inconsistency.
+    This query never contacts Razorpay or updates records.
+    """
+    if not 1 <= limit <= MAX_RECONCILIATION_CANDIDATES:
+        raise ValueError(f"limit must be between 1 and {MAX_RECONCILIATION_CANDIDATES}")
+
+    matching_refund_events = select(PaymentWebhookEvent.id).where(
+        PaymentWebhookEvent.provider_refund_id == Refund.razorpay_refund_id
+    )
+    webhook_payment_mismatch = matching_refund_events.where(
+        PaymentWebhookEvent.provider_payment_id.is_not(None),
+        Payment.provider_payment_id.is_not(None),
+        PaymentWebhookEvent.provider_payment_id != Payment.provider_payment_id,
+    ).exists()
+    webhook_order_mismatch = matching_refund_events.where(
+        PaymentWebhookEvent.provider_order_id.is_not(None),
+        Payment.provider_order_id.is_not(None),
+        PaymentWebhookEvent.provider_order_id != Payment.provider_order_id,
+    ).exists()
+    pending_cancellation_refund = (
+        select(AppointmentCancellation.id)
+        .where(
+            AppointmentCancellation.appointment_id == Payment.appointment_id,
+            AppointmentCancellation.refund_status
+            == AppointmentCancellationRefundStatus.PENDING,
+        )
+        .exists()
+    )
+    reserved_refund_amount = (
+        select(func.coalesce(func.sum(Refund.amount), 0))
+        .where(
+            Refund.payment_id == Payment.id,
+            Refund.status.in_(
+                {
+                    PaymentRefundStatus.PENDING,
+                    PaymentRefundStatus.PROCESSING,
+                    PaymentRefundStatus.PROCESSED,
+                }
+            ),
+        )
+        .correlate(Payment)
+        .scalar_subquery()
+    )
+    candidate_query = (
+        select(
+            Refund,
+            Payment,
+            webhook_payment_mismatch.label("webhook_payment_mismatch"),
+            webhook_order_mismatch.label("webhook_order_mismatch"),
+            pending_cancellation_refund.label("pending_cancellation_refund"),
+            (reserved_refund_amount > Payment.amount).label(
+                "refund_reservations_exceed_payment"
+            ),
+        )
+        .outerjoin(Payment, Payment.id == Refund.payment_id)
+        .where(
+            or_(
+                Refund.status.in_(_UNRESOLVED_REFUND_STATUSES),
+                Payment.id.is_(None),
+                Refund.amount <= 0,
+                and_(Payment.id.is_not(None), Refund.amount > Payment.amount),
+                and_(
+                    Payment.id.is_not(None),
+                    reserved_refund_amount > Payment.amount,
+                ),
+                and_(
+                    Payment.id.is_not(None),
+                    Refund.currency != Payment.currency,
+                ),
+                and_(
+                    Refund.status == PaymentRefundStatus.PROCESSED,
+                    Refund.razorpay_refund_id.is_(None),
+                ),
+                and_(
+                    Payment.id.is_not(None),
+                    Payment.provider_payment_id.is_(None),
+                ),
+                and_(Payment.id.is_not(None), Payment.provider_order_id.is_(None)),
+                and_(
+                    Payment.id.is_not(None),
+                    Payment.provider != PaymentProvider.RAZORPAY,
+                ),
+                webhook_payment_mismatch,
+                webhook_order_mismatch,
+                pending_cancellation_refund,
+            )
+        )
+        .order_by(Refund.created_at, Refund.id)
+        .limit(limit)
+    )
+    rows = db.execute(candidate_query).all()
+    if not rows:
+        return []
+
+    candidates = []
+    for (
+        refund,
+        payment,
+        payment_mismatch,
+        order_mismatch,
+        cancellation_refund_pending,
+        reservations_exceed_payment,
+    ) in rows:
+        reasons: set[RefundReconciliationReason] = set()
+        if refund.status == PaymentRefundStatus.PENDING:
+            reasons.add(RefundReconciliationReason.REFUND_PENDING)
+        elif refund.status == PaymentRefundStatus.PROCESSING:
+            reasons.add(RefundReconciliationReason.REFUND_PROCESSING)
+
+        if payment is None:
+            reasons.add(RefundReconciliationReason.MISSING_PAYMENT)
+        else:
+            if refund.amount <= 0 or refund.amount > payment.amount:
+                reasons.add(RefundReconciliationReason.INVALID_REFUND_AMOUNT)
+            if refund.currency != payment.currency:
+                reasons.add(RefundReconciliationReason.REFUND_CURRENCY_MISMATCH)
+            if reservations_exceed_payment:
+                reasons.add(
+                    RefundReconciliationReason.REFUND_RESERVATIONS_EXCEED_PAYMENT
+                )
+            if refund.razorpay_refund_id is None and (
+                refund.status in _UNRESOLVED_REFUND_STATUSES
+                or refund.status == PaymentRefundStatus.PROCESSED
+            ):
+                reasons.add(RefundReconciliationReason.MISSING_PROVIDER_REFUND_ID)
+            if payment.provider_payment_id is None:
+                reasons.add(RefundReconciliationReason.MISSING_PROVIDER_PAYMENT_ID)
+            if payment.provider_order_id is None:
+                reasons.add(RefundReconciliationReason.MISSING_PROVIDER_ORDER_ID)
+            if payment.provider != PaymentProvider.RAZORPAY:
+                reasons.add(RefundReconciliationReason.NON_RAZORPAY_PAYMENT)
+
+            if payment_mismatch:
+                reasons.add(RefundReconciliationReason.MISMATCHED_WEBHOOK_PAYMENT_ID)
+            if order_mismatch:
+                reasons.add(RefundReconciliationReason.MISMATCHED_WEBHOOK_ORDER_ID)
+            if cancellation_refund_pending:
+                reasons.add(RefundReconciliationReason.PENDING_CANCELLATION_REFUND)
+
+        candidates.append(
+            RefundReconciliationCandidate(
+                refund_id=refund.id,
+                status=refund.status,
+                amount=refund.amount,
+                currency=refund.currency,
+                razorpay_refund_id=refund.razorpay_refund_id,
+                refund_reason=refund.reason,
+                payment_id=refund.payment_id,
+                provider_payment_id=(
+                    payment.provider_payment_id if payment is not None else None
+                ),
+                provider_order_id=(
+                    payment.provider_order_id if payment is not None else None
+                ),
+                created_at=refund.created_at,
+                updated_at=refund.updated_at,
+                investigation_reasons=sorted(reasons, key=lambda reason: reason.value),
+            )
+        )
+    return candidates

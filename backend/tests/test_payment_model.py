@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import CheckConstraint, UniqueConstraint, delete
+from sqlalchemy import CheckConstraint, UniqueConstraint, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import configure_mappers
 
@@ -17,6 +17,7 @@ from app.models.appointment_series import (
 )
 from app.models.payment import Payment, PaymentProvider, PaymentStatus
 from app.models.providers import AvailabilityStatus, Provider, ProviderType
+from app.models.refund import PaymentRefundStatus, Refund
 from app.models.service import Service, ServiceStatus
 from app.models.user import User, UserRole
 
@@ -90,6 +91,15 @@ def payment_records():
     finally:
         cleanup = SessionLocal()
         cleanup.execute(
+            delete(Refund).where(
+                Refund.payment_id.in_(
+                    select(Payment.id).where(
+                        Payment.customer_id == records["customer_id"]
+                    )
+                )
+            )
+        )
+        cleanup.execute(
             delete(Payment).where(Payment.customer_id == records["customer_id"])
         )
         cleanup.execute(
@@ -123,6 +133,19 @@ def make_payment(
         provider=PaymentProvider.RAZORPAY,
         provider_order_id=provider_order_id or f"order-{uuid4()}",
     )
+
+
+def make_refund(payment, **overrides):
+    values = {
+        "payment_id": payment.id,
+        "amount": 25000,
+        "currency": "INR",
+        "status": PaymentRefundStatus.PENDING,
+        "idempotency_key": f"refund-{uuid4()}",
+        "reason": "Customer-requested refund",
+    }
+    values.update(overrides)
+    return Refund(**values)
 
 
 def test_payment_schema_constraints():
@@ -257,4 +280,168 @@ def test_provider_order_id_is_unique(payment_records):
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+    db.close()
+
+
+def test_refund_schema_constraints():
+    configure_mappers()
+    refund_table = Base.metadata.tables["payment_refunds"]
+    assert {
+        name: refund_table.c[name].nullable
+        for name in (
+            "id",
+            "payment_id",
+            "amount",
+            "currency",
+            "status",
+            "idempotency_key",
+            "reason",
+            "created_at",
+            "updated_at",
+        )
+    } == {
+        "id": False,
+        "payment_id": False,
+        "amount": False,
+        "currency": False,
+        "status": False,
+        "idempotency_key": False,
+        "reason": False,
+        "created_at": False,
+        "updated_at": False,
+    }
+    assert refund_table.c.razorpay_refund_id.nullable
+
+    unique_constraints = {
+        constraint.name: [column.name for column in constraint.columns]
+        for constraint in refund_table.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert unique_constraints == {
+        "uq_payment_refunds_idempotency_key": ["idempotency_key"],
+        "uq_payment_refunds_razorpay_refund_id": ["razorpay_refund_id"],
+    }
+    payment_fk = next(iter(refund_table.c.payment_id.foreign_keys))
+    assert payment_fk.target_fullname == "payments.id"
+    assert payment_fk.ondelete == "RESTRICT"
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    ["payment_id", "amount", "currency", "status", "idempotency_key", "reason"],
+)
+def test_refund_requires_persisted_fields(payment_records, missing_field):
+    db = SessionLocal()
+    payment = make_payment(payment_records)
+    db.add(payment)
+    db.commit()
+
+    refund = make_refund(
+        payment,
+        **{
+            "idempotency_key": f"refund-{payment_records['token']}",
+            missing_field: None,
+        },
+    )
+    db.add(refund)
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    db.close()
+
+
+@pytest.mark.parametrize("refund_status", list(PaymentRefundStatus))
+def test_refund_supports_each_status(payment_records, refund_status):
+    db = SessionLocal()
+    payment = make_payment(payment_records)
+    db.add(payment)
+    db.commit()
+
+    refund = make_refund(
+        payment,
+        idempotency_key=f"refund-{payment_records['token']}",
+        status=refund_status,
+    )
+    db.add(refund)
+    db.commit()
+
+    assert refund.status is refund_status
+    assert refund.payment is payment
+    assert refund.created_at is not None
+    assert refund.updated_at is not None
+    db.close()
+
+
+def test_refund_payment_relationship(payment_records):
+    db = SessionLocal()
+    payment = make_payment(payment_records)
+    db.add(payment)
+    db.commit()
+
+    refund = make_refund(
+        payment,
+        idempotency_key=f"refund-{payment_records['token']}",
+    )
+    db.add(refund)
+    db.commit()
+    db.refresh(payment)
+
+    assert refund.payment.id == payment.id
+    assert [payment_refund.id for payment_refund in payment.refunds] == [refund.id]
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("unique_field", "first_value", "second_value"),
+    [
+        ("idempotency_key", "stable-key", "stable-key"),
+        ("razorpay_refund_id", "rfnd_provider_id", "rfnd_provider_id"),
+    ],
+)
+def test_refund_unique_identifiers(
+    payment_records, unique_field, first_value, second_value
+):
+    db = SessionLocal()
+    payment = make_payment(payment_records)
+    db.add(payment)
+    db.commit()
+
+    db.add(
+        make_refund(
+            payment,
+            **{
+                "idempotency_key": f"first-{payment_records['token']}",
+                unique_field: first_value,
+            },
+        )
+    )
+    db.commit()
+    db.add(
+        make_refund(
+            payment,
+            **{
+                "idempotency_key": f"second-{payment_records['token']}",
+                unique_field: second_value,
+            },
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    db.close()
+
+
+def test_multiple_refunds_may_have_no_provider_refund_id(payment_records):
+    db = SessionLocal()
+    payment = make_payment(payment_records)
+    db.add(payment)
+    db.commit()
+
+    db.add_all(
+        [
+            make_refund(payment, idempotency_key=f"first-{payment_records['token']}"),
+            make_refund(payment, idempotency_key=f"second-{payment_records['token']}"),
+        ]
+    )
+    db.commit()
     db.close()

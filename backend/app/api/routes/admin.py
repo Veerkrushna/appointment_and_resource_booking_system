@@ -2,8 +2,9 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.security import require_role
@@ -12,7 +13,7 @@ from app.db.database import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.providers import AvailabilityStatus, Provider
 from app.models.service import Service, ServiceStatus
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.schemas.admin import (
     AdminAppointmentListResponse,
     AdminAppointmentResponse,
@@ -20,12 +21,26 @@ from app.schemas.admin import (
     AppointmentStatusCount,
     ProviderScheduleResponse,
 )
-from app.schemas.payment_reconciliation import PaymentReconciliationCandidate
+from app.schemas.payment_reconciliation import (
+    PaymentReconciliationCandidate,
+    RefundReconciliationCandidate,
+    RefundReconciliationResult,
+)
 from app.schemas.providers import AvailabilityWindow, BlackoutResponse, BreakWindow
 from app.services.payment_reconciliation import (
     MAX_RECONCILIATION_CANDIDATES,
     list_payment_reconciliation_candidates,
+    list_refund_reconciliation_candidates,
 )
+from app.services.payment_refunds import (
+    RefundConflictError,
+    RefundNotFoundError,
+    RefundOutcomeUnknownError,
+    RefundPersistenceError,
+    RefundValidationError,
+    reconcile_refund_for_admin,
+)
+from app.services.razorpay import RazorpayIntegrationError
 
 router = APIRouter(
     prefix="/api/admin",
@@ -87,6 +102,69 @@ def admin_payment_reconciliation(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get(
+    "/payment-reconciliation/refunds",
+    response_model=list[RefundReconciliationCandidate],
+)
+def admin_refund_reconciliation(
+    db: Annotated[Session, Depends(get_db)],
+    limit: int = Query(default=100, ge=1, le=MAX_RECONCILIATION_CANDIDATES),
+):
+    """Return unresolved or inconsistent local refund records without mutation."""
+    try:
+        return list_refund_reconciliation_candidates(db, limit=limit)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post(
+    "/payment-reconciliation/refunds/{refund_id}/reconcile",
+    response_model=RefundReconciliationResult,
+)
+def admin_reconcile_refund(
+    refund_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    admin: Annotated[User, Depends(require_role(UserRole.ADMIN))],
+) -> RefundReconciliationResult:
+    try:
+        outcome = reconcile_refund_for_admin(db, refund_id, actor_id=admin.id)
+    except RefundNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Refund was not found"
+        ) from error
+    except RefundValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    except RefundConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    except (RefundOutcomeUnknownError, RazorpayIntegrationError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Razorpay could not verify this refund; manual investigation is required",
+        ) from error
+    except (RefundPersistenceError, SQLAlchemyError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Refund reconciliation could not be persisted",
+        ) from error
+
+    return RefundReconciliationResult(
+        refund_id=outcome.refund.id,
+        previous_status=outcome.previous_status,
+        status=outcome.refund.status,
+        outcome=(
+            "updated"
+            if outcome.previous_status != outcome.refund.status
+            else "unchanged"
+        ),
+    )
 
 
 @router.get("/overview", response_model=AdminOverviewResponse)
