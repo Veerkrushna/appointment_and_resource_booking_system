@@ -226,7 +226,11 @@ export default function AdminPaymentReconciliationPage() {
           />
           <small>Between 1 and {MAX_RESULT_LIMIT} candidates.</small>
         </label>
-        <button type="submit" disabled={isLoading}>
+        <button
+          type="submit"
+          className="admin-primary-button"
+          disabled={isLoading}
+        >
           {isLoading ? "Loading candidates…" : "Load candidates"}
         </button>
       </form>
