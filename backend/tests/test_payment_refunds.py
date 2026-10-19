@@ -131,7 +131,10 @@ def _run_refund(records, provider, *, idempotency_key=None):
         db.close()
 
 
-def test_create_full_refund_verifies_and_persists_provider_result(refund_payment):
+def test_create_full_refund_verifies_and_persists_provider_result(
+    refund_payment, caplog
+):
+    caplog.set_level("INFO")
     provider = FakeRazorpayService(refund_payment)
 
     refund = _run_refund(refund_payment, provider)
@@ -149,6 +152,23 @@ def test_create_full_refund_verifies_and_persists_provider_result(refund_payment
             f"refund-{refund_payment['token']}",
         )
     ]
+    response_log = next(
+        record
+        for record in caplog.records
+        if getattr(record, "refund_event", None) == "provider_response_received"
+    )
+    assert response_log.refund_id == str(refund.id)
+    assert response_log.payment_id == str(refund_payment["payment_id"])
+    assert response_log.amount == 12500
+    assert response_log.currency == "INR"
+    assert response_log.provider_response_status == "processed"
+    assert response_log.provider_refund_id_returned is True
+    persisted_log = next(
+        record
+        for record in caplog.records
+        if getattr(record, "refund_event", None) == "provider_result_persisted"
+    )
+    assert persisted_log.provider_refund_id_returned is True
 
     db = SessionLocal()
     payment = db.get(Payment, refund_payment["payment_id"])
@@ -295,7 +315,7 @@ def test_concurrent_refund_reservations_allow_only_one_provider_request(refund_p
     assert len(provider.refund_calls) == 1
 
 
-def test_provider_rejection_is_persisted_as_failed(refund_payment):
+def test_provider_rejection_is_persisted_as_failed(refund_payment, caplog):
     provider = FakeRazorpayService(refund_payment)
     provider.refund_error = RazorpayRefundRejectedError("rejected")
 
@@ -309,6 +329,15 @@ def test_provider_rejection_is_persisted_as_failed(refund_payment):
     assert refund.status == PaymentRefundStatus.FAILED
     assert refund.razorpay_refund_id is None
     db.close()
+    failure_log = next(
+        record
+        for record in caplog.records
+        if getattr(record, "refund_event", None) == "submission_failed"
+    )
+    assert failure_log.refund_id
+    assert failure_log.payment_id == str(refund_payment["payment_id"])
+    assert failure_log.failure_classification == "definitive_rejection"
+    assert failure_log.provider_refund_id_returned is False
 
 
 def test_unclassified_provider_integration_error_does_not_mark_refund_failed(
@@ -336,10 +365,12 @@ def test_unclassified_provider_integration_error_does_not_mark_refund_failed(
 
 
 def test_provider_timeout_keeps_reservation_and_duplicate_does_not_resubmit(
-    refund_payment,
+    refund_payment, caplog
 ):
     provider = FakeRazorpayService(refund_payment)
-    provider.refund_error = RazorpayRefundOutcomeUnknownError("timeout")
+    provider.refund_error = RazorpayRefundOutcomeUnknownError(
+        "timeout", failure_classification="timeout"
+    )
     idempotency_key = f"uncertain-{refund_payment['token']}"
 
     with pytest.raises(RefundOutcomeUnknownError):
@@ -349,6 +380,12 @@ def test_provider_timeout_keeps_reservation_and_duplicate_does_not_resubmit(
     assert existing.status == PaymentRefundStatus.PROCESSING
     assert existing.razorpay_refund_id is None
     assert len(provider.refund_calls) == 1
+    failure_log = next(
+        record
+        for record in caplog.records
+        if getattr(record, "refund_event", None) == "submission_failed"
+    )
+    assert failure_log.failure_classification == "timeout"
 
 
 @pytest.mark.parametrize("uncertain_commit", ["intent", "provider_result"])
@@ -386,6 +423,57 @@ def test_uncertain_commit_outcome_is_reconciled_without_resubmission(
     assert result_status == PaymentRefundStatus.PROCESSED
     assert result_provider_refund_id
     assert len(provider.refund_calls) == 1
+
+
+def test_provider_result_persistence_failure_keeps_intent_and_prevents_resubmission(
+    refund_payment, caplog
+):
+    provider = FakeRazorpayService(refund_payment)
+    db = SessionLocal()
+    original_commit = db.commit
+    commit_count = 0
+
+    def fail_provider_result_commit():
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 2:
+            raise SQLAlchemyError("simulated database write failure")
+        original_commit()
+
+    db.commit = fail_provider_result_commit
+    idempotency_key = f"provider-result-write-failure-{refund_payment['token']}"
+    try:
+        with pytest.raises(RefundOutcomeUnknownError):
+            create_full_refund(
+                db,
+                refund_payment["payment_id"],
+                idempotency_key,
+                "Appointment cancelled",
+                razorpay_service=provider,
+            )
+    finally:
+        db.close()
+
+    retry = _run_refund(
+        refund_payment,
+        provider,
+        idempotency_key=idempotency_key,
+    )
+
+    assert retry.status == PaymentRefundStatus.PROCESSING
+    assert retry.razorpay_refund_id is None
+    assert len(provider.refund_calls) == 1
+    persistence_log = next(
+        record
+        for record in caplog.records
+        if getattr(record, "refund_event", None) == "provider_result_persistence_failed"
+    )
+    assert persistence_log.refund_id
+    assert persistence_log.payment_id == str(refund_payment["payment_id"])
+    assert persistence_log.amount == 12500
+    assert persistence_log.currency == "INR"
+    assert persistence_log.provider_refund_id_returned is True
+    assert persistence_log.failure_classification == "database_persistence_failure"
 
 
 @pytest.mark.parametrize(
