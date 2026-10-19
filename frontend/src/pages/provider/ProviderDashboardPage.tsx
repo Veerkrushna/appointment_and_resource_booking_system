@@ -5,6 +5,7 @@ import ProviderCalendarWidget from "../../components/ProviderCalendarWidget";
 type RealAppointment = {
   id: string;
   user_name: string;
+  user_email?: string;
   service_id: string;
   service_name?: string;
   appointment_start: string;
@@ -133,6 +134,23 @@ export default function ProviderDashboardPage() {
       );
   }, [appointments]);
 
+  const [historyPage, setHistoryPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  const sortedAppointments = useMemo(() => {
+    return [...appointments].sort(
+      (a, b) =>
+        new Date(b.appointment_start).getTime() -
+        new Date(a.appointment_start).getTime(),
+    );
+  }, [appointments]);
+
+  const totalHistoryPages = Math.ceil(sortedAppointments.length / PAGE_SIZE) || 1;
+  const paginatedAppointments = useMemo(() => {
+    const start = (historyPage - 1) * PAGE_SIZE;
+    return sortedAppointments.slice(start, start + PAGE_SIZE);
+  }, [sortedAppointments, historyPage]);
+
   if (isLoading) {
     return (
       <section className="dashboard-page">
@@ -245,7 +263,106 @@ export default function ProviderDashboardPage() {
           </table>
         </div>
       </section>
+
       <ProviderCalendarWidget />
+
+      <section
+        className="dashboard-panel dashboard-panel--table"
+        style={{ marginTop: "2rem" }}
+      >
+        <div className="dashboard-panel__heading">
+          <div>
+            <p className="panel-kicker">Latest activity</p>
+            <h2>Appointment History</h2>
+          </div>
+          <span className="dashboard-total">
+            {appointments.length} {appointments.length === 1 ? "booking" : "bookings"}
+          </span>
+        </div>
+        <div className="dashboard-table-wrap">
+          <table className="dashboard-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>When</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedAppointments.length > 0 ? (
+                paginatedAppointments.map((apt) => (
+                  <tr key={apt.id}>
+                    <td>
+                      <div>
+                        <strong>{apt.user_name}</strong>
+                        {apt.user_email && (
+                          <small style={{ display: "block" }}>{apt.user_email}</small>
+                        )}
+                      </div>
+                    </td>
+                    <td>{apt.service_name}</td>
+                    <td>
+                      {new Intl.DateTimeFormat("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      }).format(new Date(apt.appointment_start))}
+                    </td>
+                    <td>
+                      <span
+                        className={`dashboard-status dashboard-status--${apt.status}`}
+                      >
+                        {apt.status.replace("_", " ")}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={4}
+                    style={{
+                      textAlign: "center",
+                      padding: "2rem",
+                      color: "#64748b",
+                    }}
+                  >
+                    No appointments have been recorded.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalHistoryPages > 1 && (
+          <div className="admin-appointments-pagination">
+            <button
+              type="button"
+              disabled={historyPage === 1}
+              onClick={() => setHistoryPage((p) => Math.max(p - 1, 1))}
+            >
+              Previous
+            </button>
+
+            <span>
+              Page {historyPage} of {totalHistoryPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={historyPage >= totalHistoryPages}
+              onClick={() =>
+                setHistoryPage((p) => Math.min(p + 1, totalHistoryPages))
+              }
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </section>
     </section>
   );
 }
