@@ -3,7 +3,6 @@ import { useAuth } from "../auth/useAuth";
 import {
   dateKey,
   formatTime,
-  formatMonth,
   formatSelectedDate,
   getCalendarDays,
 } from "../utils/dateUtils";
@@ -109,7 +108,11 @@ export default function ProviderCalendarWidget() {
     void loadData();
   }, [customer?.id, token]);
 
-  const calendarDays = useMemo(() => getCalendarDays(month), [month]);
+  const [calendarView, setCalendarView] = useState<"month" | "week">("month");
+  const calendarDays = useMemo(
+    () => getCalendarDays(month, calendarView),
+    [month, calendarView],
+  );
   const appointmentsByDay = useMemo(() => {
     const grouped: Record<string, Appointment[]> = {};
     appointments.forEach((appointment) => {
@@ -122,10 +125,45 @@ export default function ProviderCalendarWidget() {
   const selectedAppointments = appointmentsByDay[selectedDate] || [];
 
   function moveMonth(amount: number) {
-    setMonth(
-      (current) =>
-        new Date(current.getFullYear(), current.getMonth() + amount, 1),
+    setMonth((current) => {
+      const next = new Date(current);
+      next.setDate(
+        current.getDate() + (calendarView === "month" ? amount * 31 : amount * 7),
+      );
+      return next;
+    });
+  }
+
+  function formatCalendarHeading(date: Date, view: "month" | "week") {
+    if (view === "week") {
+      const weekEnd = new Date(date);
+      weekEnd.setDate(date.getDate() + 6);
+      return `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date)} - ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(weekEnd)}`;
+    }
+    return new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      year: "numeric",
+    }).format(date);
+  }
+
+  function getDayAvailability(
+    day: Date,
+    dayAppointments: Appointment[],
+    isDisabledBySchedule: boolean,
+  ): { status: "available" | "booked" | "unavailable" | "limited"; label: string } {
+    if (isDisabledBySchedule || day.getDay() === 0 || day.getDay() === 6) {
+      return { status: "unavailable", label: "Unavailable" };
+    }
+    const nonCancelled = dayAppointments.filter(
+      (apt) => apt.status !== "cancelled",
     );
+    if (nonCancelled.length >= 3) {
+      return { status: "booked", label: "Booked" };
+    }
+    if (nonCancelled.length > 0) {
+      return { status: "limited", label: "Limited" };
+    }
+    return { status: "available", label: "Available" };
   }
 
   return (
@@ -142,35 +180,69 @@ export default function ProviderCalendarWidget() {
 
       {!isLoading && !error && (
         <div className="provider-calendar-layout">
-          <div className="provider-calendar-panel">
-            <div className="calendar-header">
-              <button
-                className="calendar-nav"
-                type="button"
-                aria-label="Previous month"
-                onClick={() => moveMonth(-1)}
-              >
-                &#8592;
-              </button>
-              <h2>{formatMonth(month)}</h2>
-              <button
-                className="calendar-nav"
-                type="button"
-                aria-label="Next month"
-                onClick={() => moveMonth(1)}
-              >
-                &#8594;
-              </button>
+          <div className="provider-calendar-panel availability-widget">
+            <div className="dashboard-panel__heading availability-widget__heading">
+              <div>
+                <p className="panel-kicker">Capacity planning</p>
+                <h2>Availability calendar</h2>
+              </div>
+              <div className="availability-widget__controls">
+                <div
+                  className="availability-view-toggle"
+                  role="group"
+                  aria-label="Calendar view"
+                >
+                  {(["month", "week"] as const).map((view) => (
+                    <button
+                      className={calendarView === view ? "active" : ""}
+                      key={view}
+                      type="button"
+                      aria-pressed={calendarView === view}
+                      onClick={() => setCalendarView(view)}
+                    >
+                      {view}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="calendar-nav"
+                  type="button"
+                  aria-label="Previous period"
+                  onClick={() => moveMonth(-1)}
+                >
+                  &#8592;
+                </button>
+                <button
+                  className="calendar-nav"
+                  type="button"
+                  aria-label="Next period"
+                  onClick={() => moveMonth(1)}
+                >
+                  &#8594;
+                </button>
+              </div>
             </div>
-            <div className="calendar-weekdays" aria-hidden="true">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <span key={day}>{day}</span>
-              ))}
+
+            <div className="availability-widget__meta">
+              <strong>{formatCalendarHeading(calendarDays[0] || month, calendarView)}</strong>
+              <div className="availability-legend">
+                {(
+                  ["available", "booked", "unavailable", "limited"] as const
+                ).map((status) => (
+                  <span key={status}>
+                    <i
+                      className={`availability-swatch availability-swatch--${status}`}
+                    />
+                    {status}
+                  </span>
+                ))}
+              </div>
             </div>
+
             <div
-              className="calendar-grid"
+              className={`availability-calendar availability-calendar--${calendarView}`}
               role="grid"
-              aria-label={`${formatMonth(month)} schedule`}
+              aria-label={`${formatCalendarHeading(calendarDays[0] || month, calendarView)} availability`}
             >
               {calendarDays.map((day) => {
                 const key = dateKey(day);
@@ -210,32 +282,47 @@ export default function ProviderCalendarWidget() {
                   }
                 }
 
+                const { status, label } = getDayAvailability(
+                  day,
+                  dayAppointments,
+                  isDisabled,
+                );
+                const nonCancelledCount = dayAppointments.filter(
+                  (a) => a.status !== "cancelled",
+                ).length;
+
                 return (
                   <button
-                    className={`calendar-day${isCurrentMonth ? "" : " calendar-day--outside"}${isSelected ? " calendar-day--selected" : ""}`}
+                    className={`availability-day availability-day--${status}${
+                      calendarView === "month" && !isCurrentMonth
+                        ? " availability-day--outside"
+                        : ""
+                    }${isSelected ? " calendar-day--selected" : ""}`}
                     key={key}
                     type="button"
                     role="gridcell"
-                    aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings`}
+                    aria-label={`${formatSelectedDate(key)}, ${dayAppointments.length} bookings, ${label}`}
                     onClick={() => {
-                      if (!isDisabled) setSelectedDate(key);
+                      setSelectedDate(key);
                     }}
-                    disabled={isDisabled}
                   >
-                    <span>{day.getDate()}</span>
-                    {dayAppointments.length > 0 && (
-                      <small className="calendar-day__count">
-                        {dayAppointments.length}
-                      </small>
+                    <span>
+                      {calendarView === "week" && (
+                        <small>
+                          {new Intl.DateTimeFormat("en-US", {
+                            weekday: "short",
+                          }).format(day)}
+                        </small>
+                      )}
+                      {day.getDate()}
+                    </span>
+                    {nonCancelledCount > 0 && (
+                      <strong>
+                        {nonCancelledCount}{" "}
+                        {nonCancelledCount === 1 ? "booking" : "bookings"}
+                      </strong>
                     )}
-                    <div className="calendar-day__dots">
-                      {dayAppointments.slice(0, 3).map((appointment) => (
-                        <i
-                          className={`calendar-dot calendar-dot--${appointment.status}`}
-                          key={appointment.id}
-                        />
-                      ))}
-                    </div>
+                    <em>{label}</em>
                   </button>
                 );
               })}
