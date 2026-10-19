@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from threading import Thread
 
 from sqlalchemy import select
@@ -12,12 +13,21 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.appointment_series import AppointmentSeries
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.services.notifications import (
+    NotificationDeliveryResult,
     build_series_confirmation_email,
     deliver_email_notification,
     deliver_notification,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class NotificationDeliveryOutcome(StrEnum):
+    SENT = "sent"
+    FAILED = "failed"
+    CONFIGURATION_ERROR = "configuration_error"
+    ALREADY_SENT = "already_sent"
+    SKIPPED = "skipped"
 
 
 def _enqueue(task, appointment: Appointment, eta: datetime | None = None) -> None:
@@ -96,7 +106,7 @@ def _send_once(
     recipient_phone: str | None,
     *,
     lock_appointment: bool = False,
-) -> bool:
+) -> NotificationDeliveryOutcome:
     with SessionLocal() as db:
         if lock_appointment:
             appointment = db.scalar(
@@ -108,7 +118,7 @@ def _send_once(
             appointment = db.get(Appointment, appointment_id)
 
         if appointment is None or appointment.status == AppointmentStatus.CANCELLED:
-            return False
+            return NotificationDeliveryOutcome.SKIPPED
 
         notification = db.scalar(
             select(Notification)
@@ -123,7 +133,7 @@ def _send_once(
 
         if notification is not None:
             if notification.status == NotificationStatus.SENT:
-                return True
+                return NotificationDeliveryOutcome.ALREADY_SENT
         else:
             notification = Notification(
                 appointment_id=appointment.id,
@@ -137,7 +147,16 @@ def _send_once(
             else:
                 db.flush()
 
-        return deliver_notification(db, notification, appointment)
+        delivery_result = deliver_notification(db, notification, appointment)
+        if delivery_result == NotificationDeliveryResult.CONFIGURATION_ERROR:
+            return NotificationDeliveryOutcome.CONFIGURATION_ERROR
+        if notification.status == NotificationStatus.SENT:
+            return NotificationDeliveryOutcome.SENT
+        if notification.status == NotificationStatus.FAILED:
+            return NotificationDeliveryOutcome.FAILED
+        raise RuntimeError(
+            f"Notification delivery did not persist a final status for {notification.id}"
+        )
 
 
 @celery_app.task(
@@ -323,14 +342,14 @@ def send_email_reminder(appointment_id: str) -> None:
         appointment = db.get(Appointment, appointment_id)
 
         if appointment is not None:
-            delivered = _send_once(
+            outcome = _send_once(
                 appointment_id,
                 NotificationType.REMINDER,
                 appointment.user_email,
                 None,
             )
 
-            if not delivered:
+            if outcome == NotificationDeliveryOutcome.FAILED:
                 raise RuntimeError("Email reminder delivery failed")
 
 
@@ -346,14 +365,14 @@ def send_sms_reminder(appointment_id: str) -> None:
         appointment = db.get(Appointment, appointment_id)
 
         if appointment is not None and appointment.user_phone:
-            delivered = _send_once(
+            outcome = _send_once(
                 appointment_id,
                 NotificationType.REMINDER,
                 None,
                 appointment.user_phone,
             )
 
-            if not delivered:
+            if outcome == NotificationDeliveryOutcome.FAILED:
                 raise RuntimeError("SMS reminder delivery failed")
 
 
@@ -369,12 +388,12 @@ def send_feedback_request(appointment_id: str) -> None:
         appointment = db.get(Appointment, appointment_id)
 
         if appointment is not None:
-            delivered = _send_once(
+            outcome = _send_once(
                 appointment_id,
                 NotificationType.FEEDBACK_REQUEST,
                 appointment.user_email,
                 None,
             )
 
-            if not delivered:
+            if outcome == NotificationDeliveryOutcome.FAILED:
                 raise RuntimeError("Feedback request delivery failed")
