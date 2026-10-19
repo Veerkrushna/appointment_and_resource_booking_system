@@ -6,11 +6,12 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from celery.exceptions import Retry
 from fastapi import BackgroundTasks
 from sqlalchemy import delete, select
 
 from app.db.database import SessionLocal
-from app.models.appointment import Appointment
+from app.models.appointment import Appointment, AppointmentStatus
 from app.models.appointment_series import AppointmentSeriesFrequency
 from app.models.availability import ProviderAvailability
 from app.models.notification import Notification, NotificationStatus, NotificationType
@@ -32,6 +33,8 @@ from app.tasks.notification_tasks import (
     schedule_appointment_notifications,
     send_confirmation_notification,
     send_email_reminder,
+    send_feedback_request,
+    send_sms_reminder,
 )
 
 
@@ -290,6 +293,231 @@ def test_email_reminder_has_retry_configuration():
     assert Exception in send_email_reminder.autoretry_for
     assert send_email_reminder.retry_backoff is True
     assert send_email_reminder.retry_kwargs["max_retries"] == 3
+
+
+class _NotificationTaskSession:
+    def __init__(self, appointment, notification=None):
+        self.appointment = appointment
+        self.notification = notification
+        self.scalar_calls = 0
+        self.commit_calls = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        pass
+
+    def get(self, _model, _appointment_id):
+        return self.appointment
+
+    def scalar(self, _query):
+        self.scalar_calls += 1
+        return self.notification
+
+    def add(self, notification):
+        self.notification = notification
+
+    def commit(self):
+        self.commit_calls += 1
+
+    def flush(self):
+        pass
+
+
+def _notification_task_records(
+    notification_type=NotificationType.REMINDER,
+    status=NotificationStatus.PENDING,
+    *,
+    phone=None,
+):
+    appointment = _email_appointment(
+        id=uuid4(),
+        status=AppointmentStatus.CONFIRMED,
+        user_email="task-test@example.com",
+        user_phone=phone,
+    )
+    notification = SimpleNamespace(
+        id=uuid4(),
+        status=status,
+        retry_count=0,
+        sent_at=None,
+        notification_type=notification_type,
+        recipient_email=None if phone else appointment.user_email,
+        recipient_phone=phone,
+    )
+    return appointment, notification
+
+
+def _use_notification_task_session(monkeypatch, appointment, notification=None):
+    sessions = []
+
+    def session_factory():
+        session = _NotificationTaskSession(appointment, notification)
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr("app.tasks.notification_tasks.SessionLocal", session_factory)
+    return sessions
+
+
+def test_email_reminder_success_uses_persisted_sent_status(monkeypatch):
+    appointment, notification = _notification_task_records()
+    sessions = _use_notification_task_session(monkeypatch, appointment, notification)
+    send_email_mock = MagicMock()
+    monkeypatch.setattr("app.services.notifications._send_email", send_email_mock)
+
+    send_email_reminder.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.SENT
+    assert notification.retry_count == 1
+    assert notification.sent_at is not None
+    send_email_mock.assert_called_once()
+    assert len(sessions) == 2
+
+
+def test_email_reminder_delivery_failure_preserves_failed_status_and_raises(
+    monkeypatch,
+):
+    appointment, notification = _notification_task_records()
+    _use_notification_task_session(monkeypatch, appointment, notification)
+    send_email_mock = MagicMock(side_effect=OSError("SMTP unavailable"))
+    monkeypatch.setattr("app.services.notifications._send_email", send_email_mock)
+
+    with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
+        send_email_reminder.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
+    assert notification.sent_at is None
+    send_email_mock.assert_called_once()
+
+
+def test_feedback_request_success_uses_persisted_sent_status(monkeypatch):
+    appointment, notification = _notification_task_records(
+        NotificationType.FEEDBACK_REQUEST
+    )
+    _use_notification_task_session(monkeypatch, appointment, notification)
+    send_email_mock = MagicMock()
+    monkeypatch.setattr("app.services.notifications._send_email", send_email_mock)
+
+    send_feedback_request.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.SENT
+    assert notification.retry_count == 1
+    assert notification.sent_at is not None
+    send_email_mock.assert_called_once()
+
+
+def test_sms_reminder_without_twilio_configuration_fails_safely(
+    monkeypatch, caplog
+):
+    appointment, notification = _notification_task_records(phone="+15555550123")
+    _use_notification_task_session(monkeypatch, appointment, notification)
+    monkeypatch.setattr("app.services.notifications.settings.twilio_account_sid", None)
+    monkeypatch.setattr("app.services.notifications.settings.twilio_auth_token", None)
+    monkeypatch.setattr("app.services.notifications.settings.twilio_from_phone", None)
+    urlopen_mock = MagicMock()
+    monkeypatch.setattr("app.services.notifications.urlopen", urlopen_mock)
+    retry_mock = MagicMock()
+    monkeypatch.setattr(send_sms_reminder, "retry", retry_mock)
+
+    with caplog.at_level("ERROR", logger="app.services.notifications"):
+        send_sms_reminder.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
+    assert notification.sent_at is None
+    assert "SMS is not configured" in caplog.text
+    urlopen_mock.assert_not_called()
+    retry_mock.assert_not_called()
+
+
+def test_transient_sms_delivery_failure_uses_celery_retry(monkeypatch):
+    appointment, notification = _notification_task_records(phone="+15555550123")
+    _use_notification_task_session(monkeypatch, appointment, notification)
+    monkeypatch.setattr(
+        "app.services.notifications.settings.twilio_account_sid", "ACtest"
+    )
+    monkeypatch.setattr(
+        "app.services.notifications.settings.twilio_auth_token", "test-token"
+    )
+    monkeypatch.setattr(
+        "app.services.notifications.settings.twilio_from_phone", "+15555550124"
+    )
+    urlopen_mock = MagicMock(side_effect=OSError("Twilio unavailable"))
+    monkeypatch.setattr("app.services.notifications.urlopen", urlopen_mock)
+    retry_mock = MagicMock(return_value=Retry())
+    monkeypatch.setattr(send_sms_reminder, "retry", retry_mock)
+
+    with pytest.raises(Retry):
+        send_sms_reminder.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
+    urlopen_mock.assert_called_once()
+    retry_mock.assert_called_once()
+    assert isinstance(retry_mock.call_args.kwargs["exc"], RuntimeError)
+    assert Exception in send_sms_reminder.autoretry_for
+    assert send_sms_reminder.retry_backoff is True
+    assert send_sms_reminder.retry_kwargs["max_retries"] == 3
+
+
+@pytest.mark.parametrize(
+    ("task", "notification_type", "phone"),
+    [
+        (send_email_reminder, NotificationType.REMINDER, None),
+        (send_sms_reminder, NotificationType.REMINDER, "+15555550123"),
+        (send_feedback_request, NotificationType.FEEDBACK_REQUEST, None),
+    ],
+)
+def test_already_sent_notification_is_not_delivered_again(
+    monkeypatch, task, notification_type, phone
+):
+    appointment, notification = _notification_task_records(
+        notification_type,
+        NotificationStatus.SENT,
+        phone=phone,
+    )
+    notification.sent_at = datetime.now(UTC)
+    _use_notification_task_session(monkeypatch, appointment, notification)
+    send_email_mock = MagicMock()
+    urlopen_mock = MagicMock()
+    monkeypatch.setattr("app.services.notifications._send_email", send_email_mock)
+    monkeypatch.setattr("app.services.notifications.urlopen", urlopen_mock)
+
+    task.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.SENT
+    assert notification.retry_count == 0
+    send_email_mock.assert_not_called()
+    urlopen_mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("task", "phone"),
+    [
+        (send_email_reminder, None),
+        (send_sms_reminder, "+15555550123"),
+        (send_feedback_request, None),
+    ],
+)
+def test_cancelled_appointment_notification_is_skipped_without_retry(
+    monkeypatch, task, phone
+):
+    appointment, _notification = _notification_task_records(phone=phone)
+    appointment.status = AppointmentStatus.CANCELLED
+    sessions = _use_notification_task_session(monkeypatch, appointment)
+    send_email_mock = MagicMock()
+    urlopen_mock = MagicMock()
+    monkeypatch.setattr("app.services.notifications._send_email", send_email_mock)
+    monkeypatch.setattr("app.services.notifications.urlopen", urlopen_mock)
+
+    task.run(str(appointment.id))
+
+    assert all(session.scalar_calls == 0 for session in sessions)
+    send_email_mock.assert_not_called()
+    urlopen_mock.assert_not_called()
 
 
 def _email_appointment(**overrides):

@@ -5,6 +5,7 @@ import smtplib
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from email.message import EmailMessage
+from enum import StrEnum
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -19,6 +20,16 @@ from app.models.notification import Notification, NotificationStatus, Notificati
 logger = logging.getLogger(__name__)
 
 BRAND_NAME = "Appointment Booking System"
+
+
+class NotificationConfigurationError(RuntimeError):
+    pass
+
+
+class NotificationDeliveryResult(StrEnum):
+    SENT = "sent"
+    FAILED = "failed"
+    CONFIGURATION_ERROR = "configuration_error"
 
 
 def build_branded_email(
@@ -138,9 +149,9 @@ def _send_sms(appointment: Appointment, body_text: str) -> None:
     if not appointment.user_phone:
         return
     if not settings.twilio_account_sid or not settings.twilio_auth_token:
-        raise RuntimeError("SMS is not configured")
+        raise NotificationConfigurationError("SMS is not configured")
     if not settings.twilio_from_phone:
-        raise RuntimeError("Twilio sender phone is not configured")
+        raise NotificationConfigurationError("Twilio sender phone is not configured")
     body = urlencode(
         {
             "To": appointment.user_phone,
@@ -304,7 +315,7 @@ def deliver_notification(
     *,
     previous_start: datetime | None = None,
     previous_end: datetime | None = None,
-) -> None:
+) -> NotificationDeliveryResult:
     is_email = notification.recipient_email is not None
     try:
         if is_email:
@@ -331,11 +342,15 @@ def deliver_notification(
                     ),
                 }[notification.notification_type],
             )
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to send notification %s", notification.id)
         _record_result(db, notification, delivered=False)
+        if isinstance(exc, NotificationConfigurationError):
+            return NotificationDeliveryResult.CONFIGURATION_ERROR
+        return NotificationDeliveryResult.FAILED
     else:
         _record_result(db, notification, delivered=True)
+        return NotificationDeliveryResult.SENT
 
 
 def deliver_email_notification(
