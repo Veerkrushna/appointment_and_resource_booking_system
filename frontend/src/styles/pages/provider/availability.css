@@ -70,6 +70,20 @@
   border-radius: 5px;
   padding: 0.65rem;
   color: #18312f;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.availability-day:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.availability-day.calendar-day--selected {
+  outline: 2px solid #18312f;
+  outline-offset: -1px;
 }
 
 .availability-calendar--week .availability-day {
