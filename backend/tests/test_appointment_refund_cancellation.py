@@ -508,6 +508,39 @@ def test_retry_after_provider_verification_failure_can_complete_refund(
     assert len(provider.refund_calls) == 1
 
 
+def test_notification_enqueue_failure_does_not_fail_committed_cancellation(
+    cancellation_payment, monkeypatch, caplog
+):
+    records = cancellation_payment
+    provider = FakeRefundProvider(records)
+
+    def fail_enqueue(_appointment_id):
+        raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(
+        "app.services.booking.send_cancellation_notification.delay",
+        fail_enqueue,
+    )
+
+    with caplog.at_level("ERROR", logger="app.services.booking"):
+        cancellation_id, cancellation_refund_status = _cancel(records, provider)
+
+    db = SessionLocal()
+    appointment = db.get(Appointment, records["appointment_id"])
+    cancellation = db.get(AppointmentCancellation, cancellation_id)
+    refund = db.scalar(select(Refund).where(Refund.payment_id == records["payment_id"]))
+    db.close()
+
+    assert appointment.status == AppointmentStatus.CANCELLED
+    assert cancellation.refund_status == CancellationRefundStatus.REFUNDED
+    assert refund.status == PaymentRefundStatus.PROCESSED
+    assert refund.razorpay_refund_id
+    assert cancellation_refund_status == CancellationRefundStatus.REFUNDED
+    assert len(provider.refund_calls) == 1
+    assert "Unable to enqueue cancellation notification" in caplog.text
+    assert "redis unavailable" in caplog.text
+
+
 @pytest.mark.parametrize(
     "failure",
     [
