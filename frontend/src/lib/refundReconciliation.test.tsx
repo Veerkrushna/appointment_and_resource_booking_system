@@ -17,6 +17,8 @@ const candidate: RefundReconciliationCandidate = {
   razorpay_refund_id: "rfnd-provider-1",
   refund_reason: "Appointment cancellation",
   payment_id: "payment-local-1",
+  appointment_id: "appointment-local-1",
+  series_id: null,
   provider_payment_id: "pay-provider-1",
   provider_order_id: "order-provider-1",
   created_at: "2026-10-01T10:00:00Z",
@@ -37,7 +39,7 @@ function renderSection({
   reconcilingRefundIds?: ReadonlySet<string>;
   feedback?: Record<
     string,
-    { kind: "success" | "error"; message: string }
+    { kind: "success" | "error" | "investigation"; message: string }
   >;
 } = {}) {
   return renderToStaticMarkup(
@@ -82,6 +84,7 @@ describe("refund reconciliation UI and API", () => {
     expect(markup).toContain("Razorpay refund ID");
     expect(markup).toContain("rfnd-provider-1");
     expect(markup).toContain("payment-local-1");
+    expect(markup).toContain("appointment-local-1");
     expect(markup).toContain("pay-provider-1");
     expect(markup).toContain("order-provider-1");
     expect(markup).toContain("missing_provider_refund_id");
@@ -147,6 +150,26 @@ describe("refund reconciliation UI and API", () => {
     expect(markup).toContain("disabled=\"\"");
   });
 
+  it("enables read-only verification when a processing refund ID is missing", () => {
+    const markup = renderSection({
+      candidates: [
+        {
+          ...candidate,
+          status: "PROCESSING",
+          razorpay_refund_id: null,
+        },
+      ],
+    });
+    const verifyButton = markup.match(
+      /<button class="admin-secondary-button refund-reconciliation__verify"[^>]*>/,
+    )?.[0];
+
+    expect(markup).toContain("search existing Razorpay refund history only");
+    expect(markup).toContain("it will not submit a refund");
+    expect(verifyButton).toBeDefined();
+    expect(verifyButton).not.toContain("disabled");
+  });
+
   it("posts a verification request and returns the reconciled status", async () => {
     const result = {
       refund_id: candidate.refund_id,
@@ -172,6 +195,28 @@ describe("refund reconciliation UI and API", () => {
         headers: { Authorization: "Bearer " + "admin-token" },
       },
     );
+  });
+
+  it("accepts an explicit no-match investigation result", async () => {
+    const result = {
+      refund_id: candidate.refund_id,
+      previous_status: "PROCESSING",
+      status: "PROCESSING",
+      outcome: "no_matching_refund",
+    } as const;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(
+      reconcileRefundCandidate("admin-token", candidate.refund_id),
+    ).resolves.toEqual(result);
   });
 
   it("refreshes the candidate list after successful verification", async () => {
@@ -242,6 +287,19 @@ describe("refund reconciliation UI and API", () => {
     });
     expect(conflict).toContain("role=\"alert\"");
     expect(conflict).toContain("Conflict requiring manual investigation");
+
+    const investigation = renderSection({
+      candidates: [candidate],
+      feedback: {
+        [candidate.refund_id]: {
+          kind: "investigation",
+          message:
+            "No matching refund was found in Razorpay history. The local refund remains unchanged.",
+        },
+      },
+    });
+    expect(investigation).toContain("role=\"status\"");
+    expect(investigation).toContain("local refund remains unchanged");
   });
 
   it("surfaces safe conflict responses from the reconcile action", async () => {
@@ -263,6 +321,28 @@ describe("refund reconciliation UI and API", () => {
     ).rejects.toMatchObject({
       name: "RefundReconciliationApiError",
       status: 409,
+    });
+  });
+
+  it("preserves sanitized provider lookup details from a failed verification", async () => {
+    const detail =
+      "Razorpay did not find the refund for the supplied payment and refund IDs. The local refund state was left unchanged.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail }), {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(
+      reconcileRefundCandidate("admin-token", candidate.refund_id),
+    ).rejects.toMatchObject({
+      name: "RefundReconciliationApiError",
+      status: 502,
+      message: detail,
     });
   });
 });

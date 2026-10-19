@@ -453,6 +453,8 @@ def list_refund_reconciliation_candidates(
                 razorpay_refund_id=refund.razorpay_refund_id,
                 refund_reason=refund.reason,
                 payment_id=refund.payment_id,
+                appointment_id=payment.appointment_id if payment is not None else None,
+                series_id=payment.series_id if payment is not None else None,
                 provider_payment_id=(
                     payment.provider_payment_id if payment is not None else None
                 ),

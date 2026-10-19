@@ -49,6 +49,8 @@ export type RefundReconciliationCandidate = {
   razorpay_refund_id: string | null;
   refund_reason: string;
   payment_id: string;
+  appointment_id: string | null;
+  series_id: string | null;
   provider_payment_id: string | null;
   provider_order_id: string | null;
   created_at: string;
@@ -60,7 +62,14 @@ export type RefundReconciliationResult = {
   refund_id: string;
   previous_status: string;
   status: string;
-  outcome: "updated" | "unchanged";
+  failure_classification?: string | null;
+  outcome:
+    | "updated"
+    | "unchanged"
+    | "no_matching_refund"
+    | "multiple_matching_refunds"
+    | "provider_unavailable"
+    | "evidence_conflict";
 };
 
 export class PaymentReconciliationApiError extends Error {
@@ -253,7 +262,14 @@ export async function reconcileRefundCandidate(
       !("status" in result) ||
       typeof result.status !== "string" ||
       !("outcome" in result) ||
-      (result.outcome !== "updated" && result.outcome !== "unchanged")
+      ![
+        "updated",
+        "unchanged",
+        "no_matching_refund",
+        "multiple_matching_refunds",
+        "provider_unavailable",
+        "evidence_conflict",
+      ].includes(String(result.outcome))
     ) {
       throw new Error("Invalid refund reconciliation response.");
     }

@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
@@ -40,13 +41,14 @@ from app.services.payment_refunds import (
     RefundValidationError,
     reconcile_refund_for_admin,
 )
-from app.services.razorpay import RazorpayIntegrationError
+from app.services.razorpay import RazorpayIntegrationError, RazorpayLookupError
 
 router = APIRouter(
     prefix="/api/admin",
     tags=["Admin"],
     dependencies=[Depends(require_role(UserRole.ADMIN))],
 )
+logger = logging.getLogger(__name__)
 
 
 def _admin_timezone(timezone: str):
@@ -117,6 +119,12 @@ def admin_refund_reconciliation(
         return list_refund_reconciliation_candidates(db, limit=limit)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    except SQLAlchemyError as error:
+        logger.exception("Unable to load admin refund reconciliation candidates")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Refund reconciliation is temporarily unavailable.",
+        ) from error
 
 
 @router.post(
@@ -144,10 +152,63 @@ def admin_reconcile_refund(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(error),
         ) from error
-    except (RefundOutcomeUnknownError, RazorpayIntegrationError) as error:
+    except RazorpayLookupError as error:
+        cause = error.__cause__
+        exception_class = type(cause or error).__name__
+        logger.warning(
+            "Admin refund verification provider lookup failed: %s (%s)",
+            error.failure_classification,
+            exception_class,
+            extra={
+                "refund_id": str(refund_id),
+                "failure_classification": error.failure_classification,
+                "exception_class": exception_class,
+                "provider_http_status": error.provider_http_status,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Razorpay could not verify this refund; manual investigation is required",
+            detail=f"{error} Local refund state was left unchanged.",
+        ) from error
+    except RefundOutcomeUnknownError as error:
+        cause = error.__cause__
+        exception_class = type(cause or error).__name__
+        logger.warning(
+            "Admin refund verification evidence could not be confirmed: %s (%s)",
+            error.failure_classification,
+            exception_class,
+            extra={
+                "refund_id": str(refund_id),
+                "failure_classification": error.failure_classification,
+                "exception_class": exception_class,
+                "provider_http_status": getattr(error, "provider_http_status", None),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"{error} Local refund state was left unchanged.",
+        ) from error
+    except RazorpayIntegrationError as error:
+        cause = error.__cause__
+        exception_class = type(cause or error).__name__
+        failure_classification = getattr(
+            error, "failure_classification", "provider_unavailable"
+        )
+        logger.warning(
+            "Admin refund verification provider is unavailable: %s (%s)",
+            failure_classification,
+            exception_class,
+            extra={
+                "refund_id": str(refund_id),
+                "failure_classification": failure_classification,
+                "exception_class": exception_class,
+                "provider_http_status": getattr(error, "provider_http_status", None),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Razorpay refund verification is temporarily unavailable. "
+            "The local refund state was left unchanged.",
         ) from error
     except (RefundPersistenceError, SQLAlchemyError) as error:
         raise HTTPException(
@@ -159,11 +220,8 @@ def admin_reconcile_refund(
         refund_id=outcome.refund.id,
         previous_status=outcome.previous_status,
         status=outcome.refund.status,
-        outcome=(
-            "updated"
-            if outcome.previous_status != outcome.refund.status
-            else "unchanged"
-        ),
+        failure_classification=outcome.failure_classification,
+        outcome=outcome.outcome,
     )
 
 

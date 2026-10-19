@@ -207,6 +207,16 @@ def _process_cancellation_refund(
     db.refresh(cancellation)
 
 
+def _enqueue_cancellation_notification(appointment_id: UUID) -> None:
+    try:
+        send_cancellation_notification.delay(str(appointment_id))
+    except Exception:
+        logger.exception(
+            "Unable to enqueue cancellation notification for appointment %s",
+            appointment_id,
+        )
+
+
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise BookingValidationError("appointment_start must include a timezone")
@@ -520,7 +530,7 @@ def cancel_appointment(
             _process_cancellation_refund(
                 db, eligible_payment, cancellation, razorpay_service
             )
-        send_cancellation_notification.delay(str(appointment.id))
+        _enqueue_cancellation_notification(appointment.id)
     elif (
         cancellation.refund_status == CancellationRefundStatus.PENDING
         and user_role == UserRole.CUSTOMER

@@ -285,6 +285,13 @@
   color: #9b2c2c;
 }
 
+.refund-reconciliation__lookup-notice {
+  margin: 0.4rem 0 0;
+  color: #7c4a03;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .refund-reconciliation__table td > span {
   margin-bottom: 0.3rem;
 }
@@ -316,6 +323,10 @@
 
 .refund-reconciliation__feedback--error {
   color: #9b2c2c;
+}
+
+.refund-reconciliation__feedback--investigation {
+  color: #7c4a03;
 }
 
 @media (max-width: 640px) {

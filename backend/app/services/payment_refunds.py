@@ -1,6 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -31,6 +32,15 @@ from app.services.razorpay import (
 
 logger = logging.getLogger(__name__)
 
+RefundReconciliationOutcomeType = Literal[
+    "updated",
+    "unchanged",
+    "no_matching_refund",
+    "multiple_matching_refunds",
+    "provider_unavailable",
+    "evidence_conflict",
+]
+
 
 class RefundValidationError(ValueError):
     pass
@@ -49,6 +59,22 @@ class RefundPersistenceError(RuntimeError):
 
 
 class RefundOutcomeUnknownError(RuntimeError):
+    def __init__(
+        self, message: str, *, failure_classification: str = "evidence_unverifiable"
+    ):
+        super().__init__(message)
+        self.failure_classification = failure_classification
+
+
+class RefundHistoryNoMatchError(RefundOutcomeUnknownError):
+    pass
+
+
+class RefundHistoryAmbiguousError(RefundOutcomeUnknownError):
+    pass
+
+
+class RefundHistoryInvalidError(RefundOutcomeUnknownError):
     pass
 
 
@@ -56,6 +82,8 @@ class RefundOutcomeUnknownError(RuntimeError):
 class RefundReconciliationOutcome:
     refund: Refund
     previous_status: PaymentRefundStatus
+    outcome: RefundReconciliationOutcomeType
+    failure_classification: str | None = None
 
 
 _RESERVED_REFUND_STATUSES = {
@@ -206,6 +234,19 @@ def _persist_provider_result(
         db.refresh(refund)
         return refund
     except SQLAlchemyError as error:
+        logger.error(
+            "Unable to persist successful Razorpay refund response",
+            extra={
+                "refund_event": "provider_result_persistence_failed",
+                "refund_id": str(refund.id),
+                "payment_id": str(refund.payment_id),
+                "amount": refund.amount,
+                "currency": refund.currency,
+                "provider_response_status": status.value,
+                "provider_refund_id_returned": bool(provider_refund_id),
+                "failure_classification": "database_persistence_failure",
+            },
+        )
         refund_id = refund.id
         idempotency_key = refund.idempotency_key
         db.rollback()
@@ -228,8 +269,17 @@ def _mark_definitive_failure(db: Session, refund: Refund) -> None:
         db.commit()
     except SQLAlchemyError:
         db.rollback()
-        logger.exception(
-            "Unable to persist definitive failure for refund %s", refund.id
+        logger.error(
+            "Unable to persist definitive refund rejection",
+            extra={
+                "refund_event": "rejection_persistence_failed",
+                "refund_id": str(refund.id),
+                "payment_id": str(refund.payment_id),
+                "amount": refund.amount,
+                "currency": refund.currency,
+                "provider_refund_id_returned": False,
+                "failure_classification": "database_persistence_failure",
+            },
         )
 
 
@@ -256,7 +306,10 @@ def _provider_result_status(
             "Razorpay refund response could not be verified"
         )
 
-    if provider_status not in _PROVIDER_REFUND_STATUSES:
+    if (
+        not isinstance(provider_status, str)
+        or provider_status not in _PROVIDER_REFUND_STATUSES
+    ):
         raise RefundOutcomeUnknownError(
             "Razorpay refund response has an unresolved status"
         )
@@ -267,41 +320,203 @@ def _refund_provider_status(
     evidence: object, refund: Refund, payment: Payment
 ) -> tuple[str, PaymentRefundStatus]:
     if not isinstance(evidence, dict):
-        raise RefundOutcomeUnknownError("Razorpay refund evidence is invalid")
+        raise RefundOutcomeUnknownError(
+            "Razorpay refund evidence is invalid",
+            failure_classification="refund_response_shape_invalid",
+        )
     provider_refund_id = evidence.get("id")
     provider_amount = evidence.get("amount")
     provider_status = evidence.get("status")
-    if (
-        provider_refund_id != refund.razorpay_refund_id
-        or evidence.get("payment_id") != payment.provider_payment_id
-        or type(provider_amount) is not int
-        or provider_amount != refund.amount
-        or evidence.get("currency") != refund.currency
-        or provider_status not in _PROVIDER_REFUND_STATUSES
-    ):
+    if provider_refund_id != refund.razorpay_refund_id:
         raise RefundOutcomeUnknownError(
-            "Razorpay refund evidence does not match the local refund"
+            "Razorpay refund ID does not match the local refund",
+            failure_classification="provider_refund_id_mismatch",
+        )
+    if evidence.get("payment_id") != payment.provider_payment_id:
+        raise RefundOutcomeUnknownError(
+            "Razorpay refund payment ID does not match the local payment",
+            failure_classification="provider_payment_id_mismatch",
+        )
+    if type(provider_amount) is not int or provider_amount != refund.amount:
+        raise RefundOutcomeUnknownError(
+            "Razorpay refund amount does not match the local refund",
+            failure_classification="refund_amount_mismatch",
+        )
+    if evidence.get("currency") != refund.currency:
+        raise RefundOutcomeUnknownError(
+            "Razorpay refund currency does not match the local refund",
+            failure_classification="refund_currency_mismatch",
+        )
+    if not isinstance(provider_status, str):
+        raise RefundOutcomeUnknownError(
+            "Razorpay refund status is missing or invalid",
+            failure_classification="refund_status_invalid",
+        )
+    if provider_status not in _PROVIDER_REFUND_STATUSES:
+        raise RefundOutcomeUnknownError(
+            "Razorpay refund status is not recognized",
+            failure_classification="refund_status_unrecognized",
         )
     return provider_refund_id, _PROVIDER_REFUND_STATUSES[provider_status]
 
 
-def _refund_payment_evidence(
-    evidence: object, payment: Payment, refund_amount: int | None = None
-) -> bool:
-    if not isinstance(evidence, dict):
-        return False
-    amount_refunded = evidence.get("amount_refunded")
-    return bool(
-        evidence.get("id") == payment.provider_payment_id
-        and evidence.get("order_id") == payment.provider_order_id
-        and evidence.get("status") == "captured"
-        and type(evidence.get("amount")) is int
-        and evidence.get("amount") == payment.amount
-        and evidence.get("currency") == payment.currency
-        and type(amount_refunded) is int
-        and 0 <= amount_refunded <= payment.amount
-        and (refund_amount is None or amount_refunded >= refund_amount)
+def _find_provider_refund_id(
+    provider: RazorpayService,
+    payment: Payment,
+    refund: Refund,
+) -> tuple[str, PaymentRefundStatus]:
+    if refund.amount != payment.amount:
+        raise RefundValidationError(
+            "Only full refunds can be recovered from provider refund history"
+        )
+
+    collection = provider.fetch_payment_refunds(payment.provider_payment_id)
+    if (
+        not isinstance(collection, dict)
+        or collection.get("entity") != "collection"
+        or not isinstance(collection.get("items"), list)
+        or type(collection.get("count")) is not int
+        or collection["count"] != len(collection["items"])
+        or collection.get("has_more") is True
+    ):
+        raise RefundHistoryInvalidError(
+            "Razorpay refund history is incomplete or invalid"
+        )
+    if not collection["items"]:
+        raise RefundHistoryNoMatchError(
+            "Razorpay refund history is empty; the local refund remains unchanged",
+            failure_classification="provider_refund_history_empty",
+        )
+
+    matches = []
+    for item in collection["items"]:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("id"), str)
+            or not item["id"]
+            or item.get("payment_id") != payment.provider_payment_id
+            or type(item.get("amount")) is not int
+            or item.get("currency") != payment.currency
+            or not isinstance(item.get("status"), str)
+            or item["status"] not in _PROVIDER_REFUND_STATUSES
+            or type(item.get("created_at")) is not int
+            or item["created_at"] < 0
+        ):
+            raise RefundHistoryInvalidError(
+                "Razorpay refund history contains unverifiable records"
+            )
+        if item["amount"] == refund.amount and item["created_at"] >= int(
+            refund.created_at.timestamp()
+        ):
+            matches.append((item["id"], _PROVIDER_REFUND_STATUSES[item["status"]]))
+
+    if not matches:
+        raise RefundHistoryNoMatchError(
+            "No matching Razorpay refund was found; the local refund remains unchanged"
+        )
+    if len(matches) > 1:
+        raise RefundHistoryAmbiguousError(
+            "Multiple matching Razorpay refunds were found; the local refund remains unchanged"
+        )
+    return matches[0]
+
+
+def _unchanged_refund_outcome(
+    db: Session,
+    refund_id: UUID,
+    previous_status: PaymentRefundStatus,
+    actor_id: UUID | None,
+    outcome: RefundReconciliationOutcomeType,
+    *,
+    failure_classification: str | None = None,
+    error: Exception | None = None,
+) -> RefundReconciliationOutcome:
+    db.rollback()
+    refund = db.get(Refund, refund_id)
+    if refund is None:
+        raise RefundNotFoundError("Refund was not found")
+    if failure_classification is not None:
+        cause = error.__cause__ if error is not None else None
+        exception_name = type(cause or error).__name__ if error is not None else None
+        logger.warning(
+            "Admin refund reconciliation left state unchanged: %s",
+            failure_classification,
+            extra={
+                "refund_id": str(refund_id),
+                "failure_classification": failure_classification,
+                "exception_class": (
+                    exception_name
+                    if isinstance(exception_name, str)
+                    and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", exception_name)
+                    else None
+                ),
+                "provider_http_status": getattr(error, "provider_http_status", None),
+            },
+        )
+    _log_admin_refund_reconciliation(
+        actor_id,
+        refund_id,
+        previous_status,
+        refund.status,
+        outcome,
     )
+    return RefundReconciliationOutcome(
+        refund, previous_status, outcome, failure_classification
+    )
+
+
+def _refund_payment_evidence(
+    evidence: object,
+    payment: Payment,
+    refund_amount: int | None = None,
+    *,
+    allow_fully_refunded: bool = False,
+) -> bool:
+    return (
+        _refund_payment_evidence_failure(
+            evidence,
+            payment,
+            refund_amount,
+            allow_fully_refunded=allow_fully_refunded,
+        )
+        is None
+    )
+
+
+def _refund_payment_evidence_failure(
+    evidence: object,
+    payment: Payment,
+    refund_amount: int | None = None,
+    *,
+    allow_fully_refunded: bool = False,
+) -> str | None:
+    if not isinstance(evidence, dict):
+        return "payment_response_shape_invalid"
+    if evidence.get("id") != payment.provider_payment_id:
+        return "provider_payment_id_mismatch"
+    if evidence.get("order_id") != payment.provider_order_id:
+        return "provider_order_id_mismatch"
+    provider_amount = evidence.get("amount")
+    if type(provider_amount) is not int or provider_amount != payment.amount:
+        return "payment_amount_mismatch"
+    if evidence.get("currency") != payment.currency:
+        return "payment_currency_mismatch"
+    amount_refunded = evidence.get("amount_refunded")
+    if type(amount_refunded) is not int or not 0 <= amount_refunded <= payment.amount:
+        return "payment_refunded_total_invalid"
+    provider_status = evidence.get("status")
+    if provider_status == "captured":
+        pass
+    elif provider_status == "refunded":
+        if not allow_fully_refunded:
+            return "provider_payment_not_captured"
+        if amount_refunded != payment.amount:
+            return "payment_refunded_status_total_mismatch"
+    else:
+        return "provider_payment_not_captured"
+    if refund_amount is not None and amount_refunded < refund_amount:
+        return "payment_refunded_total_below_refund"
+    return None
 
 
 def _persist_reconciled_status(
@@ -398,11 +613,167 @@ def _log_admin_refund_reconciliation(
     )
 
 
+def _recover_missing_provider_refund_id(
+    db: Session,
+    refund: Refund,
+    payment: Payment,
+    provider: RazorpayService,
+    *,
+    actor_id: UUID | None,
+    previous_status: PaymentRefundStatus,
+) -> PaymentRefundStatus | RefundReconciliationOutcome:
+    try:
+        payment_evidence = provider.fetch_payment(payment.provider_payment_id)
+    except RazorpayIntegrationError as error:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "provider_unavailable",
+            failure_classification=getattr(
+                error, "failure_classification", "provider_unavailable"
+            ),
+            error=error,
+        )
+    payment_failure = _refund_payment_evidence_failure(
+        payment_evidence, payment, allow_fully_refunded=True
+    )
+    if payment_failure is not None:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "evidence_conflict",
+            failure_classification=payment_failure,
+        )
+
+    try:
+        provider_refund_id, listed_status = _find_provider_refund_id(
+            provider, payment, refund
+        )
+    except RefundHistoryNoMatchError as error:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "no_matching_refund",
+            failure_classification=error.failure_classification
+            if error.failure_classification != "evidence_unverifiable"
+            else "provider_refund_not_found",
+        )
+    except RefundHistoryAmbiguousError:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "multiple_matching_refunds",
+            failure_classification="provider_refund_ambiguous",
+        )
+    except RefundHistoryInvalidError:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "evidence_conflict",
+            failure_classification="provider_refund_history_invalid",
+        )
+    except RazorpayIntegrationError as error:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "provider_unavailable",
+            failure_classification=getattr(
+                error, "failure_classification", "provider_unavailable"
+            ),
+            error=error,
+        )
+
+    refund.razorpay_refund_id = provider_refund_id
+    try:
+        refund_evidence = provider.fetch_refund(
+            payment.provider_payment_id, provider_refund_id
+        )
+        _, verified_status = _refund_provider_status(refund_evidence, refund, payment)
+    except RazorpayIntegrationError as error:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "provider_unavailable",
+            failure_classification=getattr(
+                error, "failure_classification", "provider_unavailable"
+            ),
+            error=error,
+        )
+    except RefundOutcomeUnknownError as error:
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "evidence_conflict",
+            failure_classification=error.failure_classification,
+            error=error,
+        )
+
+    if verified_status != listed_status or (
+        verified_status == PaymentRefundStatus.PROCESSED
+        and not _refund_payment_evidence(
+            payment_evidence,
+            payment,
+            refund.amount,
+            allow_fully_refunded=verified_status == PaymentRefundStatus.PROCESSED
+            and refund.amount == payment.amount,
+        )
+    ):
+        evidence_failure = _refund_payment_evidence_failure(
+            payment_evidence,
+            payment,
+            refund.amount,
+            allow_fully_refunded=verified_status == PaymentRefundStatus.PROCESSED
+            and refund.amount == payment.amount,
+        )
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "evidence_conflict",
+            failure_classification=(
+                "refund_status_conflicts_with_history"
+                if verified_status != listed_status
+                else evidence_failure or "refund_payment_totals_unverified"
+            ),
+        )
+    if (
+        payment_evidence.get("status") == "refunded"
+        and verified_status != PaymentRefundStatus.PROCESSED
+    ):
+        return _unchanged_refund_outcome(
+            db,
+            refund.id,
+            previous_status,
+            actor_id,
+            "evidence_conflict",
+            failure_classification="provider_payment_refund_status_conflict",
+        )
+    return verified_status
+
+
 def _reconcile_processing_refund(
     db: Session,
     refund_id: UUID,
     *,
     actor_id: UUID | None,
+    recover_missing_provider_refund_id: bool = False,
     razorpay_service: RazorpayService | None = None,
 ) -> RefundReconciliationOutcome:
     provider = razorpay_service or RazorpayService()
@@ -431,37 +802,75 @@ def _reconcile_processing_refund(
             raise RefundValidationError(
                 "Refund has no consistent Razorpay payment link"
             )
-        if not refund.razorpay_refund_id or len(refund.razorpay_refund_id) > 255:
+        if not refund.razorpay_refund_id and not recover_missing_provider_refund_id:
             raise RefundValidationError(
                 "Refund has no stored Razorpay refund ID; manual investigation is required"
             )
-
-        payment_evidence = provider.fetch_payment(payment.provider_payment_id)
-        if not _refund_payment_evidence(payment_evidence, payment):
-            raise RefundOutcomeUnknownError(
-                "Razorpay payment evidence could not reconcile this refund"
+        if not refund.razorpay_refund_id:
+            if refund.status != PaymentRefundStatus.PROCESSING:
+                raise RefundValidationError(
+                    "Refund has no stored Razorpay refund ID; manual investigation is required"
+                )
+            recovery = _recover_missing_provider_refund_id(
+                db,
+                refund,
+                payment,
+                provider,
+                actor_id=actor_id,
+                previous_status=previous_status,
             )
-
-        refund_evidence = provider.fetch_refund(
-            payment.provider_payment_id, refund.razorpay_refund_id
-        )
-        _, target_status = _refund_provider_status(refund_evidence, refund, payment)
-        if (
-            target_status == PaymentRefundStatus.PROCESSED
-            and not _refund_payment_evidence(payment_evidence, payment, refund.amount)
-        ):
-            raise RefundOutcomeUnknownError(
-                "Razorpay payment totals do not confirm the processed refund"
+            if isinstance(recovery, RefundReconciliationOutcome):
+                return recovery
+            target_status = recovery
+        elif len(refund.razorpay_refund_id) > 255:
+            raise RefundValidationError("Stored Razorpay refund ID is invalid")
+        else:
+            refund_evidence = provider.fetch_refund(
+                payment.provider_payment_id, refund.razorpay_refund_id
             )
+            _, target_status = _refund_provider_status(refund_evidence, refund, payment)
+            payment_evidence = provider.fetch_payment(payment.provider_payment_id)
+            payment_failure = _refund_payment_evidence_failure(
+                payment_evidence,
+                payment,
+                allow_fully_refunded=(
+                    target_status == PaymentRefundStatus.PROCESSED
+                    and refund.amount == payment.amount
+                ),
+            )
+            if payment_failure is not None:
+                raise RefundOutcomeUnknownError(
+                    "Razorpay payment evidence could not reconcile this refund",
+                    failure_classification=payment_failure,
+                )
+            refund_total_failure = (
+                _refund_payment_evidence_failure(
+                    payment_evidence,
+                    payment,
+                    refund.amount,
+                    allow_fully_refunded=(
+                        target_status == PaymentRefundStatus.PROCESSED
+                        and refund.amount == payment.amount
+                    ),
+                )
+                if target_status == PaymentRefundStatus.PROCESSED
+                else None
+            )
+            if refund_total_failure is not None:
+                raise RefundOutcomeUnknownError(
+                    "Razorpay payment totals do not confirm the processed refund",
+                    failure_classification=refund_total_failure,
+                )
         reconciled = _persist_reconciled_status(db, refund, payment, target_status)
+        outcome = "updated" if previous_status != reconciled.status else "unchanged"
         _log_admin_refund_reconciliation(
             actor_id,
             refund_id,
             previous_status,
             reconciled.status,
-            "updated" if previous_status != reconciled.status else "unchanged",
+            outcome,
         )
-        return RefundReconciliationOutcome(reconciled, previous_status)
+        return RefundReconciliationOutcome(reconciled, previous_status, outcome)
     except RefundNotFoundError:
         _log_admin_refund_reconciliation(
             actor_id, refund_id, previous_status, None, "not_found"
@@ -548,6 +957,7 @@ def reconcile_refund_for_admin(
         db,
         refund_id,
         actor_id=actor_id,
+        recover_missing_provider_refund_id=True,
         razorpay_service=razorpay_service,
     )
 
@@ -679,7 +1089,9 @@ def process_refund_webhook(
         )
         db.commit()
         return event.status
-    if not _refund_payment_evidence(payment_evidence, payment):
+    if not _refund_payment_evidence(
+        payment_evidence, payment, allow_fully_refunded=True
+    ):
         _finish_refund_webhook(
             event,
             PaymentWebhookEventStatus.FAILED,
@@ -732,12 +1144,29 @@ def process_refund_webhook(
 
     if (
         provider_status == PaymentRefundStatus.PROCESSED
-        and not _refund_payment_evidence(payment_evidence, payment, local_refund.amount)
+        and not _refund_payment_evidence(
+            payment_evidence,
+            payment,
+            local_refund.amount,
+            allow_fully_refunded=local_refund.amount == payment.amount,
+        )
     ):
         _finish_refund_webhook(
             event,
             PaymentWebhookEventStatus.RETRYABLE,
             "Razorpay payment totals do not yet confirm the processed refund",
+        )
+        db.commit()
+        return event.status
+    if (
+        isinstance(payment_evidence, dict)
+        and payment_evidence.get("status") == "refunded"
+        and provider_status != PaymentRefundStatus.PROCESSED
+    ):
+        _finish_refund_webhook(
+            event,
+            PaymentWebhookEventStatus.FAILED,
+            "Refund status conflicts with the fully refunded payment",
         )
         db.commit()
         return event.status
@@ -824,22 +1253,101 @@ def create_full_refund(
         raise
 
     try:
+        logger.info(
+            "Submitting refund to Razorpay",
+            extra={
+                "refund_event": "submission_started",
+                "refund_id": str(refund.id),
+                "payment_id": str(payment_id),
+                "amount": captured_amount,
+                "currency": currency,
+                "provider_refund_id_returned": False,
+            },
+        )
         result = provider.create_full_refund(
             provider_payment_id, captured_amount, idempotency_key
         )
     except RazorpayRefundRejectedError:
+        logger.warning(
+            "Razorpay definitively rejected refund",
+            extra={
+                "refund_event": "submission_failed",
+                "refund_id": str(refund.id),
+                "payment_id": str(payment_id),
+                "amount": captured_amount,
+                "currency": currency,
+                "provider_refund_id_returned": False,
+                "failure_classification": "definitive_rejection",
+            },
+        )
         _mark_definitive_failure(db, refund)
         raise
     except RazorpayRefundOutcomeUnknownError as error:
+        logger.warning(
+            "Razorpay refund outcome is uncertain",
+            extra={
+                "refund_event": "submission_failed",
+                "refund_id": str(refund.id),
+                "payment_id": str(payment_id),
+                "amount": captured_amount,
+                "currency": currency,
+                "provider_refund_id_returned": False,
+                "failure_classification": error.failure_classification,
+            },
+        )
         raise RefundOutcomeUnknownError(
             "Razorpay refund may have succeeded; reconciliation is required"
         ) from error
     except RazorpayRefundNotSubmittedError:
+        logger.warning(
+            "Razorpay refund was not submitted",
+            extra={
+                "refund_event": "submission_failed",
+                "refund_id": str(refund.id),
+                "payment_id": str(payment_id),
+                "amount": captured_amount,
+                "currency": currency,
+                "provider_refund_id_returned": False,
+                "failure_classification": "not_submitted",
+            },
+        )
         raise
     except RazorpayIntegrationError:
+        logger.warning(
+            "Razorpay refund outcome could not be confirmed",
+            extra={
+                "refund_event": "submission_failed",
+                "refund_id": str(refund.id),
+                "payment_id": str(payment_id),
+                "amount": captured_amount,
+                "currency": currency,
+                "provider_refund_id_returned": False,
+                "failure_classification": "provider_error",
+            },
+        )
         raise RefundOutcomeUnknownError(
             "Razorpay refund outcome could not be confirmed; reconciliation is required"
         ) from None
+
+    provider_status = result.get("status") if isinstance(result, dict) else None
+    provider_refund_id_returned = bool(
+        isinstance(result, dict) and isinstance(result.get("id"), str) and result["id"]
+    )
+    logger.info(
+        "Razorpay refund response received",
+        extra={
+            "refund_event": "provider_response_received",
+            "refund_id": str(refund.id),
+            "payment_id": str(payment_id),
+            "amount": captured_amount,
+            "currency": currency,
+            "provider_response_status": (
+                provider_status if isinstance(provider_status, str) else None
+            ),
+            "provider_http_status": None,
+            "provider_refund_id_returned": provider_refund_id_returned,
+        },
+    )
 
     try:
         provider_refund_id, refund_status = _provider_result_status(
@@ -847,8 +1355,33 @@ def create_full_refund(
         )
     except RefundOutcomeUnknownError:
         logger.error(
-            "Razorpay returned an unverifiable outcome for refund %s", refund.id
+            "Razorpay returned an unverifiable refund response",
+            extra={
+                "refund_event": "provider_response_unverifiable",
+                "refund_id": str(refund.id),
+                "payment_id": str(payment_id),
+                "amount": captured_amount,
+                "currency": currency,
+                "provider_response_status": (
+                    provider_status if isinstance(provider_status, str) else None
+                ),
+                "provider_refund_id_returned": provider_refund_id_returned,
+                "failure_classification": "unverifiable_provider_response",
+            },
         )
         raise
 
-    return _persist_provider_result(db, refund, provider_refund_id, refund_status)
+    persisted = _persist_provider_result(db, refund, provider_refund_id, refund_status)
+    logger.info(
+        "Razorpay refund result persisted",
+        extra={
+            "refund_event": "provider_result_persisted",
+            "refund_id": str(persisted.id),
+            "payment_id": str(persisted.payment_id),
+            "amount": persisted.amount,
+            "currency": persisted.currency,
+            "provider_response_status": refund_status.value,
+            "provider_refund_id_returned": bool(persisted.razorpay_refund_id),
+        },
+    )
+    return persisted

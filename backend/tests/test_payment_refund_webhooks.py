@@ -246,6 +246,19 @@ def test_supported_refund_events_apply_verified_provider_status(
     assert events[0].provider_refund_id == records["provider_refund_id"]
 
 
+def test_processed_refund_webhook_accepts_fully_refunded_payment_lookup(
+    refund_webhook_records, monkeypatch
+):
+    records = refund_webhook_records
+    FakeRazorpayService.payment_changes = {"status": "refunded"}
+
+    response = _post(records, monkeypatch, _payload(records))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == PaymentWebhookEventStatus.PROCESSED
+    assert _refund_and_events(records)[0] == PaymentRefundStatus.PROCESSED
+
+
 def test_invalid_refund_signature_is_rejected_without_persisting_event(
     refund_webhook_records, monkeypatch
 ):

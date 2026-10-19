@@ -97,6 +97,8 @@ class RefundReconciliationCandidate(BaseModel):
     razorpay_refund_id: str | None
     refund_reason: str
     payment_id: UUID
+    appointment_id: UUID | None
+    series_id: UUID | None
     provider_payment_id: str | None
     provider_order_id: str | None
     created_at: datetime
@@ -108,4 +110,12 @@ class RefundReconciliationResult(BaseModel):
     refund_id: UUID
     previous_status: PaymentRefundStatus
     status: PaymentRefundStatus
-    outcome: Literal["updated", "unchanged"]
+    failure_classification: str | None = None
+    outcome: Literal[
+        "updated",
+        "unchanged",
+        "no_matching_refund",
+        "multiple_matching_refunds",
+        "provider_unavailable",
+        "evidence_conflict",
+    ]

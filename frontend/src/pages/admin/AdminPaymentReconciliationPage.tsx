@@ -56,7 +56,10 @@ function refundRequestErrorMessage(error: unknown): string {
     return `Conflict requiring manual investigation. ${error.message}`;
   }
   if (error.status === 502) {
-    return "Razorpay could not verify this refund. It remains unresolved.";
+    return error.message;
+  }
+  if (error.status === 503) {
+    return "Refund records are temporarily unavailable. Contact support if this continues.";
   }
   if (error.status !== null && error.status >= 500) {
     return "The refund reconciliation service is unavailable. Try again later.";
@@ -65,7 +68,7 @@ function refundRequestErrorMessage(error: unknown): string {
 }
 
 type RefundRowFeedback = {
-  kind: "success" | "error";
+  kind: "success" | "error" | "investigation";
   message: string;
 };
 
@@ -98,7 +101,7 @@ export function RefundReconciliationSection({
           <p className="admin-page-eyebrow">Refund review</p>
           <h2 id="refund-reconciliation-heading">Refund reconciliation</h2>
           <p>
-            Review local refund records that may need investigation. This view
+            Review real local refund records that need investigation. This view
             does not submit or retry refunds.
           </p>
         </div>
@@ -155,9 +158,9 @@ export function RefundReconciliationSection({
                 <th scope="col">Amount</th>
                 <th scope="col">Refund reason</th>
                 <th scope="col">Razorpay refund ID</th>
-                <th scope="col">Related payment</th>
+                <th scope="col">Related payment / appointment</th>
                 <th scope="col">Created / updated</th>
-                <th scope="col">Investigation reasons</th>
+                <th scope="col">Investigation / actions</th>
               </tr>
             </thead>
             <tbody>
@@ -186,6 +189,18 @@ export function RefundReconciliationSection({
                   <td>
                     <span>
                       Local payment: <code>{candidate.payment_id}</code>
+                    </span>
+                    <span>
+                      Appointment:{" "}
+                      {candidate.appointment_id ? (
+                        <code>{candidate.appointment_id}</code>
+                      ) : candidate.series_id ? (
+                        <>
+                          Series payment: <code>{candidate.series_id}</code>
+                        </>
+                      ) : (
+                        "Not linked to an appointment or series"
+                      )}
                     </span>
                     <span>
                       Provider payment:{" "}
@@ -222,22 +237,39 @@ export function RefundReconciliationSection({
                     ) : (
                       <span>No investigation reasons provided.</span>
                     )}
-                    {(!candidate.razorpay_refund_id ||
-                      !candidate.provider_payment_id ||
+                    {(!candidate.provider_payment_id ||
                       !candidate.provider_order_id) && (
                       <strong className="refund-reconciliation__missing">
                         Required provider identifiers are missing; manual
                         investigation is required.
                       </strong>
                     )}
+                    {!candidate.razorpay_refund_id &&
+                      candidate.status === "PROCESSING" &&
+                      candidate.provider_payment_id &&
+                      candidate.provider_order_id && (
+                        <p className="refund-reconciliation__lookup-notice">
+                          The refund ID is missing. Verification will search
+                          existing Razorpay refund history only; it will not
+                          submit a refund.
+                        </p>
+                      )}
+                    {!candidate.razorpay_refund_id &&
+                      candidate.status !== "PROCESSING" && (
+                        <strong className="refund-reconciliation__missing">
+                          A missing refund ID can only be looked up for a
+                          processing refund; manual investigation is required.
+                        </strong>
+                      )}
                     <button
                       className="admin-secondary-button refund-reconciliation__verify"
                       type="button"
                       disabled={
                         reconcilingRefundIds.has(candidate.refund_id) ||
-                        !candidate.razorpay_refund_id ||
                         !candidate.provider_payment_id ||
-                        !candidate.provider_order_id
+                        !candidate.provider_order_id ||
+                        (!candidate.razorpay_refund_id &&
+                          candidate.status !== "PROCESSING")
                       }
                       onClick={() => onReconcile(candidate.refund_id)}
                     >
@@ -457,14 +489,34 @@ export default function AdminPaymentReconciliationPage() {
         refundId,
         loadRefundCandidates,
       );
+      let investigationMessage: string | null = null;
+      switch (result.outcome) {
+        case "no_matching_refund":
+          investigationMessage =
+            "No matching refund was found in Razorpay history. The local refund remains unchanged; do not submit another refund based on this result.";
+          break;
+        case "multiple_matching_refunds":
+          investigationMessage =
+            "Multiple matching refunds were found in Razorpay history. The local refund remains unchanged; manual investigation is required.";
+          break;
+        case "provider_unavailable":
+          investigationMessage =
+            "Razorpay refund history could not be retrieved. The local refund remains unchanged; retry the read-only verification later.";
+          break;
+        case "evidence_conflict":
+          investigationMessage =
+            "Razorpay evidence was incomplete or conflicted. The local refund remains unchanged; manual investigation is required.";
+          break;
+      }
       setRefundFeedback((current) => ({
         ...current,
         [refundId]: {
-          kind: "success",
+          kind: investigationMessage ? "investigation" : "success",
           message:
-            result.outcome === "updated"
+            investigationMessage ??
+            (result.outcome === "updated"
               ? `Verified with Razorpay. Local status updated to ${result.status}.`
-              : `Verified with Razorpay. Local status remains ${result.status}.`,
+              : `Verified with Razorpay. Local status remains ${result.status}.`),
         },
       }));
     } catch (requestError) {
