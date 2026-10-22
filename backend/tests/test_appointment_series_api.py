@@ -309,7 +309,7 @@ def test_authenticated_customer_creates_atomic_series(series_records, monkeypatc
         2,
         3,
     ]
-    assert all(item["status"] == "confirmed" for item in result["occurrences"])
+    assert all(item["status"] == "CONFIRMED" for item in result["occurrences"])
     assert commit_count == 1
     assert len(enqueued_series) == 1
     assert enqueued_series == [result["id"]]
