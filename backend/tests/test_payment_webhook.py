@@ -1897,6 +1897,7 @@ def test_admin_payment_reconciliation_returns_candidates_without_mutation(
     payment = db.get(Payment, records["payment_id"])
     payment.status = PaymentStatus.CAPTURED
     payment.provider_payment_id = records["provider_payment_id"]
+    payment.created_at = datetime(1970, 1, 1, tzinfo=UTC)
     holds = db.scalars(
         select(BookingHold).where(BookingHold.payment_id == records["payment_id"])
     ).all()
@@ -1908,7 +1909,7 @@ def test_admin_payment_reconciliation_returns_candidates_without_mutation(
         status=PaymentStatus.CREATED,
         provider=PaymentProvider.RAZORPAY,
         provider_order_id=f"order_{uuid4().hex}",
-        created_at=cutoff - timedelta(days=1),
+        created_at=datetime(1970, 1, 2, tzinfo=UTC),
     )
     recent_created_payment = Payment(
         customer_id=records["customer_id"],
@@ -1972,6 +1973,19 @@ def test_admin_payment_reconciliation_returns_candidates_without_mutation(
         payment.status,
         payment.provider_payment_id,
         payment.appointment_id,
+        payment.created_at,
+    )
+    original_stale_created_payment_state = (
+        stale_created_payment.status,
+        stale_created_payment.provider_payment_id,
+        stale_created_payment.appointment_id,
+        stale_created_payment.created_at,
+    )
+    original_recent_created_payment_state = (
+        recent_created_payment.status,
+        recent_created_payment.provider_payment_id,
+        recent_created_payment.appointment_id,
+        recent_created_payment.created_at,
     )
     original_hold_state = (holds[0].status, holds[0].updated_at)
     original_event_state = {
@@ -2011,6 +2025,8 @@ def test_admin_payment_reconciliation_returns_candidates_without_mutation(
 
     db = SessionLocal()
     payment_after = db.get(Payment, records["payment_id"])
+    stale_created_payment_after = db.get(Payment, stale_created_payment_id)
+    recent_created_payment_after = db.get(Payment, recent_created_payment_id)
     hold_after = db.get(BookingHold, hold_id)
     event_after = db.scalars(
         select(PaymentWebhookEvent).where(
@@ -2024,7 +2040,20 @@ def test_admin_payment_reconciliation_returns_candidates_without_mutation(
         payment_after.status,
         payment_after.provider_payment_id,
         payment_after.appointment_id,
+        payment_after.created_at,
     ) == original_payment_state
+    assert (
+        stale_created_payment_after.status,
+        stale_created_payment_after.provider_payment_id,
+        stale_created_payment_after.appointment_id,
+        stale_created_payment_after.created_at,
+    ) == original_stale_created_payment_state
+    assert (
+        recent_created_payment_after.status,
+        recent_created_payment_after.provider_payment_id,
+        recent_created_payment_after.appointment_id,
+        recent_created_payment_after.created_at,
+    ) == original_recent_created_payment_state
     assert (hold_after.status, hold_after.updated_at) == original_hold_state
     assert {
         event.provider_event_id: (event.status, event.error_message)
