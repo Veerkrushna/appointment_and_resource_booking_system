@@ -610,21 +610,42 @@ def test_email_reminder_success_uses_persisted_sent_status(monkeypatch):
     assert len(sessions) == 2
 
 
-def test_email_reminder_delivery_failure_preserves_failed_status_and_raises(
+def test_email_reminder_transient_delivery_failure_uses_celery_retry(
     monkeypatch,
 ):
     appointment, notification = _notification_task_records()
     _use_notification_task_session(monkeypatch, appointment, notification)
     send_email_mock = MagicMock(side_effect=OSError("SMTP unavailable"))
     monkeypatch.setattr("app.services.notifications._send_email", send_email_mock)
+    retry_mock = MagicMock(return_value=Retry())
+    monkeypatch.setattr(send_email_reminder, "retry", retry_mock)
 
-    with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
+    with pytest.raises(Retry):
         send_email_reminder.run(str(appointment.id))
 
     assert notification.status == NotificationStatus.FAILED
     assert notification.retry_count == 1
     assert notification.sent_at is None
     send_email_mock.assert_called_once()
+    retry_mock.assert_called_once()
+    assert isinstance(retry_mock.call_args.kwargs["exc"], RuntimeError)
+    assert str(retry_mock.call_args.kwargs["exc"]) == "Email reminder delivery failed"
+
+
+def test_email_reminder_without_smtp_configuration_does_not_retry(monkeypatch):
+    appointment, notification = _notification_task_records()
+    _use_notification_task_session(monkeypatch, appointment, notification)
+    monkeypatch.setattr("app.services.notifications.settings.smtp_host", None)
+    monkeypatch.setattr("app.services.notifications.settings.smtp_from", None)
+    retry_mock = MagicMock()
+    monkeypatch.setattr(send_email_reminder, "retry", retry_mock)
+
+    send_email_reminder.run(str(appointment.id))
+
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
+    assert notification.sent_at is None
+    retry_mock.assert_not_called()
 
 
 def test_feedback_request_success_uses_persisted_sent_status(monkeypatch):
