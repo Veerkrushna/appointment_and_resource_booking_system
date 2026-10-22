@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, time, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -430,11 +430,12 @@ def test_reschedule_notification_receives_previous_schedule(
         ),
     )
 
-    assert calls == [
-        (
-            str(appointment.id),
-            persisted_previous_start.isoformat(),
-            persisted_previous_end.isoformat(),
-        )
-    ]
+    assert len(calls) == 1
+    call = calls[0]
+    assert call[:3] == (
+        str(appointment.id),
+        persisted_previous_start.isoformat(),
+        persisted_previous_end.isoformat(),
+    )
+    assert str(UUID(call[3])) == call[3]
     db.close()

@@ -230,12 +230,12 @@ def test_each_recurring_reminder_uses_contact_email_and_sent_retry_is_idempotent
         appointment_ids = [str(appointment.id) for appointment in appointments]
         recipient_emails = [appointment.user_email for appointment in appointments]
 
-    # The existing task retries after delivery; the SENT record prevents a resend.
+    # Repeated task delivery is idempotent once SENT has been persisted.
     for appointment_id in appointment_ids:
-        with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
-            send_email_reminder.run(appointment_id)
+        send_email_reminder.run(appointment_id)
         send_email_reminder.run(appointment_id)
 
+    assert len(sent) == len(appointments)
     assert [recipient for recipient, _, _ in sent] == recipient_emails
     assert all(
         subject == "Reminder: your upcoming appointment" for _, subject, _ in sent
@@ -272,11 +272,9 @@ def test_individually_cancelled_occurrence_suppresses_only_its_reminder(
             user_role=UserRole.ADMIN,
         )
 
-    with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
-        send_email_reminder.run(str(cancelled_id))
+    send_email_reminder.run(str(cancelled_id))
     for appointment_id in remaining_ids:
-        with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
-            send_email_reminder.run(str(appointment_id))
+        send_email_reminder.run(str(appointment_id))
         send_email_reminder.run(str(appointment_id))
 
     with SessionLocal() as db:
@@ -284,9 +282,19 @@ def test_individually_cancelled_occurrence_suppresses_only_its_reminder(
         remaining = [
             db.get(Appointment, appointment_id) for appointment_id in remaining_ids
         ]
+        reminders = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id.in_([cancelled_id, *remaining_ids]),
+                Notification.notification_type == NotificationType.REMINDER,
+            )
+        ).all()
     assert cancelled.status == AppointmentStatus.CANCELLED
     assert all(item.status == AppointmentStatus.CONFIRMED for item in remaining)
+    assert len(sent) == len(remaining)
     assert sent == [item.user_email for item in remaining]
+    assert len(reminders) == len(remaining)
+    assert all(reminder.status == NotificationStatus.SENT for reminder in reminders)
+    assert all(reminder.appointment_id != cancelled_id for reminder in reminders)
 
 
 def test_series_cancellation_suppresses_future_reminders_and_preserves_completed(
@@ -313,17 +321,24 @@ def test_series_cancellation_suppresses_future_reminders_and_preserves_completed
         lambda recipient, subject, body, **_kwargs: sent.append(recipient),
     )
     for appointment_id in future_ids:
-        with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
-            send_email_reminder.run(str(appointment_id))
+        send_email_reminder.run(str(appointment_id))
 
     with SessionLocal() as db:
         completed = db.get(Appointment, completed_id)
         future = [db.get(Appointment, appointment_id) for appointment_id in future_ids]
         series = db.get(AppointmentSeries, recurring_reminder_records["series_id"])
+        reminders = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id.in_(future_ids),
+                Notification.notification_type == NotificationType.REMINDER,
+            )
+        ).all()
     assert completed.status == AppointmentStatus.COMPLETED
     assert all(item.status == AppointmentStatus.CANCELLED for item in future)
     assert series.status.value == "cancelled"
+    assert len(sent) == 0
     assert sent == []
+    assert reminders == []
 
 
 def test_one_time_cancelled_appointment_reminder_remains_suppressed(
@@ -352,6 +367,13 @@ def test_one_time_cancelled_appointment_reminder_remains_suppressed(
         "app.services.notifications.send_email",
         lambda recipient, subject, body, **_kwargs: sent.append(recipient),
     )
-    with pytest.raises(RuntimeError, match="Email reminder delivery failed"):
-        send_email_reminder.run(str(one_time_id))
+    send_email_reminder.run(str(one_time_id))
     assert sent == []
+    with SessionLocal() as db:
+        reminder = db.scalar(
+            select(Notification).where(
+                Notification.appointment_id == one_time_id,
+                Notification.notification_type == NotificationType.REMINDER,
+            )
+        )
+    assert reminder is None
