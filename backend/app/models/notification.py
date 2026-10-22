@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,9 +32,21 @@ class Notification(Base):
     """Tracks an email or SMS notification for an appointment."""
 
     __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "appointment_id",
+            "notification_type",
+            "idempotency_key",
+            name="uq_notifications_appointment_type_idempotency_key",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    idempotency_key: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
     )
 
     appointment_id: Mapped[uuid.UUID] = mapped_column(

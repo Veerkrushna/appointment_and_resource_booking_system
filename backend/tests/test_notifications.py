@@ -1,9 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, time, timedelta
 from email.parser import BytesParser
 from email.policy import default
+from threading import Barrier
+from time import sleep
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from celery.exceptions import Retry
@@ -31,9 +34,11 @@ from app.services.notifications import (
 )
 from app.tasks.notification_tasks import (
     schedule_appointment_notifications,
+    send_cancellation_notification,
     send_confirmation_notification,
     send_email_reminder,
     send_feedback_request,
+    send_reschedule_notification,
     send_sms_reminder,
 )
 
@@ -222,6 +227,60 @@ def test_confirmation_task_is_idempotent_on_redelivery(notification_records):
     mock_send_email.assert_called_once()
 
 
+def test_distinct_reschedule_events_each_send_notification(notification_records):
+    provider_id, service_id = notification_records
+
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="Distinct Reschedule Test",
+                user_email=f"distinct-reschedule-{uuid4()}@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+        appointment_id = str(appointment.id)
+        appointment_uuid = appointment.id
+        original_start = appointment.appointment_start
+        original_end = appointment.appointment_end
+
+    first_previous_start = (original_start - timedelta(days=1)).isoformat()
+    first_previous_end = (original_end - timedelta(days=1)).isoformat()
+
+    second_previous_start = original_start.isoformat()
+    second_previous_end = original_end.isoformat()
+    first_event_id = str(uuid4())
+    second_event_id = str(uuid4())
+
+    with patch("app.services.notifications._send_email") as mock_send_email:
+        send_reschedule_notification.run(
+            appointment_id, first_previous_start, first_previous_end, first_event_id
+        )
+        send_reschedule_notification.run(
+            appointment_id, second_previous_start, second_previous_end, second_event_id
+        )
+
+    with SessionLocal() as db:
+        notifications = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id == appointment_uuid,
+                Notification.notification_type == NotificationType.RESCHEDULE,
+            )
+        ).all()
+
+    assert len(notifications) == 2
+    assert all(
+        notification.status == NotificationStatus.SENT for notification in notifications
+    )
+    assert {notification.idempotency_key for notification in notifications} == {
+        UUID(first_event_id),
+        UUID(second_event_id),
+    }
+    assert mock_send_email.call_count == 2
+
+
 def test_one_time_booking_still_queues_confirmation_and_reminders(
     notification_records, monkeypatch
 ):
@@ -287,6 +346,181 @@ def test_cancellation_notification_is_sent(notification_records):
     assert notification is not None
     assert notification.status == NotificationStatus.SENT
     mock_send_email.assert_called_once()
+
+
+def test_cancellation_task_is_idempotent_on_redelivery(notification_records):
+    provider_id, service_id = notification_records
+
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="Repeated Cancellation Test",
+                user_email=f"repeated-cancellation-{uuid4()}@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+        appointment_id = str(appointment.id)
+        appointment_uuid = appointment.id
+
+    with patch("app.services.notifications._send_email") as mock_send_email:
+        send_cancellation_notification.run(appointment_id)
+        send_cancellation_notification.run(appointment_id)
+
+    with SessionLocal() as db:
+        notifications = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id == appointment_uuid,
+                Notification.notification_type == NotificationType.CANCELLATION,
+            )
+        ).all()
+
+    assert len(notifications) == 1
+    assert notifications[0].status == NotificationStatus.SENT
+    mock_send_email.assert_called_once()
+
+
+def test_reschedule_task_is_idempotent_on_redelivery(notification_records):
+    provider_id, service_id = notification_records
+
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="Repeated Reschedule Test",
+                user_email=f"repeated-reschedule-{uuid4()}@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+        appointment_id = str(appointment.id)
+        appointment_uuid = appointment.id
+
+    previous_start = (_future_sunday_at_10() - timedelta(days=1)).isoformat()
+    previous_end = (
+        _future_sunday_at_10() - timedelta(days=1) + timedelta(minutes=30)
+    ).isoformat()
+
+    event_id = str(uuid4())
+
+    with patch("app.services.notifications._send_email") as mock_send_email:
+        send_reschedule_notification.run(
+            appointment_id, previous_start, previous_end, event_id
+        )
+        send_reschedule_notification.run(
+            appointment_id, previous_start, previous_end, event_id
+        )
+
+    with SessionLocal() as db:
+        notifications = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id == appointment_uuid,
+                Notification.notification_type == NotificationType.RESCHEDULE,
+            )
+        ).all()
+
+    assert len(notifications) == 1
+    assert notifications[0].status == NotificationStatus.SENT
+    assert notifications[0].idempotency_key == UUID(event_id)
+    mock_send_email.assert_called_once()
+
+
+def test_concurrent_reschedule_redelivery_sends_only_once(notification_records):
+    provider_id, service_id = notification_records
+
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="Concurrent Reschedule Test",
+                user_email=f"concurrent-reschedule-{uuid4()}@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+        appointment_id = str(appointment.id)
+        appointment_uuid = appointment.id
+
+    event_id = str(uuid4())
+    previous_start = (_future_sunday_at_10() - timedelta(days=1)).isoformat()
+    previous_end = (
+        _future_sunday_at_10() - timedelta(days=1) + timedelta(minutes=30)
+    ).isoformat()
+    start_barrier = Barrier(2)
+
+    def deliver_event():
+        start_barrier.wait(timeout=5)
+        send_reschedule_notification.run(
+            appointment_id, previous_start, previous_end, event_id
+        )
+
+    with patch(
+        "app.services.notifications._send_email",
+        side_effect=lambda *_args, **_kwargs: sleep(0.2),
+    ) as mock_send_email:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(deliver_event) for _ in range(2)]
+            for future in futures:
+                future.result(timeout=10)
+
+    with SessionLocal() as db:
+        notifications = db.scalars(
+            select(Notification).where(
+                Notification.appointment_id == appointment_uuid,
+                Notification.notification_type == NotificationType.RESCHEDULE,
+            )
+        ).all()
+
+    assert len(notifications) == 1
+    assert notifications[0].status == NotificationStatus.SENT
+    assert notifications[0].idempotency_key == UUID(event_id)
+    mock_send_email.assert_called_once()
+
+
+def test_reschedule_without_smtp_configuration_does_not_retry(
+    notification_records, monkeypatch
+):
+    provider_id, service_id = notification_records
+
+    with SessionLocal() as db:
+        appointment = create_appointment(
+            db,
+            AppointmentCreate(
+                service_id=service_id,
+                provider_id=provider_id,
+                user_name="SMTP Configuration Test",
+                user_email=f"smtp-configuration-{uuid4()}@example.com",
+                appointment_start=_future_sunday_at_10(),
+            ),
+        )
+        appointment_id = str(appointment.id)
+        appointment_uuid = appointment.id
+
+    monkeypatch.setattr("app.services.notifications.settings.smtp_host", None)
+    monkeypatch.setattr("app.services.notifications.settings.smtp_from", None)
+
+    send_reschedule_notification.run(
+        appointment_id,
+        (_future_sunday_at_10() - timedelta(days=1)).isoformat(),
+        (_future_sunday_at_10() - timedelta(days=1) + timedelta(minutes=30)).isoformat(),
+        str(uuid4()),
+    )
+
+    with SessionLocal() as db:
+        notification = db.scalar(
+            select(Notification).where(
+                Notification.appointment_id == appointment_uuid,
+                Notification.notification_type == NotificationType.RESCHEDULE,
+            )
+        )
+
+    assert notification is not None
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
 
 
 def test_email_reminder_has_retry_configuration():
@@ -409,9 +643,7 @@ def test_feedback_request_success_uses_persisted_sent_status(monkeypatch):
     send_email_mock.assert_called_once()
 
 
-def test_sms_reminder_without_twilio_configuration_fails_safely(
-    monkeypatch, caplog
-):
+def test_sms_reminder_without_twilio_configuration_fails_safely(monkeypatch, caplog):
     appointment, notification = _notification_task_records(phone="+15555550123")
     _use_notification_task_session(monkeypatch, appointment, notification)
     monkeypatch.setattr("app.services.notifications.settings.twilio_account_sid", None)

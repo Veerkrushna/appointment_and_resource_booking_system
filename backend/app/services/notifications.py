@@ -113,7 +113,7 @@ def send_email(
     html_body: str | None = None,
 ) -> None:
     if not settings.smtp_host or not settings.smtp_from:
-        raise RuntimeError("SMTP is not configured")
+        raise NotificationConfigurationError("SMTP is not configured")
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = settings.smtp_from
