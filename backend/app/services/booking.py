@@ -1,6 +1,6 @@
 import logging
 from datetime import UTC, datetime, time, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
@@ -443,6 +443,7 @@ def update_appointment(
             str(appointment.id),
             previous_start.isoformat() if previous_start else None,
             previous_end.isoformat() if previous_end else None,
+            str(uuid4()),
         )
     return appointment
 
@@ -612,5 +613,6 @@ def reschedule_appointment(
         str(appointment.id),
         previous_start.isoformat(),
         previous_end.isoformat(),
+        str(uuid4()),
     )
     return appointment

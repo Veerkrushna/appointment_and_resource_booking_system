@@ -2,8 +2,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from threading import Thread
+from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.celery_app import celery_app
@@ -106,6 +108,9 @@ def _send_once(
     recipient_phone: str | None,
     *,
     lock_appointment: bool = False,
+    previous_start: datetime | None = None,
+    previous_end: datetime | None = None,
+    idempotency_key: UUID | None = None,
 ) -> NotificationDeliveryOutcome:
     with SessionLocal() as db:
         if lock_appointment:
@@ -117,18 +122,29 @@ def _send_once(
         else:
             appointment = db.get(Appointment, appointment_id)
 
-        if appointment is None or appointment.status == AppointmentStatus.CANCELLED:
+        if (
+            appointment is None
+            or appointment.status == AppointmentStatus.CANCELLED
+        ):
             return NotificationDeliveryOutcome.SKIPPED
 
-        notification = db.scalar(
-            select(Notification)
-            .where(
-                Notification.appointment_id == appointment.id,
-                Notification.notification_type == notification_type,
+        notification_query = select(Notification).where(
+            Notification.appointment_id == appointment.id,
+            Notification.notification_type == notification_type,
+        )
+
+        if idempotency_key is not None:
+            notification_query = notification_query.where(
+                Notification.idempotency_key == idempotency_key
+            )
+        else:
+            notification_query = notification_query.where(
                 Notification.recipient_email == recipient_email,
                 Notification.recipient_phone == recipient_phone,
             )
-            .order_by(Notification.created_at.desc())
+
+        notification = db.scalar(
+            notification_query.order_by(Notification.created_at.desc())
         )
 
         if notification is not None:
@@ -140,14 +156,48 @@ def _send_once(
                 notification_type=notification_type,
                 recipient_email=recipient_email,
                 recipient_phone=recipient_phone,
+                idempotency_key=idempotency_key,
             )
             db.add(notification)
-            if not lock_appointment:
-                db.commit()
-            else:
-                db.flush()
+            try:
+                if not lock_appointment:
+                    db.commit()
+                else:
+                    db.flush()
+            except IntegrityError:
+                db.rollback()
+                if idempotency_key is None:
+                    raise
 
-        delivery_result = deliver_notification(db, notification, appointment)
+                appointment = db.scalar(
+                    select(Appointment)
+                    .where(Appointment.id == appointment_id)
+                    .with_for_update()
+                )
+                if appointment is None or appointment.status == AppointmentStatus.CANCELLED:
+                    return NotificationDeliveryOutcome.SKIPPED
+
+                notification = db.scalar(
+                    select(Notification)
+                    .where(
+                        Notification.appointment_id == appointment.id,
+                        Notification.notification_type == notification_type,
+                        Notification.idempotency_key == idempotency_key,
+                    )
+                    .with_for_update()
+                )
+                if notification is None:
+                    raise
+                if notification.status == NotificationStatus.SENT:
+                    return NotificationDeliveryOutcome.ALREADY_SENT
+
+        delivery_result = deliver_notification(
+            db,
+            notification,
+            appointment,
+            previous_start=previous_start,
+            previous_end=previous_end,
+        )
         if delivery_result == NotificationDeliveryResult.CONFIGURATION_ERROR:
             return NotificationDeliveryOutcome.CONFIGURATION_ERROR
         if notification.status == NotificationStatus.SENT:
@@ -262,14 +312,15 @@ def send_cancellation_notification(appointment_id: str) -> None:
         if appointment is None:
             return
 
-        notification = Notification(
-            appointment_id=appointment.id,
-            notification_type=NotificationType.CANCELLATION,
-            recipient_email=appointment.user_email,
+        outcome = _send_once(
+            appointment_id,
+            NotificationType.CANCELLATION,
+            appointment.user_email,
+            None,
         )
-        db.add(notification)
-        db.commit()
-        deliver_notification(db, notification, appointment)
+
+        if outcome == NotificationDeliveryOutcome.FAILED:
+            raise RuntimeError("Cancellation notification delivery failed")
 
 
 @celery_app.task(
@@ -283,28 +334,30 @@ def send_reschedule_notification(
     appointment_id: str,
     previous_start: str | None = None,
     previous_end: str | None = None,
+    idempotency_key: str | None = None,
 ) -> None:
     with SessionLocal() as db:
         appointment = db.get(Appointment, appointment_id)
         if appointment is None:
             return
 
-        notification = Notification(
-            appointment_id=appointment.id,
-            notification_type=NotificationType.RESCHEDULE,
-            recipient_email=appointment.user_email,
-        )
-        db.add(notification)
-        db.commit()
-        deliver_notification(
-            db,
-            notification,
-            appointment,
+        outcome = _send_once(
+            appointment_id,
+            NotificationType.RESCHEDULE,
+            appointment.user_email,
+            None,
+            lock_appointment=True,
             previous_start=(
                 datetime.fromisoformat(previous_start) if previous_start else None
             ),
-            previous_end=datetime.fromisoformat(previous_end) if previous_end else None,
+            previous_end=(
+                datetime.fromisoformat(previous_end) if previous_end else None
+            ),
+            idempotency_key=UUID(idempotency_key) if idempotency_key else None,
         )
+
+        if outcome == NotificationDeliveryOutcome.FAILED:
+            raise RuntimeError("Reschedule notification delivery failed")
 
 
 @celery_app.task(
